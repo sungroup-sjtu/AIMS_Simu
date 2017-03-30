@@ -1,115 +1,64 @@
-from . import db
-from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateTime
+import os
+import shutil
 from datetime import datetime
-
 from functools import partial
 
+import math
+from sqlalchemy import Column, ForeignKey, Integer, Text, String, DateTime
+
+from config import Config
+from mstools.tools import random_string, cd_or_create_and_cd
+from . import db
+
 NotNullColumn = partial(Column, nullable=False)
+from mstools.wrapper import DFF, Packmol, Lammps
+from mstools.simulation import Simulation
 
 
-class Simulation(db.Model):
-    __tablename__ = 'simulation'
-    id = NotNullColumn(Integer, primary_key=True)
-    name = NotNullColumn(String(200))
+class Unit:
+    K = 1
+    Pa = 1
+    kPa = 1000
+    MPa = int(1E6)
+    GPa = int(1E9)
+    bar = int(1E5)
+    atm = int(1.013E5)
+    J = 1
+    kJ = 1000
+    kcal = 4184
+    J_per_mol = 1
+    kJ_per_mol = 1000
+    kcal_per_mol = 4184
 
-    properties = db.relationship('Property', lazy='dynamic')
-
-    class Type:
-        NPT = 1
-        NVT = 2
-        SLAB = 3
-        VISCOSITY = 4
-        BINARY_SLAB = 5
-        SOLVATION_FE = 6
-
-    @staticmethod
-    def insert_simulations():
-        simulations = [
-            (Simulation.Type.NPT, 'npt'),
-            (Simulation.Type.NVT, 'nvt'),
-            (Simulation.Type.SLAB, 'slab'),
-            (Simulation.Type.VISCOSITY, 'viscosity'),
-            (Simulation.Type.BINARY_SLAB, 'binary_slab'),
-            (Simulation.Type.SOLVATION_FE, 'solvation_fe'),
-        ]
-        for i in simulations:
-            simulation = Simulation(id=i[0], name=i[1])
-            db.session.add(simulation)
-        try:
-            db.session.commit()
-        except Exception as e:
-            print(str(e))
-            db.session.rollback()
+    text = {
+        K: 'K',
+        Pa: 'Pa',
+        kPa: 'kPa',
+        MPa: 'MPa',
+        GPa: 'GPa',
+        bar: 'bar',
+        atm: 'atm',
+        J: 'J',
+        kJ: 'kJ',
+        kcal: 'kcal',
+        J_per_mol: 'J/mol',
+        kJ_per_mol: 'kJ/mol',
+        kcal_per_mol: 'kcal/mol'
+    }
 
 
-class Property(db.Model):
-    __tablename__ = 'property'
-    id = NotNullColumn(Integer, primary_key=True)
-    name = NotNullColumn(db.String(200), unique=True)
-    abbr = NotNullColumn(db.String(200), unique=True)
-    unit = NotNullColumn(db.String(200))
-    type = NotNullColumn(db.Integer)
-    simulation_id = NotNullColumn(Integer, ForeignKey(Simulation.id))
-
-    simulation = db.relationship(Simulation)
-
-    def __repr__(self):
-        return '<Property: %s>' % self.name
-
-    class Type:
-        TP = 1
-        SATURATION = 2
-        CRITICAL = 3
-        choices = [TP, SATURATION, CRITICAL]
-        T_RELEVANT = [TP, SATURATION]
-        P_RELEVANT = [TP]
-
-    @staticmethod
-    def insert_properties():
-        properties = [
-            # TP thermodynamic properties
-            ('Density', 'density', 'g/mL', Property.Type.TP, Simulation.Type.NPT),
-            ('Enthalpy of vaporization', 'HoV', 'kcal/mol', Property.Type.TP, Simulation.Type.NPT),
-            ('Isochoric heat capacity', 'Cv', 'cal/mol/K', Property.Type.TP, Simulation.Type.NPT),
-            ('Isobaric heat capacity', 'Cp', 'cal/mol/K', Property.Type.TP, Simulation.Type.NPT),
-            ('Isothermal compressibility', 'compressibility', '/Pa', Property.Type.TP, Simulation.Type.NPT),
-            ('Volume expansivity', 'expansivity', '/K', Property.Type.TP, Simulation.Type.NPT),
-            ('Joule-Thomson coefficient', 'JT', 'K/Pa', Property.Type.TP, Simulation.Type.NPT),
-            ('Speed of sound', 'cSound', 'm/s', Property.Type.TP, Simulation.Type.NPT),
-
-            # TP dynamic properties
-            ('Diffusion coefficient', 'diffusion', 'm^2/s', Property.Type.TP, Simulation.Type.NVT),
-            ('Viscosity', 'viscosity', 'cP', Property.Type.TP, Simulation.Type.VISCOSITY),
-            ('Thermal conductivity', 'TC', 'W/m/K', Property.Type.TP, Simulation.Type.NVT),
-
-            # Saturation properties
-            ('Surface tension', 'ST', 'mN/m', Property.Type.SATURATION, Simulation.Type.SLAB),
-            ('Liquid density', 'dLiquid', 'g/mL', Property.Type.SATURATION, Simulation.Type.SLAB),
-            ('Vapor density', 'dVapor', 'g/mL', Property.Type.SATURATION, Simulation.Type.SLAB),
-            ('Vapor pressure', 'pVapor', 'kPa', Property.Type.SATURATION, Simulation.Type.SLAB),
-
-            # Critical properties
-            ('Critical temperature', 'tCritical', 'K', Property.Type.CRITICAL, Simulation.Type.SLAB),
-            ('Critical pressure', 'pCritical', 'kPa', Property.Type.CRITICAL, Simulation.Type.SLAB),
-            ('Critical density', 'dCritical', 'g/mL', Property.Type.CRITICAL, Simulation.Type.SLAB),
-
-            # Binary TP properties
-            ('Solvation free energy', 'gSolvation', 'kcal/mol', Property.Type.TP, Simulation.Type.SOLVATION_FE),
-            ('Solubility', 'solubility', 'mol/L', Property.Type.TP, Simulation.Type.BINARY_SLAB),
-
-            # Binary Saturation properties
-            ('Mole fraction in gas phase', 'Xg', '', Property.Type.SATURATION, Simulation.Type.BINARY_SLAB),
-            ('Mole fraction in liquid phase', 'Xl', '', Property.Type.SATURATION, Simulation.Type.BINARY_SLAB),
-        ]
-
-        for i in properties:
-            property = Property(name=i[0], abbr=i[1], unit=i[2], type=i[3], simulation_id=i[4])
-            db.session.add(property)
-        try:
-            db.session.commit()
-        except Exception as e:
-            print(str(e))
-            db.session.rollback()
+class ComputeProcedure:
+    NPT = 'npt'
+    NPT_SOLVATION = 'npt-solvation'
+    NPT_HOV_IONIC_LIQUID = 'npt-hov-ionic-liquid'
+    NVT = 'nvt'
+    NVT_MSD = 'nvt-msd'
+    NVT_VISCOSITY = 'nvt-viscosity'
+    NVT_SLAB = 'nvt-slab'
+    NVT_BINARY_SLAB = 'nvt-binary-slab'
+    choices = [NPT, NPT_SOLVATION, NPT_HOV_IONIC_LIQUID, NVT, NVT_MSD, NVT_VISCOSITY, NVT_SLAB, NVT_BINARY_SLAB]
+    T_RELEVANT = choices
+    P_RELEVANT = [NPT, NPT_SOLVATION, NVT, NVT_MSD, NVT_VISCOSITY]
 
 
 class Compute(db.Model):
@@ -118,12 +67,9 @@ class Compute(db.Model):
     web_id = NotNullColumn(Integer)
     web_user_id = NotNullColumn(Integer)
     web_ip = NotNullColumn(String(200))
-    type = NotNullColumn(Integer)
+    n_components = NotNullColumn(Integer)
     time = NotNullColumn(DateTime, default=datetime.now)
-
-    class Type:
-        UNARY = 1
-        BINARY = 2
+    json = NotNullColumn(Text)
 
     class Status:
         SUBMITTED = 0
@@ -134,66 +80,79 @@ class Compute(db.Model):
 
         text = {
             SUBMITTED: 'Submitted',
-            PREPARING: 'Preparing',
-            RUNNING: 'Running',
+            PREPARING: 'Building...',
+            RUNNING: 'Running...',
             DONE: 'Done',
             FAILED: 'Failed'
         }
 
 
-class ComputeUnary(db.Model):
-    __tablename__ = 'compute_unary'
+class JobUnary(db.Model):
+    __tablename__ = 'job_unray'
     id = NotNullColumn(Integer, primary_key=True)
     compute_id = NotNullColumn(Integer, ForeignKey(Compute.id))
-    web_molecule_id = NotNullColumn(Integer)
-    web_molecule_smiles = NotNullColumn(Text)
-    simulation_id = NotNullColumn(Integer, ForeignKey(Simulation.id))
-    t_min = NotNullColumn(Integer)
-    t_max = NotNullColumn(Integer)
-    p_min = NotNullColumn(Integer)
-    p_max = NotNullColumn(Integer)
+    smiles = NotNullColumn(Text)
+    procedure = NotNullColumn(String(200))
+    t = Column(Integer, nullable=True)
+    p = Column(Integer, nullable=True)
+    time = NotNullColumn(DateTime, default=datetime.now)
+    job_name = NotNullColumn(String(200), default=random_string)
+    status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
+    remark = Column(Text, nullable=True)
+    n_mol = Column(Integer, nullable=True)
+
+    compute = db.relationship(Compute)
+
+    def __repr__(self):
+        return '<Job: %s %s>' % (self.smiles, self.procedure)
+
+    def build(self):
+        cd_or_create_and_cd(self.base_dir)
+        cd_or_create_and_cd('build')
+
+        simulation = Simulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT, lmp_bin=Config.LAMMPS_BIN)
+        simulation.build_lammps_box_from_smiles(self.smiles, 3000, 'init.data', 'em.lmp', minimize=True)
+
+        print('Preparing simulation files...')
+        os.chdir('..')
+        shutil.copy('build/em.data', 'em.data')
+        special, bond, angle, dihedral, improper = Lammps.get_intra_style_from_lmp('build/em.lmp')
+        Lammps.prepare_lmp_from_template('t_npt.lmp', 'in.lmp', 'em.data', self.t, self.p / Unit.bar, int(1E3),
+                                         self.n_mol, special, bond, angle, dihedral, improper)
+
+    def run_local(self):
+        try:
+            os.chdir(self.base_dir)
+        except:
+            raise Exception('Should build simulation box first')
+
+        if not (os.path.exists('in.lmp') and os.path.exists('em.data')):
+            raise Exception('Should prepare simulation first')
+
+        lammps = Lammps(Config.LAMMPS_BIN)
+        print('Running NPT simulation...')
+        lammps.run('in.lmp')
+
+    def analyze(self):
+        pass
+
+    @property
+    def base_dir(self) -> str:
+        return os.path.join(Config.WORK_DIR, self.job_name)
+
+
+class JobBinary(db.Model):
+    __tablename__ = 'job_binary'
+    id = NotNullColumn(Integer, primary_key=True)
+    compute_id = NotNullColumn(Integer, ForeignKey(Compute.id))
+    smiles = NotNullColumn(Text)
+    smiles2 = NotNullColumn(Text)
+    procedure = NotNullColumn(String(200))
+    t = NotNullColumn(Integer)
+    p = NotNullColumn(Integer)
     time = NotNullColumn(DateTime, default=datetime.now)
     job_name = Column(String(200), nullable=True)
     status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
     remark = Column(Text, nullable=True)
 
     compute = db.relationship(Compute)
-    simulation = db.relationship(Simulation)
-
-    def generate_tasks(self):
-        pass
-
-    def build(self):
-        pass
-
-    def run(self):
-        pass
-
-    def get_dir(self):
-        pass
-
-    def analyze(self):
-        pass
-
-
-class ComputeBinary(db.Model):
-    __tablename__ = 'compute_binary'
-    id = NotNullColumn(Integer, primary_key=True)
-    compute_id = NotNullColumn(Integer, ForeignKey(Compute.id))
-    web_id = NotNullColumn(Integer)
-    web_molecule_id = NotNullColumn(Integer)
-    web_molecule_smiles = NotNullColumn(Text)
-    web_molecule2_id = NotNullColumn(Integer)
-    web_molecule2_smiles = NotNullColumn(Text)
-    simulation_id = NotNullColumn(Integer, ForeignKey(Simulation.id))
-    t_min = NotNullColumn(Integer)
-    t_max = NotNullColumn(Integer)
-    p_min = NotNullColumn(Integer)
-    p_max = NotNullColumn(Integer)
-    time = NotNullColumn(DateTime, default=datetime.now)
-    name = Column(String(200), nullable=True)
-    status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
-    remark = Column(Text, nullable=True)
-
-    compute = db.relationship(Compute)
-    simulation = db.relationship(Simulation)

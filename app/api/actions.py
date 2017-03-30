@@ -1,91 +1,102 @@
-from flask import request
-from ..models import *
-from .. import db
-from typing import Dict, List
-from sqlalchemy import and_, or_
+import json
+import threading
 
+from flask import request
+
+from mstools.tools import get_T_list_from_range, get_P_list_from_range
+from ..models import *
+
+
+class JobThread(threading.Thread):
+    def __init__(self, compute_id: int):
+        threading.Thread.__init__(self)
+        self.compute_id = compute_id
+    def run(self):
+        compute =  Compute.query.get(self.compute_id)
+        Job = JobUnary
+        if compute.n_components == 2:
+            Job = JobBinary
+        for job in Job.query.filter(Job.compute_id == self.compute_id):
+            job.status = Compute.Status.PREPARING
+            db.session.commit()
+            job.build()
+            job.status = Compute.Status.RUNNING
+            db.session.commit()
+            job.run_local()
+            job.status = Compute.Status.DONE
+            db.session.commit()
 
 class ComputeAction():
     def init_from_json(self, compute_json) -> int:
-        if compute_json['type'] == 'unary':
-            type = Compute.Type.UNARY
-        elif compute_json['type'] == 'binary':
-            type = Compute.Type.BINARY
-        else:
-            raise Exception('Invalid compute type')
-
-        try:
-            simulations = self.get_simulation_types(compute_json['properties'])
-        except Exception as e:
-            raise Exception(str(e))
-
-        if len(simulations) == 0 or len(compute_json['molecules']) == 0:
+        detail_json = compute_json['detail']
+        n_components = len(detail_json['smiles_list'])
+        for smiless in detail_json['smiles_list']:
+            if len(smiless) == 0:
+                raise Exception('Invalid information')
+        procedures = detail_json['procedures']
+        if len(procedures) == 0:
             raise Exception('Invalid information')
 
         compute = Compute()
         compute.web_id = compute_json['id']
         compute.web_user_id = compute_json['user_id']
         compute.web_ip = request.remote_addr
-        compute.type = type
+        compute.n_components = n_components
+        compute.json = json.dumps(detail_json)
 
         db.session.add(compute)
         db.session.flush()
 
-        if type == Compute.Type.UNARY:
-            for molecule_json_dict in compute_json['molecules']:
-                for simulation in simulations:
-                    task = ComputeUnary()
-                    task.compute_id = compute.id
-                    task.web_molecule_id = molecule_json_dict['id']
-                    task.web_molecule_smiles = molecule_json_dict['smiles']
-                    task.simulation_id = simulation.id
-                    task.t_min = compute_json['t_min']
-                    task.t_max = compute_json['t_max']
-                    task.p_min = compute_json['p_min']
-                    task.p_max = compute_json['p_max']
-                    db.session.add(task)
+        T_list = get_T_list_from_range(detail_json['t_min'], detail_json['t_max'])
+        P_list = get_P_list_from_range(detail_json['p_min'], detail_json['p_max'])
 
-        elif type == Compute.Type.BINARY:
-            for molecule_json_dict in compute_json['molecules']:
-                for molecule2_json_dict in compute_json['molecule2s']:
-                    for simulation in simulations:
-                        task = ComputeBinary()
-                        task.compute_id = compute.id
-                        task.web_molecule_id = molecule_json_dict['id']
-                        task.web_molecule_smiles = molecule_json_dict['smiles']
-                        task.web_molecule2_id = molecule2_json_dict['id']
-                        task.web_molecule2_smiles = molecule2_json_dict['smiles']
-                        task.simulation_id = simulation.id
-                        task.t_min = compute_json['t_min']
-                        task.t_max = compute_json['t_max']
-                        task.p_min = compute_json['p_min']
-                        task.p_max = compute_json['p_max']
-                        db.session.add(task)
+        if n_components == 1:
+            combinations = []
+            for smiles in detail_json['smiles_list'][0]:
+                for procedure in procedures:
+                    for T in T_list:
+                        if procedure not in ComputeProcedure.T_RELEVANT:
+                            T = None
+                        for P in P_list:
+                            if procedure not in ComputeProcedure.P_RELEVANT:
+                                P = None
+
+                            combination = [smiles, procedure, T, P]
+                            if combination in combinations:
+                                continue
+
+                            combinations.append(combination)
+                            job = JobUnary()
+                            job.compute_id = compute.id
+                            job.smiles = smiles
+                            job.procedure = procedure
+                            job.t = T
+                            job.p = P
+                            db.session.add(job)
+
+        elif n_components == 2:
+            for smiles in detail_json['smiles_list'][0]:
+                for smiles2 in detail_json['smiles_list'][1]:
+                    for procedure in procedures:
+                        for T in T_list:
+                            for P in P_list:
+                                job = JobBinary()
+                                job.compute_id = compute.id
+                                job.smiles = smiles
+                                job.smiles2 = smiles2
+                                job.procedure = procedure
+                                job.t = T
+                                job.p = P
+                                db.session.add(job)
 
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
             raise Exception(str(e))
-        else:
-            return compute.id
 
-    def get_simulation_types(self, properties_json_dict: List[Dict]) -> List[Simulation]:
-        simulations = []
-        for property_dict in properties_json_dict:
-            name = property_dict['name']
-            abbr = property_dict['abbr']
+        thread_build = JobThread(compute.id)
+        thread_build.start()
 
-            property = Property.query.join(Simulation).filter(
-                or_(
-                    Property.name.ilike(name),
-                    Property.abbr.ilike(abbr),
-                )
-            ).first()
+        return compute.id
 
-            if property == None:
-                raise Exception('Invalid property: ' + name)
-
-            if property.simulation not in simulations:
-                simulations.append(property.simulation)
-        return simulations

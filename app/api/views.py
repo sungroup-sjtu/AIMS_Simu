@@ -1,5 +1,4 @@
-from flask import request
-
+from sqlalchemy import and_
 from . import api
 from .actions import *
 
@@ -21,12 +20,24 @@ def check():
         return json.dumps({'success': False,
                            'reason': 'Not found'})
 
-    if compute.type == Compute.Type.UNARY:
-        tasks = ComputeUnary.query.filter(ComputeUnary.compute_id == compute.id).all()
-    elif compute.type == Compute.Type.BINARY:
-        tasks = ComputeBinary.query.filter(ComputeBinary.compute_id == compute.id).all()
+    Job = JobUnary
+    if compute.n_components == 2:
+        Job = JobBinary
+    jobs = Job.query.filter(Job.compute_id == compute.id).all()
 
-    data = {'success': True, 'ip': request.remote_addr}
+    details = []
+    for job in jobs:
+        details.append({
+            'id': job.id,
+            'name': job.job_name,
+            'smiles': job.smiles,
+            't': job.t,
+            'p': job.p,
+            'procedure': job.procedure,
+            'status': Compute.Status.text[job.status]
+        })
+
+    data = {'success': True, 'ip': request.remote_addr, 'jobs': details}
     return json.dumps(data)
 
 
