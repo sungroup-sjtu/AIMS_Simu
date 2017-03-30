@@ -1,5 +1,5 @@
-import os, subprocess
-from subprocess import Popen, PIPE, STDOUT
+import os, subprocess, sys
+from subprocess import PIPE, STDOUT
 
 
 class DFF:
@@ -11,7 +11,15 @@ class DFF:
 
     def __init__(self, dff_root):
         self.DFF_ROOT = os.path.abspath(dff_root)
-        self.DFF_BIN_DIR = os.path.join(self.DFF_ROOT, 'bin32m')
+        if sys.platform == 'darwin':
+            self.DFF_BIN_DIR = os.path.join(self.DFF_ROOT, 'bin32m')
+        elif sys.platform.startswith('linux'):
+            self.DFF_BIN_DIR = os.path.join(self.DFF_ROOT, 'bin32x')
+        elif sys.platform.startswith('win'):
+            self.DFF_BIN_DIR = os.path.join(self.DFF_ROOT, 'bin32w')
+        else:
+            raise Exception('DFF: Unsupported platform')
+
         self.DFFJOB_BIN = os.path.join(self.DFF_BIN_DIR, 'dffjob.exe')
         self.DFFEXP_BIN = os.path.join(self.DFF_BIN_DIR, 'dffexp.exe')
 
@@ -27,7 +35,7 @@ class DFF:
             .replace('%OUTPUT%', ppf_out).replace('%LOG%', os.path.abspath('checkout.dfo'))
         with open('checkout.dfi', 'w') as f:
             f.write(dfi)
-        subprocess.check_call([self.DFFJOB_BIN, 'checkout'], stdin=PIPE, stdout=PIPE)
+        subprocess.Popen([self.DFFJOB_BIN, 'checkout'], stdin=PIPE, stdout=PIPE).communicate()
 
     def export_lammps(self, model, ppf, data_out, lmp_out):
         model = os.path.abspath(model)
@@ -48,7 +56,7 @@ class DFF:
             .replace('%DATAFILE%', data_out).replace('%INFILE%', lmp_out)
         with open('export_lammps.dfi', 'w') as f:
             f.write(dfi)
-        subprocess.check_call([self.DFFEXP_BIN, 'export_lammps'], stdin=PIPE, stdout=PIPE)
+        subprocess.Popen([self.DFFEXP_BIN, 'export_lammps'], stdin=PIPE, stdout=PIPE).communicate()
 
     def export_gmx(self, model, ppf, gro_out, top_out, itp_out, mdp_out):
         pass
@@ -62,7 +70,7 @@ class DFF:
             .replace('%PDB%', pdb_corr).replace('%LENGTH%', str(length))
         with open('build.dfi', 'w') as f:
             f.write(dfi)
-        subprocess.check_call([self.DFFJOB_BIN, 'build'], stdin=PIPE, stdout=PIPE)
+        subprocess.Popen([self.DFFJOB_BIN, 'build'], stdin=PIPE, stdout=PIPE).communicate()
 
     def checkout_TEAM_MS(self, model, ppf_out):
         db = os.path.join(self.DFF_ROOT, 'database/TEAMFF.dffdb')

@@ -110,7 +110,7 @@ class JobUnary(db.Model):
         cd_or_create_and_cd(self.base_dir)
         cd_or_create_and_cd('build')
 
-        simulation = Simulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT, lmp_bin=Config.LAMMPS_BIN)
+        simulation = Simulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT, lmp_bin=Config.LMP_BIN)
         simulation.build_lammps_box_from_smiles(self.smiles, 3000, 'init.data', 'em.lmp', minimize=True)
 
         print('Preparing simulation files...')
@@ -129,7 +129,7 @@ class JobUnary(db.Model):
         if not (os.path.exists('in.lmp') and os.path.exists('em.data')):
             raise Exception('Should prepare simulation first')
 
-        lammps = Lammps(Config.LAMMPS_BIN)
+        lammps = Lammps(Config.LMP_BIN)
         print('Running NPT simulation...')
         lammps.run('in.lmp')
 

@@ -1,5 +1,7 @@
 import os
+import sys
 import subprocess
+from subprocess import PIPE
 import math
 import random
 from mstools.tools import count_atoms, greatest_common_divisor
@@ -18,8 +20,7 @@ class Packmol:
                   natoms: int = None,
                   size: [float] = None, length: float = None,
                   tolerance: float = None,
-                  seed: int = None,
-                  save_input: bool = True) -> [int]:
+                  seed: int = None) -> [int]:
         '''
         Build box directly from files
 
@@ -82,17 +83,15 @@ structure {filename}
 end structure
 '''.format(filename=filename, number=number, box_size=' '.join(map(str, box)))
 
-        # TODO subprocess PIPE not work on Mac, do not know why
-        # if save_input:
-        #     with open('build.inp', 'w') as f:
-        #         f.write(inp)
-        #
-        # sp = subprocess.Popen([self.PACKMOL_BIN], stdin=subprocess.PIPE)
-        # sp.communicate(input=inp.encode())
-
         with open('build.inp', 'w') as f:
             f.write(inp)
-        os.system(self.PACKMOL_BIN + ' < build.inp > /dev/null')
+
+        # TODO subprocess PIPE not work on Mac, do not know why
+        if sys.platform == 'darwin':
+            os.system(self.PACKMOL_BIN + ' < build.inp > /dev/null')
+        else:
+            sp = subprocess.Popen([self.PACKMOL_BIN], stdin=PIPE, stdout=PIPE)
+            sp.communicate(input=inp.encode())
 
         self.numbers = numbers
         self.length = box[0]
