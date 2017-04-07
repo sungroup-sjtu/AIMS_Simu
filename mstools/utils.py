@@ -3,6 +3,8 @@ import os
 
 from typing import List
 
+from .errors import OpenBabelError
+
 
 def count_atoms(filename):
     '''
@@ -20,6 +22,7 @@ def count_atoms(filename):
             return n
     else:
         return 1
+
 
 def greatest_common_divisor(numbers):
     '''
@@ -80,3 +83,16 @@ def get_P_list_from_range(p_min, p_max, multiple=(5,)) -> List[int]:
             P_list.append(10 ** i * m)
     P_list.append(10 ** magnitude_max)
     return P_list
+
+
+def create_pdb_from_smiles(smiles: str, pdb_out: str):
+    try:
+        import pybel
+        py_mol = pybel.readstring('smi', smiles)
+        py_mol.addh()
+        py_mol.make3D()
+        py_mol.write('pdb', pdb_out, overwrite=True)
+    except:
+        raise OpenBabelError('Cannot create PDB from SMILES')
+    else:
+        return py_mol

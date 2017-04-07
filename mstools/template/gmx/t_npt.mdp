@@ -1,5 +1,5 @@
 integrator      = md
-dt              = 0.002
+dt              = %dt%
 nsteps          = %nsteps%
 
 nstenergy          = %nstenergy%

@@ -1,10 +1,12 @@
-import os
-import sys
-import subprocess
-from subprocess import PIPE
 import math
+import os
 import random
-from mstools.tools import count_atoms, greatest_common_divisor
+import subprocess
+import sys
+from subprocess import PIPE
+
+from mstools.errors import PackmolError
+from mstools.utils import count_atoms, greatest_common_divisor
 
 
 class Packmol:
@@ -35,18 +37,18 @@ class Packmol:
         :return:
         '''
         if len(files) == 0:
-            raise Exception('no files provided')
+            raise PackmolError('No files provided')
         if len(files) != len(numbers):
-            raise Exception('invalid numbers')
+            raise PackmolError('Invalid numbers')
 
         extensions = {filename.split('.')[-1].lower() for filename in files}
         if len(extensions) > 1:
-            raise Exception('all file types should be the same')
+            raise PackmolError('All file types should be the same')
         filetype = extensions.pop()
 
         if natoms != None:
             if natoms < 1:
-                raise Exception('invalid natoms')
+                raise PackmolError('Invalid natoms')
             n_each_file = [count_atoms(filename) for filename in files]
 
             gcd_numbers = greatest_common_divisor(numbers)
@@ -56,13 +58,13 @@ class Packmol:
 
         if size != None:
             if len(size) != 3:
-                raise Exception('Invalid box size')
+                raise PackmolError('Invalid box size')
             else:
                 box = size
         elif length != None:
             box = [length, length, length]
         else:
-            raise Exception('box size needed')
+            raise PackmolError('box size needed')
 
         tolerance = tolerance or 2.0
 

@@ -3,49 +3,16 @@ import shutil
 from datetime import datetime
 from functools import partial
 
-import math
 from sqlalchemy import Column, ForeignKey, Integer, Text, String, DateTime
 
 from config import Config
-from mstools.tools import random_string, cd_or_create_and_cd
+from mstools.utils import random_string, cd_or_create_and_cd
 from . import db
 
 NotNullColumn = partial(Column, nullable=False)
-from mstools.wrapper import DFF, Packmol, Lammps
+from mstools.wrapper import Lammps
 from mstools.simulation import Simulation
-
-
-class Unit:
-    K = 1
-    Pa = 1
-    kPa = 1000
-    MPa = int(1E6)
-    GPa = int(1E9)
-    bar = int(1E5)
-    atm = int(1.013E5)
-    J = 1
-    kJ = 1000
-    kcal = 4184
-    J_per_mol = 1
-    kJ_per_mol = 1000
-    kcal_per_mol = 4184
-
-    text = {
-        K: 'K',
-        Pa: 'Pa',
-        kPa: 'kPa',
-        MPa: 'MPa',
-        GPa: 'GPa',
-        bar: 'bar',
-        atm: 'atm',
-        J: 'J',
-        kJ: 'kJ',
-        kcal: 'kcal',
-        J_per_mol: 'J/mol',
-        kJ_per_mol: 'kJ/mol',
-        kcal_per_mol: 'kcal/mol'
-    }
-
+from mstools.unit import Unit
 
 class ComputeProcedure:
     NPT = 'npt'

@@ -1,7 +1,10 @@
 import os
-import subprocess
-from subprocess import PIPE, STDOUT
 import shutil
+import subprocess
+from subprocess import Popen, PIPE
+
+from mstools.errors import GmxError
+
 
 class GMX:
     TEMPLATE_DIR = os.path.abspath(os.path.dirname(__file__) + os.sep + '../template/gmx/')
@@ -13,49 +16,57 @@ class GMX:
     def __init__(self, gmx_bin):
         self.GMX_BIN = gmx_bin
 
-    def grompp(self, mdp='grompp.mdp', gro='conf.gro', top='topol.top', out='md.tpr', maxwarn=3):
-        sp = subprocess.run([self.GMX_BIN, 'grompp', '-f', mdp, '-c', gro, '-p', top, '-o', out, '-maxwarn', str(maxwarn)])
+    def grompp(self, mdp='grompp.mdp', gro='conf.gro', top='topol.top', tpr_out='md.tpr', maxwarn=3, silent=False):
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen([self.GMX_BIN, 'grompp', '-f', mdp, '-c', gro, '-p', top, '-o', tpr_out, '-maxwarn', str(maxwarn)],
+                   stdout=stdout, stderr=stderr)
+        sp.communicate()
 
-    def mdrun(self, tpr, nprocs=1):
-        if nprocs == 1:
-            sp = subprocess.run([self.GMX_BIN, 'mdrun', '-v', '-deffnm', tpr])
-        else:
-            sp = subprocess.run(['mpirun', '-np', str(nprocs), self.GMX_BIN, 'mdrun', '-v', '-deffnm', tpr])
+    def mdrun(self, name='md', nprocs=1, silent=False):
+        cmd = [self.GMX_BIN, 'mdrun', '-v', '-deffnm', name]
+        if nprocs > 1:
+            cmd = ['mpirun', '-np', str(nprocs)] + cmd
 
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen(cmd, stdout=stdout, stderr=stderr)
+        sp.communicate()
 
     @staticmethod
-    def prepare_mdp_from_template(template: str, mdp='grompp.mdp', T=None, P=None, nsteps=None,
-            nstenergy=1000, nstvout = 0,
-            nstxtcout=10000, xtcgrps = 'System',
-            genvel=True):
+    def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=1000, dt=0.001,
+                                  nstenergy=1000, nstvout=0,
+                                  nstxtcout=10000, xtcgrps='System',
+                                  genvel=True):
 
         if T == None or P == None or nsteps == None:
-            raise Exception('T, P, nsteps are required')
+            raise GmxError('T, P, nsteps are required')
 
         genvel = 'yes' if genvel else 'no'
 
         template = os.path.join(GMX.TEMPLATE_DIR, template)
         if not os.path.exists(template):
-            raise Exception('mdp template not found')
+            raise GmxError('mdp template not found')
 
         with open(template) as f_t:
-            with open(mdp, 'w') as f_mdp:
-                f_mdp.write(f_t.read().replace('%T%', str(T)).replace('%P%', str(P)).replace('%nsteps%', str(int(nsteps)))\
-                        .replace('%nstenergy%', str(nstenergy)).replace('%nstvout%', str(nstvout))\
-                        .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps))\
+            with open(mdp_out, 'w') as f_mdp:
+                f_mdp.write(
+                    f_t.read().replace('%T%', str(T)).replace('%P%', str(P)).replace('%nsteps%', str(int(nsteps))) \
+                        .replace('%dt%', str(dt)) \
+                        .replace('%nstenergy%', str(nstenergy)).replace('%nstvout%', str(nstvout)) \
+                        .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps)) \
                         .replace('%genvel%', str(genvel)))
 
     def get_property(self, edr, property_str, begin=0) -> float:
-        sp = subprocess.Popen([self.GMX_BIN, 'energy', '-f', edr, '-b', str(begin)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        sp = Popen([self.GMX_BIN, 'energy', '-f', edr, '-b', str(begin)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
         sp_out = sp.communicate(input=property_str.encode())[0]
 
         for line in sp_out.decode().splitlines():
             if line.lower().startswith(property_str.lower()):
                 return float(line.split()[1])
-        raise Exception('Invalid property')
+        raise GmxError('Invalid property')
 
     def get_box(self, edr, begin=0) -> [float]:
-        sp = subprocess.Popen([self.GMX_BIN, 'energy', '-f', edr, '-b', str(begin)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
+        sp = subprocess.Popen([self.GMX_BIN, 'energy', '-f', edr, '-b', str(begin)], stdout=PIPE, stdin=PIPE,
+                              stderr=PIPE)
         sp_out = sp.communicate(input='Box-'.encode())[0]
 
         box = [0, 0, 0]
@@ -69,7 +80,7 @@ class GMX:
         return box
 
     @staticmethod
-    def scale_box(gro, new_gro, new_box:[float]):
+    def scale_box(gro, new_gro, new_box: [float]):
         n = 0
         NAtoms = 0
         nresidue = []
@@ -82,7 +93,7 @@ class GMX:
         if not os.path.exists(gro):
             gro = gro + '.gro'
         if not os.path.exists(gro):
-            raise Exception('gro not found')
+            raise GmxError('gro not found')
         with open(gro) as f:
             for line in f:
                 n += 1
@@ -102,23 +113,23 @@ class GMX:
                     vx = float(line[44:52])
                     vy = float(line[52:60])
                     vz = float(line[60:68])
-                    xyz.append([x,y,z])
-                    vxyz.append([vx,vy,vz])
+                    xyz.append([x, y, z])
+                    vxyz.append([vx, vy, vz])
                 if n == 3 + NAtoms:
-                    box = [ float(word) for word in line.strip().split()[:3]]
+                    box = [float(word) for word in line.strip().split()[:3]]
                     break
 
         scale = [new_box[i] / box[i] for i in range(3)]
-        xyz = [[i[0] * scale[0], i[1]*scale[1], i[2]*scale[2]] for i in xyz]
-        vxyz = [[i[0] * scale[0], i[1]*scale[1], i[2]*scale[2]] for i in vxyz]
+        xyz = [[i[0] * scale[0], i[1] * scale[1], i[2] * scale[2]] for i in xyz]
+        vxyz = [[i[0] * scale[0], i[1] * scale[1], i[2] * scale[2]] for i in vxyz]
 
         with open(new_gro, 'w') as f:
-            f.write('Scaled box\n%i\n' %NAtoms)
+            f.write('Scaled box\n%i\n' % NAtoms)
             for i in range(NAtoms):
                 f.write('%5i%5s%5s%5i%8.3f%8.3f%8.3f%8.4f%8.4f%8.4f\n'
-                        %(nresidue[i], residue[i], element[i], natom[i],
-                          xyz[i][0],xyz[i][1],xyz[i][2],vxyz[i][0],vxyz[i][1],vxyz[i][2]))
-            f.write('%f %f %f\n' %(new_box[0], new_box[1], new_box[2]))
+                        % (nresidue[i], residue[i], element[i], natom[i],
+                           xyz[i][0], xyz[i][1], xyz[i][2], vxyz[i][0], vxyz[i][1], vxyz[i][2]))
+            f.write('%f %f %f\n' % (new_box[0], new_box[1], new_box[2]))
 
     @staticmethod
     def generate_top(itp, molecules, numbers):
@@ -126,61 +137,58 @@ class GMX:
         with open('topol.top', 'a') as f:
             f.write('\n[system]\n[molecules]\n')
             for i, molecule in enumerate(molecules):
-                f.write('%s %i\n' %(molecule, numbers[i]))
+                f.write('%s %i\n' % (molecule, numbers[i]))
 
-    def pdb2gro(self, pdb, gro, box: [float]):
+    def pdb2gro(self, pdb, gro_out, box: [float]):
         if len(box) != 3:
-            raise Exception('Invalid box')
-        sp = subprocess.run([self.GMX_BIN, 'editconf', '-f', pdb, '-o', gro, '-box', str(box[0]), str(box[1]), str(box[2])])
+            raise GmxError('Invalid box')
+        sp = Popen([self.GMX_BIN, 'editconf', '-f', pdb, '-o', gro_out, '-box', str(box[0]), str(box[1]), str(box[2])])
+        sp.communicate()
 
-
-    def velacc(self, trr, tpr=None, group=None, begin=0, out='velacc', silent=False):
+    def velacc(self, trr, tpr=None, group=None, begin=0, xvg_out='velacc', silent=False):
         if tpr == None:
             tpr = trr
         if group == None:
-            raise Exception('No group specifed')
+            raise GmxError('No group specifed')
 
-        if silent:
-            sp = subprocess.Popen([self.GMX_BIN, 'velacc', '-f', trr, '-s', tpr, '-o', out, '-b', str(begin), '-mol', '-nonormalize'],
-                    stdin=PIPE, stdout=PIPE, stderr=PIPE)
-        else:
-            sp = subprocess.Popen([self.GMX_BIN, 'velacc', '-f', trr, '-s', tpr, '-o', out, '-b', str(begin), '-mol', '-nonormalize'],
-                    stdin=PIPE)
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen([self.GMX_BIN, 'velacc', '-f', trr, '-s', tpr, '-o', xvg_out, '-b', str(begin), '-mol',
+                    '-nonormalize'],
+                   stdin=PIPE, stdout=stdout, stderr=stderr)
         sp.communicate(input=str(group).encode())
 
-    def msd_com(self, xtc, tpr, resname, beginfit=-1, endfit=-1, out=None, silent=False):
+    def msd_com(self, xtc, tpr, resname, beginfit=-1, endfit=-1, xvg_out=None, silent=False):
         ndx = 'com-' + resname + '.ndx'
-        GMX.select_com(tpr, resname, out=ndx)
-        if out == None:
-            out = 'msd-com-%s.xvg' %resname
-        if silent:
-            sp = subprocess.Popen([self.GMX_BIN, 'msd', '-f', xtc, '-s', tpr, '-n', ndx, '-o', out, '-nomw', '-beginfit', str(beginfit), '-endfit', str(endfit)], stdout=PIPE, stderr=PIPE)
-        else:
-            sp = subprocess.Popen([self.GMX_BIN, 'msd', '-f', xtc, '-s', tpr, '-n', ndx, '-o', out, '-nomw', '-beginfit', str(beginfit), '-endfit', str(endfit)])
+        GMX.select_com(tpr, resname, ndx_out=ndx)
+        if xvg_out == None:
+            xvg_out = 'msd-com-%s.xvg' % resname
+
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen([self.GMX_BIN, 'msd', '-f', xtc, '-s', tpr, '-n', ndx, '-o', xvg_out, '-nomw',
+                    '-beginfit', str(beginfit), '-endfit', str(endfit)], stdout=stdout, stderr=stderr)
         sp_out = sp.communicate()[0]
 
         for line in sp_out.decode().splitlines():
             if line.startswith('D['):
                 return line
-        raise Exception('Error running gmx msd')
+        raise GmxError('Error running gmx msd')
 
-    def traj_com(self, xtc, tpr, out=None, silent=False):
+    def traj_com(self, xtc, tpr, xtc_out=None, silent=False):
         ndx = 'com.ndx'
-        GMX.select_com(tpr, 'all', out=ndx)
-        if out == None:
-            out = 'com.xtc'
-        if silent:
-            sp = subprocess.Popen([self.GMX_BIN, 'traj', '-s', tpr, '-f', xtc, '-oxt', out, '-mol', '-n', ndx], stdout=PIPE, stderr=PIPE)
-            sp.communicate()
-        else:
-            sp = subprocess.run([self.GMX_BIN, 'traj', '-s', tpr, '-f', xtc, '-oxt', out, '-mol', '-n', ndx])
-        return out, ndx
+        self.select_com(tpr, 'all', ndx_out=ndx)
+        if xtc_out == None:
+            xtc_out = 'com.xtc'
 
-    def select_com(self, tpr, resname, out='selection.ndx'):
-        sp = subprocess.Popen([self.GMX_BIN, 'select', '-s', tpr, '-on', out], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen([self.GMX_BIN, 'traj', '-s', tpr, '-f', xtc, '-oxt', xtc_out, '-mol', '-n', ndx],
+                   stdout=stdout, stderr=stderr)
+        sp.communicate()
+        return xtc_out, ndx
+
+    def select_com(self, tpr, resname, ndx_out='selection.ndx'):
+        sp = Popen([self.GMX_BIN, 'select', '-s', tpr, '-on', ndx_out], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         if resname == 'all':
             select_com_str = 'res_com of all'
         else:
-            select_com_str = 'res_com of resname %s' %resname
+            select_com_str = 'res_com of resname %s' % resname
         sp.communicate(input=select_com_str.encode())
-

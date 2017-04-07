@@ -3,7 +3,7 @@ import threading
 
 from flask import request
 
-from mstools.tools import get_T_list_from_range, get_P_list_from_range
+from mstools.utils import get_T_list_from_range, get_P_list_from_range
 from ..models import *
 
 
