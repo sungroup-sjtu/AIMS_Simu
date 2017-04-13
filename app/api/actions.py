@@ -1,30 +1,10 @@
 import json
-import threading
 
 from flask import request
 
 from mstools.utils import get_T_list_from_range, get_P_list_from_range
 from ..models import *
 
-
-class JobThread(threading.Thread):
-    def __init__(self, compute_id: int):
-        threading.Thread.__init__(self)
-        self.compute_id = compute_id
-    def run(self):
-        compute =  Compute.query.get(self.compute_id)
-        Job = JobUnary
-        if compute.n_components == 2:
-            Job = JobBinary
-        for job in Job.query.filter(Job.compute_id == self.compute_id):
-            job.status = Compute.Status.PREPARING
-            db.session.commit()
-            job.build()
-            job.status = Compute.Status.RUNNING
-            db.session.commit()
-            job.run_local()
-            job.status = Compute.Status.DONE
-            db.session.commit()
 
 class ComputeAction():
     def init_from_json(self, compute_json) -> int:
@@ -95,8 +75,7 @@ class ComputeAction():
             db.session.rollback()
             raise Exception(str(e))
 
-        thread_build = JobThread(compute.id)
-        thread_build.start()
+        job_thread = JobThread(compute.id)
+        job_thread.start()
 
         return compute.id
-

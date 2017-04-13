@@ -31,6 +31,11 @@ class GMX:
         sp = Popen(cmd, stdout=stdout, stderr=stderr)
         sp.communicate()
 
+    def minimize(self, gro, top, nprocs=1, silent=False, name='em'):
+        self.prepare_mdp_from_template('t_em.mdp')
+        self.grompp(gro=gro, top=top, tpr_out=name + '.tpr', silent=silent)
+        self.mdrun(name=name, nprocs=nprocs, silent=silent)
+
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=1000, dt=0.001,
                                   nstenergy=1000, nstvout=0,

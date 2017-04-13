@@ -48,7 +48,7 @@ class DFF:
         if err.decode() != '':
             raise DffError('Checkout failed: %s' % err.decode())
 
-    def export_lammps(self, model, ppf, data_out, lmp_out):
+    def export_lammps(self, model, ppf, data_out='data', lmp_out='in.lmp'):
         model = os.path.abspath(model)
         ppf = os.path.abspath(ppf)
         data_out = os.path.abspath(data_out)
@@ -67,7 +67,7 @@ class DFF:
         if err.decode() != '':
             raise DffError('Export failed: %s' % err.decode())
 
-    def export_gmx(self, model, ppf, gro_out, top_out, mdp_out):
+    def export_gmx(self, model, ppf, gro_out='conf.gro', top_out='topol.top', mdp_out='grompp.mdp'):
         model = os.path.abspath(model)
         ppf = os.path.abspath(ppf)
         gro_out = os.path.abspath(gro_out)
@@ -100,7 +100,7 @@ class DFF:
             f.write(dfi)
         sp = Popen([self.DFFJOB_BIN, 'build'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = sp.communicate()
-        if (err.decode()):
+        if err.decode() != '':
             raise DffError('Build failed: %s' %err.decode())
 
     @staticmethod

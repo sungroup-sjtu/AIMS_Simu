@@ -7,7 +7,3 @@ coulombtype     = PME
 rcoulomb        = 1.2
 rvdw            = 1.2
 DispCorr        = EnerPres
-
-constraints      = h-bonds
-constraint_algorithm = lincs
-

@@ -10,8 +10,10 @@ class BaseConfig:
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     SQLALCHEMY_TRACK_MODIFICATIONS = True
 
-    # SIMULATION_ENGINE = 'lammps'
     SIMULATION_ENGINE = 'gmx'
+    # SIMULATION_ENGINE = 'lammps'
+    QUEUE_SYSTEM = 'local'
+    # QUEUE_SYSTEM = 'torque'
 
 
 class ClusterConfig(BaseConfig):

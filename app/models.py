@@ -1,7 +1,7 @@
 import os
-import shutil
 from datetime import datetime
 from functools import partial
+from threading import Thread
 
 from sqlalchemy import Column, ForeignKey, Integer, Text, String, DateTime
 
@@ -10,9 +10,8 @@ from mstools.utils import random_string, cd_or_create_and_cd
 from . import db
 
 NotNullColumn = partial(Column, nullable=False)
-from mstools.wrapper import Lammps
-from mstools.simulation import Simulation
-from mstools.unit import Unit
+from mstools.simulation import GmxSimulation, LammpsSimulation
+
 
 class ComputeProcedure:
     NPT = 'npt'
@@ -53,6 +52,14 @@ class Compute(db.Model):
             FAILED: 'Failed'
         }
 
+    @property
+    def jobs(self):
+        if self.n_components == 1:
+            Job = JobUnary
+        elif self.n_components == 2:
+            Job = JobBinary
+        return Job.query.filter(Job.compute_id == self.id)
+
 
 class JobUnary(db.Model):
     __tablename__ = 'job_unray'
@@ -73,35 +80,39 @@ class JobUnary(db.Model):
     def __repr__(self):
         return '<Job: %s %s>' % (self.smiles, self.procedure)
 
+    def init_simulation(self):
+        if Config.SIMULATION_ENGINE == 'lammps':
+            self.simulation = LammpsSimulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT,
+                                               lmp_bin=Config.LMP_BIN, procedure=self.procedure)
+        elif Config.SIMULATION_ENGINE == 'gmx':
+            self.simulation = GmxSimulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT,
+                                            gmx_bin=Config.GMX_BIN, procedure=self.procedure)
+        else:
+            raise Exception('Simulation engine not supported')
+
     def build(self):
         cd_or_create_and_cd(self.base_dir)
         cd_or_create_and_cd('build')
+        self.init_simulation()
+        self.simulation.build(self.smiles, minimize=True)
+        self.simulation.prepare()
 
-        simulation = Simulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT, lmp_bin=Config.LMP_BIN)
-        simulation.build_lammps_box_from_smiles(self.smiles, 3000, 'init.data', 'em.lmp', minimize=True)
-
-        print('Preparing simulation files...')
-        os.chdir('..')
-        shutil.copy('build/em.data', 'em.data')
-        special, bond, angle, dihedral, improper = Lammps.get_intra_style_from_lmp('build/em.lmp')
-        Lammps.prepare_lmp_from_template('t_npt.lmp', 'in.lmp', 'em.data', self.t, self.p / Unit.bar, int(1E3),
-                                         self.n_mol, special, bond, angle, dihedral, improper)
-
-    def run_local(self):
+    def run(self):
         try:
             os.chdir(self.base_dir)
         except:
             raise Exception('Should build simulation box first')
-
-        if not (os.path.exists('in.lmp') and os.path.exists('em.data')):
-            raise Exception('Should prepare simulation first')
-
-        lammps = Lammps(Config.LMP_BIN)
-        print('Running NPT simulation...')
-        lammps.run('in.lmp')
+        else:
+            self.init_simulation()
+            self.simulation.run()
 
     def analyze(self):
-        pass
+        try:
+            os.chdir(self.base_dir)
+        except:
+            raise Exception('Should build simulation box first')
+        else:
+            self.simulation.analyze()
 
     @property
     def base_dir(self) -> str:
@@ -123,3 +134,37 @@ class JobBinary(db.Model):
     remark = Column(Text, nullable=True)
 
     compute = db.relationship(Compute)
+
+    def build(self):
+        pass
+
+    def prepare(self):
+        pass
+
+    def run(self):
+        pass
+
+    def analyze(self):
+        pass
+
+
+class JobThread(Thread):
+    def __init__(self, compute_id: int):
+        super().__init__()
+        self.compute_id = compute_id
+
+    def run(self):
+        compute = Compute.query.get(self.compute_id)
+        if compute.n_components == 1:
+            Job = JobUnary
+        elif compute.n_components == 2:
+            Job = JobBinary
+        for job in Job.query.filter(Job.compute_id == self.compute_id):
+            job.status = Compute.Status.PREPARING
+            db.session.commit()
+            job.build()
+            job.status = Compute.Status.RUNNING
+            db.session.commit()
+            job.run_local()
+            job.status = Compute.Status.DONE
+            db.session.commit()
