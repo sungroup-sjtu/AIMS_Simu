@@ -7,11 +7,10 @@ from sqlalchemy import Column, ForeignKey, Integer, Text, String, DateTime
 
 from config import Config
 from mstools.utils import random_string, cd_or_create_and_cd
-from . import db
+from . import db, jobmanager
 
 NotNullColumn = partial(Column, nullable=False)
-from mstools.simulation import GmxSimulation, LammpsSimulation
-
+from mstools.simulation import *
 
 
 class Compute(db.Model):
@@ -66,39 +65,48 @@ class Task(db.Model):
     def init_simulation(self):
         if Config.SIMULATION_ENGINE == 'lammps':
             self.simulation = LammpsSimulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT,
-                                               lmp_bin=Config.LMP_BIN, procedure=self.procedure)
+                                               lmp_bin=Config.LMP_BIN, procedure=self.procedure,
+                                               jobmanager=jobmanager)
         elif Config.SIMULATION_ENGINE == 'gmx':
             self.simulation = GmxSimulation(packmol_bin=Config.PACKMOL_BIN, dff_root=Config.DFF_ROOT,
-                                            gmx_bin=Config.GMX_BIN, procedure=self.procedure)
+                                            gmx_bin=Config.GMX_BIN, procedure=self.procedure,
+                                            jobmanager=jobmanager)
         else:
             raise Exception('Simulation engine not supported')
 
     def build(self):
-        cd_or_create_and_cd(self.base_dir)
+        cd_or_create_and_cd(self.task_dir)
         cd_or_create_and_cd('build')
         self.init_simulation()
         self.simulation.build(self.smiles, minimize=True)
-        self.simulation.prepare()
+        for job in self.jobs():
+            self.simulation.prepare(model_dir='..', T=job.t, P=job.p, jobname=job.job_name)
 
     def run(self):
         try:
-            os.chdir(self.base_dir)
+            os.chdir(self.task_dir)
         except:
             raise Exception('Should build simulation box first')
-        else:
-            self.init_simulation()
-            self.simulation.run()
+
+        for job in self.jobs():
+            try:
+                os.chdir(job.job_dir)
+            except:
+                raise Exception('Should prepare simulation first')
+
+            jobmanager.submit()
+
 
     def analyze(self):
         try:
-            os.chdir(self.base_dir)
+            os.chdir(self.task_dir)
         except:
             raise Exception('Should build simulation box first')
         else:
             self.simulation.analyze()
 
     @property
-    def base_dir(self) -> str:
+    def task_dir(self) -> str:
         return os.path.join(Config.WORK_DIR, self.task_name)
 
 
@@ -110,15 +118,16 @@ class Job(db.Model):
     p = Column(Integer, nullable=True)
     time = NotNullColumn(DateTime, default=datetime.now)
     status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
+    job_name = NotNullColumn(String(200))
 
     task = db.relationship(Task)
 
     def __repr__(self):
-        return '<Job: %s %s>' % (self.smiles, self.procedure)
+        return '<Job: %s>' % (self.job_name)
 
     @property
-    def job_name(self):
-        return self.task.task_name + '_' + self.t + '_' + self.p
+    def job_dir(self) -> str:
+        return os.path.join(self.task.task_dir, self.job_name)
 
 
 class JobThread(Thread):

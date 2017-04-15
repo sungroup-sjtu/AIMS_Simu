@@ -1,6 +1,6 @@
 from subprocess import Popen
 
-from . import JobManager
+from .jobmanager import JobManager
 
 
 class Torque(JobManager):

@@ -2,15 +2,16 @@ import math
 import os
 import shutil
 
-from mstools.errors import LammpsError
-from mstools.simulation import Simulation
-from mstools.utils import create_pdb_from_smiles
-from mstools.wrapper import Packmol, DFF, Lammps
+from ...errors import LammpsError
+from ..simulation import Simulation
+from ...utils import create_pdb_from_smiles
+from ...wrapper import Packmol, DFF, Lammps
+from ...jobmanager import Local
 
 
 class LammpsSimulation(Simulation):
-    def __init__(self, packmol_bin=None, dff_root=None, lmp_bin=None, procedure=None):
-        super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, procedure=procedure)
+    def __init__(self, packmol_bin=None, dff_root=None, lmp_bin=None, procedure=None, jobmanager=Local()):
+        super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, procedure=procedure,jobmanager=jobmanager)
         self.LMP_BIN = lmp_bin
 
     def build(self, smiles, n_atoms=3000, density=1.0, ff='TEAM_LS',

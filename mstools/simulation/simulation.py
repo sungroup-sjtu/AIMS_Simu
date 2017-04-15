@@ -1,12 +1,13 @@
 import math
 
-from mstools.utils import create_pdb_from_smiles
-from mstools.wrapper import Packmol, DFF
+from ..utils import create_pdb_from_smiles
+from ..wrapper import Packmol, DFF
 from .procedure import Procedure
+from ..jobmanager import Local
 
 
 class Simulation():
-    def __init__(self, packmol_bin=None, dff_root=None, procedure=None, jobmanager = None):
+    def __init__(self, packmol_bin=None, dff_root=None, procedure=None, jobmanager=None):
         self.packmol = Packmol(packmol_bin=packmol_bin)
         self.dff = DFF(dff_root=dff_root)
         self.procedure = procedure
@@ -18,17 +19,11 @@ class Simulation():
     def build(self, smiles, n_atoms):
         pass
 
-    def prepare(self):
-        pass
-
-    def run_local(self):
-        pass
-
-    def run_queue(self):
+    def prepare(self, model_dir):
         pass
 
     def run(self):
-        pass
+        self.jobmanager.submit()
 
     def analyze(self):
         pass

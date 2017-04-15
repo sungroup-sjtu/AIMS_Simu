@@ -12,8 +12,9 @@ class BaseConfig:
 
     SIMULATION_ENGINE = 'gmx'
     # SIMULATION_ENGINE = 'lammps'
-    QUEUE_SYSTEM = 'local'
-    # QUEUE_SYSTEM = 'torque'
+    JOB_MANAGER = 'local'
+    # JOB_MANAGER = 'torque'
+    JOB_QUEUE = 'cpu'
     NPROC_PER_JOB = 8
 
 
@@ -51,3 +52,4 @@ elif socket.gethostname() == 'z-XPS':
     Config = XPSConfig
 else:
     raise Exception('MSData Server will not work on this machine')
+

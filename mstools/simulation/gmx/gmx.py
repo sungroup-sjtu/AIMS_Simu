@@ -5,11 +5,12 @@ from ..procedure import Procedure
 from ..simulation import Simulation
 from ...errors import GmxError
 from ...wrapper import GMX
+from ...jobmanager import Local
 
 
 class GmxSimulation(Simulation):
-    def __init__(self, packmol_bin=None, dff_root=None, gmx_bin=None, procedure=None):
-        super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, procedure=procedure)
+    def __init__(self, packmol_bin=None, dff_root=None, gmx_bin=None, procedure=None, jobmanager=Local()):
+        super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, procedure=procedure, jobmanager=jobmanager)
         self.gmx = GMX(gmx_bin=gmx_bin)
 
     def build(self, smiles, n_atoms=3000, ff='TEAM_LS',
@@ -30,28 +31,23 @@ class GmxSimulation(Simulation):
             else:
                 raise GmxError('Energy minimization failed')
 
-    def prepare(self, gro='conf.gro', top='topol.top', T=None, P=None, nproc=1, job_name=None):
-        if job_name == None:
-            job_name = self.procedure
+    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, nproc=1, jobname=None):
+        if os.path.abspath(model_dir) != os.getcwd():
+            shutil.copy(os.path.join(model_dir, gro), gro)
+            shutil.copy(os.path.join(model_dir, top), top)
+
         commands = []
         if self.procedure in (Procedure.NPT, Procedure.NPT_BINARY_SLAB,):
             self.gmx.prepare_mdp_from_template('t_npt.mdp', T=T, P=P, nsteps=int(1E6))
         elif self.procedure in (Procedure.NVT_SLAB,):
             self.gmx.prepare_mdp_from_template('t_nvt.mdp', T=T, nsteps=int(1E6))
-        self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, silent=True)
+        cmd = self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
+        commands.append(cmd)
         cmd = self.gmx.mdrun(name=self.procedure, nprocs=nproc, get_cmd=True)
         commands.append(cmd)
-        self.jobmanager.generate_sh(os.getcwd(), commands, job_name)
-
-        # if self.procedure in (Procedure.NPT,):
-        #     cmd = self.gmx.energy(edr=self.procedure, properties = ['Density', ] , get_cmd=True)
-        #     commands.append(cmd)
-        # elif self.procedure in (Procedure.NPT_BINARY_SLAB, Procedure.NVT_SLAB):
-        #     cmd = self.gmx.energy(edr=self.procedure, properties = ['#Surf', ] , get_cmd=True)
-        #     commands.append(cmd)
+        self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
     def analyze(self):
         import panedr
         df = panedr.edr_to_df(self.procedure + '.edr')
         pass
-

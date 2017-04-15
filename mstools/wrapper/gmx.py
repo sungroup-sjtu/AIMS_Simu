@@ -16,11 +16,15 @@ class GMX:
     def __init__(self, gmx_bin):
         self.GMX_BIN = gmx_bin
 
-    def grompp(self, mdp='grompp.mdp', gro='conf.gro', top='topol.top', tpr_out='md.tpr', maxwarn=3, silent=False):
-        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
-        sp = Popen([self.GMX_BIN, 'grompp', '-f', mdp, '-c', gro, '-p', top, '-o', tpr_out, '-maxwarn', str(maxwarn)],
-                   stdout=stdout, stderr=stderr)
-        sp.communicate()
+    def grompp(self, mdp='grompp.mdp', gro='conf.gro', top='topol.top', tpr_out='md.tpr',
+               maxwarn=3, silent=False, get_cmd=False):
+        cmd = '%s grompp -f %s -c %s -p %s -o %s -maxwarn %i' % (self.GMX_BIN, mdp, gro, top, tpr_out, maxwarn)
+        if get_cmd:
+            return cmd
+        else:
+            (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+            sp = Popen(cmd.strip(), stdout=stdout, stderr=stderr)
+            sp.communicate()
 
     def mdrun(self, name='md', nprocs=1, silent=False, get_cmd=False):
         cmd = '%s mdrun -deffnm %s' % (self.GMX_BIN, name)
