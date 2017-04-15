@@ -22,14 +22,17 @@ class GMX:
                    stdout=stdout, stderr=stderr)
         sp.communicate()
 
-    def mdrun(self, name='md', nprocs=1, silent=False):
-        cmd = [self.GMX_BIN, 'mdrun', '-v', '-deffnm', name]
+    def mdrun(self, name='md', nprocs=1, silent=False, get_cmd=False):
+        cmd = '%s mdrun -deffnm %s' % (self.GMX_BIN, name)
         if nprocs > 1:
-            cmd = ['mpirun', '-np', str(nprocs)] + cmd
+            cmd = 'mpirun -np %i %s' % (nprocs, cmd)
 
-        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
-        sp = Popen(cmd, stdout=stdout, stderr=stderr)
-        sp.communicate()
+        if get_cmd:
+            return cmd
+        else:
+            (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+            sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
+            sp.communicate()
 
     def minimize(self, gro, top, nprocs=1, silent=False, name='em'):
         self.prepare_mdp_from_template('t_em.mdp')
@@ -60,12 +63,22 @@ class GMX:
                         .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps)) \
                         .replace('%genvel%', str(genvel)))
 
-    def get_property(self, edr, property_str, begin=0) -> float:
-        sp = Popen([self.GMX_BIN, 'energy', '-f', edr, '-b', str(begin)], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-        sp_out = sp.communicate(input=property_str.encode())[0]
+    def energy(self, edr, properties: [str], begin=0, get_cmd=False):
+        property_str = '\\n'.join(properties)
+        cmd = '%s energy -f %s -b %s' % (self.GMX_BIN, edr, str(begin))
+        if get_cmd:
+            cmd = 'echo "%s" | %s' % (property_str, cmd)
+            return cmd
+        else:
+            sp = Popen(cmd.split(), stdout=PIPE, stdin=PIPE, stderr=PIPE)
+            sp_out = sp.communicate(input=property_str.encode())[0]
+            return sp_out
+
+    def get_property(self, edr, property: str, begin=0) -> float:
+        sp_out = self.energy(edr, properties=[property], begin=begin)
 
         for line in sp_out.decode().splitlines():
-            if line.lower().startswith(property_str.lower()):
+            if line.lower().startswith(property.lower()):
                 return float(line.split()[1])
         raise GmxError('Invalid property')
 

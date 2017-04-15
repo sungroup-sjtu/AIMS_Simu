@@ -13,19 +13,6 @@ NotNullColumn = partial(Column, nullable=False)
 from mstools.simulation import GmxSimulation, LammpsSimulation
 
 
-class ComputeProcedure:
-    NPT = 'npt'
-    NPT_SOLVATION = 'npt-solvation'
-    NPT_HOV_IONIC_LIQUID = 'npt-hov-ionic-liquid'
-    NVT = 'nvt'
-    NVT_MSD = 'nvt-msd'
-    NVT_VISCOSITY = 'nvt-viscosity'
-    NVT_SLAB = 'nvt-slab'
-    NVT_BINARY_SLAB = 'nvt-binary-slab'
-    choices = [NPT, NPT_SOLVATION, NPT_HOV_IONIC_LIQUID, NVT, NVT_MSD, NVT_VISCOSITY, NVT_SLAB, NVT_BINARY_SLAB]
-    T_RELEVANT = choices
-    P_RELEVANT = [NPT, NPT_SOLVATION, NVT, NVT_MSD, NVT_VISCOSITY]
-
 
 class Compute(db.Model):
     __tablename__ = 'compute'
@@ -33,9 +20,10 @@ class Compute(db.Model):
     web_id = NotNullColumn(Integer)
     web_user_id = NotNullColumn(Integer)
     web_ip = NotNullColumn(String(200))
-    n_components = NotNullColumn(Integer)
     time = NotNullColumn(DateTime, default=datetime.now)
     json = NotNullColumn(Text)
+
+    tasks = db.relationship('Task', lazy='dynamic')
 
     class Status:
         SUBMITTED = 0
@@ -52,33 +40,28 @@ class Compute(db.Model):
             FAILED: 'Failed'
         }
 
-    @property
-    def jobs(self):
-        if self.n_components == 1:
-            Job = JobUnary
-        elif self.n_components == 2:
-            Job = JobBinary
-        return Job.query.filter(Job.compute_id == self.id)
 
-
-class JobUnary(db.Model):
-    __tablename__ = 'job_unray'
+class Task(db.Model):
+    __tablename__ = 'task'
     id = NotNullColumn(Integer, primary_key=True)
     compute_id = NotNullColumn(Integer, ForeignKey(Compute.id))
-    smiles = NotNullColumn(Text)
+    n_components = NotNullColumn(Integer)
+    smiles_list = NotNullColumn(Text)
+    n_mol_list = Column(Text, nullable=True)
     procedure = NotNullColumn(String(200))
-    t = Column(Integer, nullable=True)
-    p = Column(Integer, nullable=True)
-    time = NotNullColumn(DateTime, default=datetime.now)
-    job_name = NotNullColumn(String(200), default=random_string)
+    t_min = Column(Integer, nullable=True)
+    t_max = Column(Integer, nullable=True)
+    p_min = Column(Integer, nullable=True)
+    p_max = Column(Integer, nullable=True)
+    task_name = NotNullColumn(String(200), default=random_string)
     status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
     remark = Column(Text, nullable=True)
-    n_mol = Column(Integer, nullable=True)
 
     compute = db.relationship(Compute)
+    jobs = db.relationship('Job', lazy='dynamic')
 
     def __repr__(self):
-        return '<Job: %s %s>' % (self.smiles, self.procedure)
+        return '<Task: %s %s>' % (self.smiles, self.procedure)
 
     def init_simulation(self):
         if Config.SIMULATION_ENGINE == 'lammps':
@@ -116,36 +99,26 @@ class JobUnary(db.Model):
 
     @property
     def base_dir(self) -> str:
-        return os.path.join(Config.WORK_DIR, self.job_name)
+        return os.path.join(Config.WORK_DIR, self.task_name)
 
 
-class JobBinary(db.Model):
-    __tablename__ = 'job_binary'
+class Job(db.Model):
+    __tablename__ = 'job'
     id = NotNullColumn(Integer, primary_key=True)
-    compute_id = NotNullColumn(Integer, ForeignKey(Compute.id))
-    smiles = NotNullColumn(Text)
-    smiles2 = NotNullColumn(Text)
-    procedure = NotNullColumn(String(200))
-    t = NotNullColumn(Integer)
-    p = NotNullColumn(Integer)
+    task_id = NotNullColumn(Integer, ForeignKey(Task.id))
+    t = Column(Integer, nullable=True)
+    p = Column(Integer, nullable=True)
     time = NotNullColumn(DateTime, default=datetime.now)
-    job_name = Column(String(200), nullable=True)
     status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
-    remark = Column(Text, nullable=True)
 
-    compute = db.relationship(Compute)
+    task = db.relationship(Task)
 
-    def build(self):
-        pass
+    def __repr__(self):
+        return '<Job: %s %s>' % (self.smiles, self.procedure)
 
-    def prepare(self):
-        pass
-
-    def run(self):
-        pass
-
-    def analyze(self):
-        pass
+    @property
+    def job_name(self):
+        return self.task.task_name + '_' + self.t + '_' + self.p
 
 
 class JobThread(Thread):
@@ -155,10 +128,7 @@ class JobThread(Thread):
 
     def run(self):
         compute = Compute.query.get(self.compute_id)
-        if compute.n_components == 1:
-            Job = JobUnary
-        elif compute.n_components == 2:
-            Job = JobBinary
+        Job = Task
         for job in Job.query.filter(Job.compute_id == self.compute_id):
             job.status = Compute.Status.PREPARING
             db.session.commit()

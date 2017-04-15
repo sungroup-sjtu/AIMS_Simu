@@ -46,7 +46,7 @@ class ComputeAction():
                                 continue
 
                             combinations.append(combination)
-                            job = JobUnary()
+                            job = Task()
                             job.compute_id = compute.id
                             job.smiles = smiles
                             job.procedure = procedure

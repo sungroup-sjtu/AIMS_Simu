@@ -1,9 +1,10 @@
 import os
 import shutil
 
-from mstools.errors import GmxError
-from mstools.simulation import Simulation
-from mstools.wrapper import GMX
+from ..procedure import Procedure
+from ..simulation import Simulation
+from ...errors import GmxError
+from ...wrapper import GMX
 
 
 class GmxSimulation(Simulation):
@@ -21,10 +22,36 @@ class GmxSimulation(Simulation):
         self.dff.export_gmx(self.msd, ff + '.ppf', gro_out, top_out, mdp_out)
 
         if minimize:
-            print('Energy minimizing ...')
+            print('Energy minimize ...')
             self.gmx.minimize(gro_out, top_out, name='em', silent=True)
 
             if os.path.exists('em.gro'):
                 shutil.move('em.gro', gro_out)
             else:
                 raise GmxError('Energy minimization failed')
+
+    def prepare(self, gro='conf.gro', top='topol.top', T=None, P=None, nproc=1, job_name=None):
+        if job_name == None:
+            job_name = self.procedure
+        commands = []
+        if self.procedure in (Procedure.NPT, Procedure.NPT_BINARY_SLAB,):
+            self.gmx.prepare_mdp_from_template('t_npt.mdp', T=T, P=P, nsteps=int(1E6))
+        elif self.procedure in (Procedure.NVT_SLAB,):
+            self.gmx.prepare_mdp_from_template('t_nvt.mdp', T=T, nsteps=int(1E6))
+        self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, silent=True)
+        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nproc, get_cmd=True)
+        commands.append(cmd)
+        self.jobmanager.generate_sh(os.getcwd(), commands, job_name)
+
+        # if self.procedure in (Procedure.NPT,):
+        #     cmd = self.gmx.energy(edr=self.procedure, properties = ['Density', ] , get_cmd=True)
+        #     commands.append(cmd)
+        # elif self.procedure in (Procedure.NPT_BINARY_SLAB, Procedure.NVT_SLAB):
+        #     cmd = self.gmx.energy(edr=self.procedure, properties = ['#Surf', ] , get_cmd=True)
+        #     commands.append(cmd)
+
+    def analyze(self):
+        import panedr
+        df = panedr.edr_to_df(self.procedure + '.edr')
+        pass
+

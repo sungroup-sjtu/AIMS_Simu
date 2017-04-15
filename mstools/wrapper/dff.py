@@ -80,7 +80,7 @@ class DFF:
         dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_export_gmx.dfi')).read()
         dfi = dfi.replace('%ROOT%', self.DFF_ROOT).replace('%MODEL%', model).replace('%PPF%', ppf) \
             .replace('%TEMPLATE%', 'GROMACS.Opt').replace('%FFTYPE%', fftype) \
-            .replace('%GROFILE%', gro_out).replace('%TOPFILE%', top_out).replace('%MDPFILE%', mdp_out)\
+            .replace('%GROFILE%', gro_out).replace('%TOPFILE%', top_out).replace('%MDPFILE%', mdp_out) \
             .replace('%ITPFILE%', itp_out)
         with open('export_gmx.dfi', 'w') as f:
             f.write(dfi)
@@ -89,19 +89,29 @@ class DFF:
         if err.decode() != '':
             raise DffError('Export failed: %s' % err.decode())
 
-    def build_bulk_after_packmol(self, model, number, msd_out, pdb_corr, length):
+    def build_bulk_after_packmol(self, model, number, msd_out, pdb_corr, size: [float] = None, length: float = None):
+        if size != None:
+            if len(size) != 3:
+                raise DffError('Invalid box size')
+            else:
+                box = size
+        elif length != None:
+            box = [length, length, length]
+        else:
+            raise DffError('Box size needed')
+
         model = os.path.abspath(model)
         msd_out = os.path.abspath(msd_out)
         pdb_corr = os.path.abspath(pdb_corr)
         dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_packmol.dfi')).read()
         dfi = dfi.replace('%MODEL%', model).replace('%NUMBER%', str(number)).replace('%OUT%', msd_out) \
-            .replace('%PDB%', pdb_corr).replace('%LENGTH%', str(length))
+            .replace('%PDB%', pdb_corr).replace('%PBC%', ' '.join(map(str, box)))
         with open('build.dfi', 'w') as f:
             f.write(dfi)
         sp = Popen([self.DFFJOB_BIN, 'build'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = sp.communicate()
         if err.decode() != '':
-            raise DffError('Build failed: %s' %err.decode())
+            raise DffError('Build failed: %s' % err.decode())
 
     @staticmethod
     def get_ff_type_from_ppf(ppf):
@@ -110,4 +120,4 @@ class DFF:
                 if line.startswith('#PROTOCOL'):
                     fftype = line.split('=')[-1].strip()
                     return fftype
-        raise DffError('Unknown FF Type: %s' %ppf)
+        raise DffError('Unknown FF Type: %s' % ppf)

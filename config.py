@@ -14,6 +14,7 @@ class BaseConfig:
     # SIMULATION_ENGINE = 'lammps'
     QUEUE_SYSTEM = 'local'
     # QUEUE_SYSTEM = 'torque'
+    NPROC_PER_JOB = 8
 
 
 class ClusterConfig(BaseConfig):

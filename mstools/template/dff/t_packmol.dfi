@@ -9,7 +9,7 @@
   $END
   $MODEL=$SETCOORDINATION
     PDB=%PDB%
-    PBC=%LENGTH% %LENGTH% %LENGTH%
+    PBC=%PBC%
   $END
   $MODEL=$SAVE
     %OUT%

@@ -1,8 +1,9 @@
+import json
+
 from sqlalchemy import and_
+
 from . import api
 from .actions import *
-
-import json
 
 
 @api.route('/')
@@ -20,7 +21,7 @@ def check():
         return json.dumps({'success': False,
                            'reason': 'Not found'})
 
-    Job = JobUnary
+    Job = Task
     if compute.n_components == 2:
         Job = JobBinary
     jobs = Job.query.filter(Job.compute_id == compute.id).all()
