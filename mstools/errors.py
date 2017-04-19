@@ -15,3 +15,6 @@ class GmxError(Exception):
 
 class OpenBabelError(Exception):
     pass
+
+class JobManagerError(Exception):
+    pass

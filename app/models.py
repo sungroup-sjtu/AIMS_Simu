@@ -1,5 +1,6 @@
 import itertools
 import json
+import time
 from datetime import datetime
 from functools import partial
 from threading import Thread
@@ -9,7 +10,7 @@ from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateT
 from config import Config
 from mstools.simulation.procedure import Procedure
 from mstools.utils import *
-from . import db, simulation
+from . import db, simulation, jobmanager
 
 NotNullColumn = partial(Column, nullable=False)
 
@@ -24,28 +25,6 @@ class Compute(db.Model):
     json = NotNullColumn(Text)
 
     tasks = db.relationship('Task', lazy='dynamic')
-
-    class Stage:
-        SUBMITTED = 0
-        BUILDING = 1
-        RUNNING = 2
-
-        text = {
-            SUBMITTED: 'Submitted',
-            BUILDING: 'Building...',
-            RUNNING: 'Running...',
-        }
-
-    class Status:
-        STARTED = 1
-        DONE = 9
-        FAILED = -1
-
-        text = {
-            STARTED: 'Started',
-            DONE: 'Done',
-            FAILED: 'Failed'
-        }
 
     def create_tasks(self):
         detail = json.loads(self.json)
@@ -95,6 +74,28 @@ class Compute(db.Model):
                     task.p_max = None
                 db.session.add(task)
 
+    class Stage:
+        SUBMITTED = 0
+        BUILDING = 1
+        RUNNING = 2
+
+        text = {
+            SUBMITTED: 'Submitted',
+            BUILDING: 'Building...',
+            RUNNING: 'Running...',
+        }
+
+    class Status:
+        STARTED = 1
+        DONE = 9
+        FAILED = -1
+
+        text = {
+            STARTED: 'Started',
+            DONE: 'Done',
+            FAILED: 'Failed'
+        }
+
 
 class Task(db.Model):
     __tablename__ = 'task'
@@ -111,7 +112,7 @@ class Task(db.Model):
     p_min = Column(Integer, nullable=True)
     p_max = Column(Integer, nullable=True)
     name = NotNullColumn(String(200), default=random_string)
-    stage = NotNullColumn(String(200), default=Compute.Stage.SUBMITTED)
+    stage = NotNullColumn(Integer, default=Compute.Stage.SUBMITTED)
     status = NotNullColumn(Integer, default=Compute.Status.DONE)
     remark = Column(Text, nullable=True)
 
@@ -132,7 +133,7 @@ class Task(db.Model):
         simulation.set_procedure(self.procedure)
         try:
             simulation.build(json.loads(self.smiles_list), minimize=True)
-            self.n_mol_list = json.loads(simulation.n_mol_list)
+            self.n_mol_list = json.dumps(simulation.n_mol_list)
         except:
             self.status = Compute.Status.FAILED
             db.session.commit()
@@ -184,13 +185,14 @@ class Task(db.Model):
             for job in self.jobs:
                 job.prepare()
 
-    def run(self):
-        if not (self.stage == Compute.Stage.BUILDING and self.status == Compute.Status.DONE):
+    def run(self, sleep=0.5):
+        if self.stage == Compute.Stage.BUILDING and self.status == Compute.Status.DONE:
             self.stage = Compute.Stage.RUNNING
             self.status = Compute.Status.STARTED
             db.session.commit()
             for job in self.jobs:
                 job.run()
+                time.sleep(sleep)
         else:
             raise Exception('Should build first')
 
@@ -237,6 +239,26 @@ class Job(db.Model):
             raise Exception('Should prepare job first')
 
         simulation.run()
+
+    @property
+    def is_running(self) -> bool:
+        return jobmanager.get_info_from_name(self.name)
+
+    def update_status(self):
+        if self.is_running:
+            return
+        else:
+            try:
+                os.chdir(self.dir)
+            except:
+                raise Exception('Should prepare job first')
+
+            simulation.set_procedure(self.task.procedure)
+            if simulation.check_finished():
+                self.status = Compute.Status.DONE
+            else:
+                self.status = Compute.Status.FAILED
+            db.session.commit()
 
     def analyze(self):
         pass

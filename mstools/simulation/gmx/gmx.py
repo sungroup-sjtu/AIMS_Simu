@@ -42,7 +42,7 @@ class GmxSimulation(Simulation):
 
         commands = []
         if self.procedure in (Procedure.NPT, Procedure.NPT_BINARY_SLAB,):
-            self.gmx.prepare_mdp_from_template('t_npt.mdp', T=T, P=P/Unit.bar, nsteps=int(1E6))
+            self.gmx.prepare_mdp_from_template('t_npt.mdp', T=T, P=P / Unit.bar, nsteps=int(1E6))
         elif self.procedure in (Procedure.NVT_SLAB,):
             self.gmx.prepare_mdp_from_template('t_nvt.mdp', T=T, nsteps=int(1E6))
         cmd = self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
@@ -50,6 +50,22 @@ class GmxSimulation(Simulation):
         cmd = self.gmx.mdrun(name=self.procedure, nprocs=nproc, get_cmd=True)
         commands.append(cmd)
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
+
+    def check_finished(self, log=None):
+        if log == None:
+            log = self.procedure + '.log'
+        if not os.path.exists(log):
+            return False
+        with open(log) as f:
+            lines = f.readlines()
+        try:
+            last_line = lines[-1]
+        except:
+            return False
+        if last_line.startswith('Finished mdrun'):
+            return True
+        else:
+            return False
 
     def analyze(self):
         import panedr

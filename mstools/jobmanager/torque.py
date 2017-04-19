@@ -1,3 +1,4 @@
+import subprocess
 from subprocess import Popen
 
 from .jobmanager import JobManager
@@ -32,3 +33,36 @@ class Torque(JobManager):
 
     def submit(self):
         Popen(['qsub', self.sh]).communicate()
+
+    def get_info_from_id(self, id) -> bool:
+        try:
+            output = subprocess.check_output(['qstat', '-f', str(id)])
+        except:
+            return False
+
+        for line in output.decode().splitlines():
+            if line.strip().startswith('job_state'):
+                state = line.split()[-1]
+                if state in ['R', 'Q']:
+                    return True
+                else:
+                    return False
+        return False
+
+    def get_id_from_name(self, name: str) -> int:
+        try:
+            output = subprocess.check_output(['qstat'])
+        except:
+            raise
+
+        for line in output.decode().splitlines():
+            if line.find(name) != -1:
+                return int(line.strip().split()[0])
+
+        return None
+
+    def get_info_from_name(self, name) -> bool:
+        id = self.get_id_from_name(name)
+        if id == None:
+            return False
+        return self.get_info_from_id(id)

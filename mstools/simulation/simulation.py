@@ -27,6 +27,9 @@ class Simulation():
     def run(self):
         self.jobmanager.submit()
 
+    def check_finished(self):
+        pass
+
     def analyze(self):
         pass
 
