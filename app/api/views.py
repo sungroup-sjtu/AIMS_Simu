@@ -37,8 +37,6 @@ def check():
 def submit():
     compute_json = request.json
 
-    print(compute_json)
-
     computeAction = ComputeAction()
     try:
         compute_id = computeAction.init_from_json(compute_json)

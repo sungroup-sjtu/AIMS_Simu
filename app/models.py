@@ -4,7 +4,7 @@ from datetime import datetime
 from functools import partial
 from threading import Thread
 
-from sqlalchemy import Column, ForeignKey, Integer, Text, String, DateTime, and_
+from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateTime, and_
 
 from config import Config
 from mstools.simulation.procedure import Procedure
@@ -25,17 +25,24 @@ class Compute(db.Model):
 
     tasks = db.relationship('Task', lazy='dynamic')
 
-    class Status:
+    class Stage:
         SUBMITTED = 0
-        PREPARING = 1
+        BUILDING = 1
         RUNNING = 2
+
+        text = {
+            SUBMITTED: 'Submitted',
+            BUILDING: 'Building...',
+            RUNNING: 'Running...',
+        }
+
+    class Status:
+        STARTED = 1
         DONE = 9
         FAILED = -1
 
         text = {
-            SUBMITTED: 'Submitted',
-            PREPARING: 'Building...',
-            RUNNING: 'Running...',
+            STARTED: 'Started',
             DONE: 'Done',
             FAILED: 'Failed'
         }
@@ -104,7 +111,8 @@ class Task(db.Model):
     p_min = Column(Integer, nullable=True)
     p_max = Column(Integer, nullable=True)
     name = NotNullColumn(String(200), default=random_string)
-    status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
+    stage = NotNullColumn(String(200), default=Compute.Stage.SUBMITTED)
+    status = NotNullColumn(Integer, default=Compute.Status.DONE)
     remark = Column(Text, nullable=True)
 
     compute = db.relationship(Compute)
@@ -116,9 +124,29 @@ class Task(db.Model):
     def build(self):
         cd_or_create_and_cd(self.dir)
         cd_or_create_and_cd('build')
+
+        self.stage = Compute.Stage.BUILDING
+        self.status = Compute.Status.STARTED
+        db.session.commit()
+
         simulation.set_procedure(self.procedure)
-        simulation.build(json.loads(self.smiles_list), minimize=True)
-        self.prepare_jobs()
+        try:
+            simulation.build(json.loads(self.smiles_list), minimize=True)
+            self.n_mol_list = json.loads(simulation.n_mol_list)
+        except:
+            self.status = Compute.Status.FAILED
+            db.session.commit()
+            raise
+        else:
+            try:
+                self.prepare_jobs()
+            except:
+                self.status = Compute.Status.FAILED
+                db.session.commit()
+                raise
+            else:
+                self.status = Compute.Status.DONE
+                db.session.commit()
 
     def prepare_jobs(self):
         if not os.path.exists(os.path.join(self.dir, 'build')):
@@ -157,8 +185,14 @@ class Task(db.Model):
                 job.prepare()
 
     def run(self):
-        for job in self.jobs:
-            job.run()
+        if not (self.stage == Compute.Stage.BUILDING and self.status == Compute.Status.DONE):
+            self.stage = Compute.Stage.RUNNING
+            self.status = Compute.Status.STARTED
+            db.session.commit()
+            for job in self.jobs:
+                job.run()
+        else:
+            raise Exception('Should build first')
 
     def analyze(self):
         for job in self.jobs:
@@ -176,8 +210,10 @@ class Job(db.Model):
     t = Column(Integer, nullable=True)
     p = Column(Integer, nullable=True)
     time = NotNullColumn(DateTime, default=datetime.now)
-    status = NotNullColumn(Integer, default=Compute.Status.SUBMITTED)
     name = NotNullColumn(String(200), default=random_string)
+    cycle = NotNullColumn(Integer, default=1)
+    status = NotNullColumn(Integer, default=Compute.Status.STARTED)
+    converged = Column(Boolean, nullable=True)
 
     task = db.relationship(Task)
 
@@ -220,9 +256,5 @@ class TaskThread(Thread):
     def run(self):
         with self.app.app_context():
             for task in Task.query.filter(Task.compute_id == self.compute_id):
-                task.status = Compute.Status.PREPARING
-                db.session.commit()
                 task.build()
-                task.status = Compute.Status.RUNNING
-                db.session.commit()
                 task.run()

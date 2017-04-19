@@ -2,4 +2,3 @@ flask
 flask-sqlalchemy
 sqlalchemy
 openbabel
-redis
