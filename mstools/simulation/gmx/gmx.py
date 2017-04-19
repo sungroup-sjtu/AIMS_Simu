@@ -67,7 +67,4 @@ class GmxSimulation(Simulation):
         else:
             return False
 
-    def analyze(self):
-        import panedr
-        df = panedr.edr_to_df(self.procedure + '.edr')
-        pass
+
