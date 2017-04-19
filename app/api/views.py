@@ -1,7 +1,3 @@
-import json
-
-from sqlalchemy import and_
-
 from . import api
 from .actions import *
 
@@ -21,21 +17,16 @@ def check():
         return json.dumps({'success': False,
                            'reason': 'Not found'})
 
-    Job = Task
-    if compute.n_components == 2:
-        Job = JobBinary
-    jobs = Job.query.filter(Job.compute_id == compute.id).all()
+    tasks = Task.query.filter(Task.compute_id == compute_id).all()
 
     details = []
-    for job in jobs:
+    for task in tasks:
         details.append({
-            'id': job.id,
-            'name': job.job_name,
-            'smiles': job.smiles,
-            't': job.t,
-            'p': job.p,
-            'procedure': job.procedure,
-            'status': Compute.Status.text[job.status]
+            'id': task.id,
+            'name': task.name,
+            'smiles_list': json.loads(task.smiles_list),
+            'procedure': task.procedure,
+            'status': Compute.Status.text[task.status]
         })
 
     data = {'success': True, 'ip': request.remote_addr, 'jobs': details}

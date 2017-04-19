@@ -1,5 +1,3 @@
-from subprocess import Popen
-
 from .jobmanager import JobManager
 
 
@@ -12,9 +10,10 @@ class Local(JobManager):
         with open(self.sh, 'w') as f:
             f.write('#!/bin/sh\n\n'
                     'cd %(workdir)s\n'
-                    % (workdir))
+                    % ({'workdir': workdir})
+                    )
             for cmd in commands:
                 f.write(cmd + '\n')
 
     def submit(self):
-        Popen(['sh', self.sh]).communicate()
+        print('Localhost is only for test')

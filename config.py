@@ -12,10 +12,13 @@ class BaseConfig:
 
     SIMULATION_ENGINE = 'gmx'
     # SIMULATION_ENGINE = 'lammps'
+
     JOB_MANAGER = 'local'
+    NPROC_PER_JOB = 1
+
     # JOB_MANAGER = 'torque'
-    JOB_QUEUE = 'cpu'
-    NPROC_PER_JOB = 8
+    # JOB_QUEUE = 'cpu'
+    # NPROC_PER_JOB = 8
 
 
 class ClusterConfig(BaseConfig):

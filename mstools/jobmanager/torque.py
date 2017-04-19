@@ -24,8 +24,9 @@ class Torque(JobManager):
                         'err': self.err,
                         'queue': self.queue,
                         'nprocs': self.nprocs,
-                        'workdir': workdir}
-                       ))
+                        'workdir': workdir
+                        })
+                    )
             for cmd in commands:
                 f.write(cmd + '\n')
 

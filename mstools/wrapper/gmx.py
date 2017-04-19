@@ -23,7 +23,7 @@ class GMX:
             return cmd
         else:
             (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
-            sp = Popen(cmd.strip(), stdout=stdout, stderr=stderr)
+            sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
             sp.communicate()
 
     def mdrun(self, name='md', nprocs=1, silent=False, get_cmd=False):

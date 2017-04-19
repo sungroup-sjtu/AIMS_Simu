@@ -89,7 +89,8 @@ class DFF:
         if err.decode() != '':
             raise DffError('Export failed: %s' % err.decode())
 
-    def build_bulk_after_packmol(self, model, number, msd_out, pdb_corr, size: [float] = None, length: float = None):
+    def build_bulk_after_packmol(self, models: [str], numbers: [int], msd_out, pdb_corr,
+                                 size: [float] = None, length: float = None):
         if size != None:
             if len(size) != 3:
                 raise DffError('Invalid box size')
@@ -100,12 +101,17 @@ class DFF:
         else:
             raise DffError('Box size needed')
 
-        model = os.path.abspath(model)
+        model_list_str = ''
+        for model in models:
+            model = os.path.abspath(model)
+            model_list_str += '  MOL=%s' % model
+        number_list_str = ' '.join(map(str, numbers))
+
         msd_out = os.path.abspath(msd_out)
         pdb_corr = os.path.abspath(pdb_corr)
-        dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_packmol.dfi')).read()
-        dfi = dfi.replace('%MODEL%', model).replace('%NUMBER%', str(number)).replace('%OUT%', msd_out) \
-            .replace('%PDB%', pdb_corr).replace('%PBC%', ' '.join(map(str, box)))
+        dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_packmol_multiple.dfi')).read()
+        dfi = dfi.replace('%MODEL_LIST%', model_list_str).replace('%NUMBER_LIST%', number_list_str) \
+            .replace('%OUT%', msd_out).replace('%PDB%', pdb_corr).replace('%PBC%', ' '.join(map(str, box)))
         with open('build.dfi', 'w') as f:
             f.write(dfi)
         sp = Popen([self.DFFJOB_BIN, 'build'], stdin=PIPE, stdout=PIPE, stderr=PIPE)

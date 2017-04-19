@@ -26,7 +26,7 @@ def count_atoms(filename):
 
 def greatest_common_divisor(numbers):
     '''
-    calculte the greatest common divisor
+    calculate the greatest common divisor
     '''
     minimal = min(numbers)
     for i in range(minimal, 1, -1):
@@ -57,8 +57,16 @@ def cd_or_create_and_cd(dir):
         raise Exception('Cannot read directory: %s' % dir)
 
 
-def get_T_list_from_range(t_min, t_max, interval=20) -> List[int]:
+def get_T_list_from_range(t_min, t_max, interval=None, number=None) -> List[int]:
     T_list = []
+
+    if number <= 1:
+        interval = t_max - t_min
+    elif number != None:
+        interval = math.ceil((t_max - t_min) / (number - 1))
+        interval = max(1, interval)
+    elif interval == None:
+        interval = 20
 
     t_min_new = int(t_min / interval)
     t_max_new = math.ceil(t_max / interval)
@@ -67,7 +75,7 @@ def get_T_list_from_range(t_min, t_max, interval=20) -> List[int]:
     return T_list
 
 
-def get_P_list_from_range(p_min, p_max, multiple=(5,)) -> List[int]:
+def get_P_list_from_range(p_min, p_max, multiple=(5,), n_point: int = None) -> List[int]:
     P_list = []
 
     multiple = list(multiple)
