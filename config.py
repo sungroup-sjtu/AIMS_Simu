@@ -31,7 +31,7 @@ class ClusterConfig(BaseConfig):
 
 
 class MacConfig(BaseConfig):
-    WORK_DIR = '/tmp/MSDataServer/'
+    WORK_DIR = '/tmp/MSDServer/'
     DFF_ROOT = '/Users/zheng/Projects/DFF7.2'
     PACKMOL_BIN = '/Users/zheng/Projects/DFF7.2/bin32m/Packmol/packmol.exe'
     LMP_BIN = '/Users/zheng/Projects/DFF7.2/bin32m/Lammps/lammps'

@@ -10,9 +10,33 @@ from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateT
 from config import Config
 from mstools.simulation.procedure import Procedure
 from mstools.utils import *
-from . import db, simulation, jobmanager
+from . import db, jobmanager
 
 NotNullColumn = partial(Column, nullable=False)
+
+
+def init_simulation(procedure):
+    if Config.SIMULATION_ENGINE == 'gmx':
+        from mstools.simulation import gmx as simulationEngine
+        kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
+                  'gmx_bin': Config.GMX_BIN, 'jobmanager': jobmanager}
+    elif Config.SIMULATION_ENGINE == 'lammps':
+        from mstools.simulation import lammps as simulationEngine
+        kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
+                  'lmp_bin': Config.LMP_BIN, 'jobmanager': jobmanager}
+    else:
+        raise Exception('Simulation engine not supported')
+
+    if procedure == 'npt':
+        return simulationEngine.Npt(**kwargs)
+    elif procedure == 'npt-cp':
+        return simulationEngine.NptCp(**kwargs)
+    elif procedure == 'nvt-slab':
+        return simulationEngine.NvtSlab(**kwargs)
+    elif procedure == 'nvt-vacuum':
+        return simulationEngine.NvtVacuum(**kwargs)
+    else:
+        raise Exception('Unknown simulation procedure')
 
 
 class Compute(db.Model):
@@ -130,9 +154,10 @@ class Task(db.Model):
         self.status = Compute.Status.STARTED
         db.session.commit()
 
-        simulation.set_procedure(self.procedure)
+        simulation = init_simulation(self.procedure)
         try:
-            simulation.build(json.loads(self.smiles_list), minimize=True)
+            simulation.set_system(json.loads(self.smiles_list), n_atoms=3000)
+            simulation.build(minimize=True)
             self.n_mol_list = json.dumps(simulation.n_mol_list)
         except:
             self.status = Compute.Status.FAILED
@@ -196,10 +221,6 @@ class Task(db.Model):
         else:
             raise Exception('Should build first')
 
-    def analyze(self):
-        for job in self.jobs:
-            job.analyze()
-
     @property
     def dir(self) -> str:
         return os.path.join(Config.WORK_DIR, self.name)
@@ -216,11 +237,13 @@ class Job(db.Model):
     cycle = NotNullColumn(Integer, default=1)
     status = NotNullColumn(Integer, default=Compute.Status.STARTED)
     converged = Column(Boolean, nullable=True)
+    result = Column(Text, nullable=True)
+    next_cycle_started = NotNullColumn(Boolean, default=False)
 
     task = db.relationship(Task)
 
     def __repr__(self):
-        return '<Job: %s %i-%i>' % (self.name, self.t or 0, self.p or 0)
+        return '<Job: %s %i-%i-%i>' % (self.name, self.t or 0, self.p or 0, self.cycle)
 
     def prepare(self):
         try:
@@ -229,7 +252,7 @@ class Job(db.Model):
             raise Exception('Should build simulation box first')
 
         cd_or_create_and_cd(self.dir)
-        simulation.set_procedure(self.task.procedure)
+        simulation = init_simulation(self.task.procedure)
         simulation.prepare(model_dir='../build', T=self.t, P=self.p, nproc=Config.NPROC_PER_JOB, jobname=self.name)
 
     def run(self):
@@ -238,13 +261,10 @@ class Job(db.Model):
         except:
             raise Exception('Should prepare job first')
 
+        simulation = init_simulation(self.task.procedure)
         simulation.run()
 
-    @property
-    def is_running(self) -> bool:
-        return jobmanager.get_info_from_name(self.name)
-
-    def update_status(self):
+    def check_finished(self):
         if self.is_running:
             return
         else:
@@ -253,7 +273,7 @@ class Job(db.Model):
             except:
                 raise Exception('Should prepare job first')
 
-            simulation.set_procedure(self.task.procedure)
+            simulation = init_simulation(self.task.procedure)
             if simulation.check_finished():
                 self.status = Compute.Status.DONE
             else:
@@ -261,12 +281,77 @@ class Job(db.Model):
             db.session.commit()
 
     def analyze(self):
-        pass
+        if self.status != Compute.Status.DONE:
+            raise Exception('Job is still running')
+
+        try:
+            os.chdir(self.dir)
+        except:
+            raise
+
+        simulation = init_simulation(self.task.procedure)
+        try:
+            converged, result = simulation.analyze()
+        except Exception as e:
+            print('Analyze failed: %s %s' % (self, str(e)))
+        else:
+            self.converged = converged
+            if converged:
+                self.result = json.dumps(result)
+            db.session.commit()
+
+    def start_next_cycle(self):
+        if self.converged == None or self.converged:
+            print('New cycle can only be started if this cycle does not converge')
+            return
+
+        if self.next_cycle_started:
+            print('Next cycle already started')
+            return
+
+        self.next_cycle_started = True
+
+        job = Job()
+        job.task_id = self.task_id
+        job.t = self.t
+        job.p = self.p
+        job.cycle = self.cycle + 1
+        db.session.add(job)
+        db.session.commit()
+
+        job.prepare()
+        job.run()
 
     @property
     def dir(self) -> str:
-        dir_name = '%i-%i' % (self.t or 0, self.p or 0)
+        dir_name = '%i-%i-%i' % (self.t or 0, self.p or 0, self.cycle)
         return os.path.join(self.task.dir, dir_name)
+
+    @property
+    def is_running(self) -> bool:
+        return jobmanager.get_info_from_name(self.name)
+
+    @property
+    def next_cycle(self):
+        return Job.query.filter(
+            and_(
+                Job.task_id == self.task_id,
+                Job.t == self.t,
+                Job.p == self.p,
+                Job.cycle == self.cycle + 1
+            )
+        ).first()
+
+    @property
+    def previous_cycle(self):
+        return Job.query.filter(
+            and_(
+                Job.task_id == self.task_id,
+                Job.t == self.t,
+                Job.p == self.p,
+                Job.cycle == self.cycle - 1
+            )
+        ).first()
 
 
 class TaskThread(Thread):

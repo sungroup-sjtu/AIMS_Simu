@@ -1,27 +1,7 @@
 import math
 import os
 
-from typing import List
-
 from .errors import OpenBabelError
-
-
-def count_atoms(filename):
-    '''
-    count atom numbers in PDB file
-    '''
-    if not os.path.exists(filename):
-        raise Exception('file not exist')
-    filetype = filename.split('.')[-1].lower()
-    if filetype == 'pdb':
-        with open(filename) as f:
-            strf = f.read()
-            n = strf.count('ATOM')
-            if n == 0:
-                n = strf.count('HETATM')
-            return n
-    else:
-        return 1
 
 
 def greatest_common_divisor(numbers):
@@ -57,14 +37,15 @@ def cd_or_create_and_cd(dir):
         raise Exception('Cannot read directory: %s' % dir)
 
 
-def get_T_list_from_range(t_min, t_max, interval=None, number=None) -> List[int]:
+def get_T_list_from_range(t_min, t_max, interval=None, number=None) -> [int]:
     T_list = []
 
-    if number <= 1:
-        interval = t_max - t_min
-    elif number != None:
-        interval = math.ceil((t_max - t_min) / (number - 1))
-        interval = max(1, interval)
+    if number != None:
+        if number == 1:
+            interval = t_max - t_min
+        else:
+            interval = math.ceil((t_max - t_min) / (number - 1))
+            interval = max(1, interval)
     elif interval == None:
         interval = 20
 
@@ -75,7 +56,7 @@ def get_T_list_from_range(t_min, t_max, interval=None, number=None) -> List[int]
     return T_list
 
 
-def get_P_list_from_range(p_min, p_max, multiple=(5,), n_point: int = None) -> List[int]:
+def get_P_list_from_range(p_min, p_max, multiple=(5,), n_point: int = None) -> [int]:
     P_list = []
 
     multiple = list(multiple)
@@ -93,14 +74,21 @@ def get_P_list_from_range(p_min, p_max, multiple=(5,), n_point: int = None) -> L
     return P_list
 
 
-def create_pdb_from_smiles(smiles: str, pdb_out: str):
+def create_mol_from_smiles(smiles: str, pdb_out: str = None, mol2_out: str = None):
     try:
         import pybel
         py_mol = pybel.readstring('smi', smiles)
         py_mol.addh()
         py_mol.make3D()
-        py_mol.write('pdb', pdb_out, overwrite=True)
+        if pdb_out != None:
+            py_mol.write('pdb', pdb_out, overwrite=True)
+        if mol2_out != None:
+            py_mol.write('mol2', mol2_out, overwrite=True)
     except:
-        raise OpenBabelError('Cannot create PDB from SMILES')
+        raise OpenBabelError('Cannot create molecule from SMILES')
     else:
         return py_mol
+
+
+def check_converged(data_series: [float]) -> bool:
+    return True

@@ -5,7 +5,7 @@ import shutil
 from ..simulation import Simulation
 from ...errors import LammpsError
 from ...jobmanager import Local
-from ...utils import create_pdb_from_smiles
+from ...utils import create_mol_from_smiles
 from ...wrapper import Packmol, DFF, Lammps
 
 
@@ -17,7 +17,7 @@ class LammpsSimulation(Simulation):
     def build(self, smiles, n_atoms=3000, density=1.0, ff='TEAM_LS',
               data_out='data', in_lmp='em.lmp',
               minimize=False):
-        py_mol = create_pdb_from_smiles(smiles, 'mol.pdb')
+        py_mol = create_mol_from_smiles(smiles, 'mol.pdb')
         n_atom_per_mol = len(py_mol.atoms)
         number = math.ceil(n_atoms / n_atom_per_mol)  # A total of 3000 atoms
         length = (10 / 6.022 * py_mol.molwt * number / density) ** (1 / 3)
@@ -28,7 +28,7 @@ class LammpsSimulation(Simulation):
         packmol.build_box(['mol.pdb'], [number], 'init.pdb', length=length - 2)
         dff = DFF(dff_root=self.DFF_ROOT)
         print('Create box using DFF...')
-        dff.build_bulk_after_packmol('mol.pdb', number, 'init.msd', pdb_corr='init.pdb', length=length)
+        dff.build_box_after_packmol('mol.pdb', number, 'init.msd', mol_corr='init.pdb', length=length)
         print('Checkout force field: %s ...' % ff)
         dff.checkout('init.msd', table=ff)
         print('Export lammps files...')

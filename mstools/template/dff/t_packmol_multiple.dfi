@@ -8,7 +8,7 @@
     %OUT%
   $END
   $MODEL=$SETCOORDINATION
-    PDB=%PDB%
+    MOL=%CORRMOL%
     PBC=%PBC%
   $END
   $MODEL=$SAVE
