@@ -1,5 +1,6 @@
 import itertools
 import json
+import shutil
 import time
 from datetime import datetime
 from functools import partial
@@ -240,6 +241,17 @@ class Task(db.Model):
                 self.status = Compute.Status.DONE
         db.session.commit()
 
+    def remove(self):
+        for job in self.jobs:
+            job.remove()
+        try:
+            shutil.rmtree(self.dir)
+        except:
+            print('Cannot remove folder: %s' %self.dir)
+        else:
+            db.session.remove(self)
+            db.session.commit()
+
     @property
     def dir(self) -> str:
         return os.path.join(Config.WORK_DIR, self.name)
@@ -343,6 +355,15 @@ class Job(db.Model):
 
         job.prepare()
         job.run()
+
+    def remove(self):
+        try:
+            shutil.rmtree(self.dir)
+        except:
+            print('Cannot remove folder: %s' % self.dir)
+        else:
+            db.session.remove(self)
+            db.session.commit()
 
     @property
     def dir(self) -> str:
