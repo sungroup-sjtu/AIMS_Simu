@@ -61,8 +61,19 @@ class Torque(JobManager):
 
         return None
 
-    def get_info_from_name(self, name) -> bool:
+    def get_info(self, name) -> bool:
         id = self.get_id_from_name(name)
         if id == None:
             return False
         return self.get_info_from_id(id)
+
+    def kill_job(self, name) -> bool:
+        id = self.get_id_from_name(name)
+        if id == None:
+            return False
+        try:
+            subprocess.check_call(['qdel', str(id)])
+        except:
+            raise Exception('Cannot kill job: %s' % name)
+
+        return True

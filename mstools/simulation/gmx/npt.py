@@ -37,10 +37,13 @@ class Npt(GmxSimulation):
         commands.append(cmd)
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
-    def analyze(self):
-        # TODO check convergence, utilizing previous cycles
+    def analyze(self, dirs=None):
+        if dirs is None:
+            dirs = ['.', ]
         import numpy as np
         import panedr
+
+        # TODO check convergence, utilizing previous cycles
         df = panedr.edr_to_df(self.procedure + '.edr')
         temperature_series = df.Temperature[500:]
         pressure_series = df.Pressure[500:]

@@ -18,5 +18,8 @@ class Local(JobManager):
     def submit(self):
         print('Localhost is only for test')
 
-    def get_info_from_name(self, name):
+    def get_info(self, name):
+        raise Exception('Not supported on localhost')
+
+    def kill_job(self, name):
         raise Exception('Not supported on localhost')

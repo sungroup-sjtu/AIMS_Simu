@@ -9,5 +9,8 @@ class JobManager:
     def submit(self):
         pass
 
-    def get_info_from_name(self, name):
+    def get_info(self, name):
+        pass
+
+    def kill_job(self, name):
         pass

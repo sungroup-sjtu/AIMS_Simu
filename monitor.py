@@ -26,13 +26,13 @@ def monitor_tasks():
         elif task.stage == Compute.Stage.RUNNING and task.status == Compute.Status.STARTED:
             task.check_finished()
 
-            for job in task.jobs:
-                if job.status == Compute.Status.DONE and job.converged == None:
-                    job.analyze()
+        for job in Job.query():
+            if job.status == Compute.Status.DONE and job.converged == None:
+                job.analyze()
 
-                elif job.status == Compute.Status.DONE and job.converged == False:
-                    if not job.next_cycle_started:
-                        job.start_next_cycle()
+            elif job.status == Compute.Status.DONE and job.converged == False:
+                if not job.next_cycle_started:
+                    job.start_next_cycle()
 
 
 if __name__ == '__main__':

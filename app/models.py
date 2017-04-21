@@ -247,9 +247,9 @@ class Task(db.Model):
         try:
             shutil.rmtree(self.dir)
         except:
-            print('Cannot remove folder: %s' %self.dir)
+            print('Cannot remove folder: %s' % self.dir)
         else:
-            db.session.remove(self)
+            db.session.delete(self)
             db.session.commit()
 
     @property
@@ -315,8 +315,10 @@ class Job(db.Model):
         return True
 
     def analyze(self):
-        if self.status != Compute.Status.DONE:
-            raise Exception('Job is still running')
+        if self.status == Compute.Status.STARTED:
+            print('Job is still running')
+        if self.status == Compute.Status.FAILED:
+            print('Job failed, will not perform analyze')
 
         try:
             os.chdir(self.dir)
@@ -324,8 +326,14 @@ class Job(db.Model):
             raise
 
         simulation = init_simulation(self.task.procedure)
+        dirs = [self.dir]
+        if self.cycle > 1:
+            previous_job = self.previous_cycle
+            for i in range(self.cycle, 1, -1):
+                dirs.append(previous_job.dir)
+                previous_job = previous_job.previous_cycle
         try:
-            converged, result = simulation.analyze()
+            converged, result = simulation.analyze(dirs)
         except Exception as e:
             print('Analyze failed: %s %s' % (self, str(e)))
         else:
@@ -358,11 +366,16 @@ class Job(db.Model):
 
     def remove(self):
         try:
+            jobmanager.kill_job(self.name)
+        except Exception as e:
+            print(str(e))
+
+        try:
             shutil.rmtree(self.dir)
         except:
             print('Cannot remove folder: %s' % self.dir)
         else:
-            db.session.remove(self)
+            db.session.delete(self)
             db.session.commit()
 
     @property
@@ -372,7 +385,7 @@ class Job(db.Model):
 
     @property
     def is_running(self) -> bool:
-        return jobmanager.get_info_from_name(self.name)
+        return jobmanager.get_info(self.name)
 
     @property
     def next_cycle(self):
