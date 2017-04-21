@@ -147,6 +147,7 @@ class Task(db.Model):
         return '<Task: %s %s>' % (self.smiles_list, self.procedure)
 
     def build(self):
+        # TODO optimize logic
         cd_or_create_and_cd(self.dir)
         cd_or_create_and_cd('build')
 
@@ -210,7 +211,7 @@ class Task(db.Model):
             for job in self.jobs:
                 job.prepare()
 
-    def run(self, sleep=0.5):
+    def run(self, sleep=0.1):
         if self.stage == Compute.Stage.BUILDING and self.status == Compute.Status.DONE:
             self.stage = Compute.Stage.RUNNING
             self.status = Compute.Status.STARTED
@@ -220,6 +221,24 @@ class Task(db.Model):
                 time.sleep(sleep)
         else:
             raise Exception('Should build first')
+
+    def check_finished(self):
+        finished = True
+        failed = False
+        for job in self.jobs:
+            if not job.check_finished():
+                finished = False
+            elif job.status == Compute.Status.FAILED:
+                failed = True
+            elif not job.converged:
+                finished = False
+
+        if finished:
+            if failed:
+                self.status = Compute.Status.FAILED
+            else:
+                self.status = Compute.Status.DONE
+        db.session.commit()
 
     @property
     def dir(self) -> str:
@@ -264,21 +283,24 @@ class Job(db.Model):
         simulation = init_simulation(self.task.procedure)
         simulation.run()
 
-    def check_finished(self):
+    def check_finished(self) -> bool:
+        if self.status in (Compute.Status.DONE, Compute.Status.FAILED):
+            return True
         if self.is_running:
-            return
-        else:
-            try:
-                os.chdir(self.dir)
-            except:
-                raise Exception('Should prepare job first')
+            return False
 
-            simulation = init_simulation(self.task.procedure)
-            if simulation.check_finished():
-                self.status = Compute.Status.DONE
-            else:
-                self.status = Compute.Status.FAILED
-            db.session.commit()
+        try:
+            os.chdir(self.dir)
+        except:
+            raise Exception('Should prepare job first')
+
+        simulation = init_simulation(self.task.procedure)
+        if simulation.check_finished():
+            self.status = Compute.Status.DONE
+        else:
+            self.status = Compute.Status.FAILED
+        db.session.commit()
+        return True
 
     def analyze(self):
         if self.status != Compute.Status.DONE:

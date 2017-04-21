@@ -1,8 +1,6 @@
 import os
 import shutil
 
-import numpy
-
 from .gmx import GmxSimulation
 from ...unit import Unit
 from ...utils import check_converged
@@ -41,8 +39,11 @@ class Npt(GmxSimulation):
 
     def analyze(self):
         # TODO check convergence, utilizing previous cycles
+        import numpy as np
         import panedr
         df = panedr.edr_to_df(self.procedure + '.edr')
+        temperature_series = df.Temperature[500:]
+        pressure_series = df.Pressure[500:]
         potential_series = df.Potential[500:]
         density_series = df.Density[500:]
 
@@ -51,6 +52,8 @@ class Npt(GmxSimulation):
             converged = check_converged(density_series)
 
         return converged, {
-            'potential': numpy.mean(potential_series),
-            'density': numpy.mean(density_series)
+            'temperature': np.mean(temperature_series),
+            'pressure': np.mean(pressure_series),
+            'potential': np.mean(potential_series),
+            'density': np.mean(density_series)
         }

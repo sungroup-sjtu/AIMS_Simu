@@ -90,5 +90,11 @@ def create_mol_from_smiles(smiles: str, pdb_out: str = None, mol2_out: str = Non
         return py_mol
 
 
+def estimate_density_from_formula(f) -> float:
+    from .formula import Formula
+    # unit: g/mL
+    return Formula.read(f).estimate_density()
+
+
 def check_converged(data_series: [float]) -> bool:
     return True

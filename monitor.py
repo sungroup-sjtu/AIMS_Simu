@@ -4,6 +4,7 @@ from app.models import *
 
 
 def monitor_tasks():
+    # TODO optimize logic
     tasks = Task.query.all()
     for task in tasks:
         if task.stage == Compute.Stage.SUBMITTED and task.status == Compute.Status.DONE:
@@ -11,6 +12,10 @@ def monitor_tasks():
                 task.build()
             except Exception as e:
                 print('Error when build task %s: %s' % (repr(task), str(e)))
+            try:
+                task.run()
+            except Exception as e:
+                print('Error when run task %s: %s' % (repr(task), str(e)))
 
         elif task.stage == Compute.Stage.BUILDING and task.status == Compute.Status.DONE:
             try:
@@ -19,11 +24,10 @@ def monitor_tasks():
                 print('Error when run task %s: %s' % (repr(task), str(e)))
 
         elif task.stage == Compute.Stage.RUNNING and task.status == Compute.Status.STARTED:
-            for job in task.jobs:
-                if job.status == Compute.Status.STARTED:
-                    job.check_finished()
+            task.check_finished()
 
-                elif job.status == Compute.Status.DONE and job.converged == None:
+            for job in task.jobs:
+                if job.status == Compute.Status.DONE and job.converged == None:
                     job.analyze()
 
                 elif job.status == Compute.Status.DONE and job.converged == False:
@@ -34,4 +38,5 @@ def monitor_tasks():
 if __name__ == '__main__':
     while True:
         monitor_tasks()
+        print('Sleeping......')
         time.sleep(300)
