@@ -5,7 +5,7 @@ from .gmx import GmxSimulation
 from ...utils import check_convergence
 
 
-class NvtVacuum(GmxSimulation):
+class NvtSingle(GmxSimulation):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.procedure = 'nvt-vacuum'

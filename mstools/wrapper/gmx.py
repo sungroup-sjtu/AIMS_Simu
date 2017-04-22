@@ -26,10 +26,13 @@ class GMX:
             sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
             sp.communicate()
 
-    def mdrun(self, name='md', nprocs=1, silent=False, get_cmd=False):
+    def mdrun(self, name='md', nprocs=1, rerun: str = None, silent=False, get_cmd=False):
         cmd = '%s mdrun -deffnm %s' % (self.GMX_BIN, name)
         if nprocs > 1:
             cmd = 'mpirun -np %i %s' % (nprocs, cmd)
+
+        if rerun != None:
+            cmd = '%s -rerun %s' % (cmd, rerun)
 
         if get_cmd:
             return cmd
@@ -218,3 +221,38 @@ class GMX:
         else:
             select_com_str = 'res_com of resname %s' % resname
         sp.communicate(input=select_com_str.encode())
+
+    @staticmethod
+    def generate_top_for_hvap(top, top_out):
+        with open(top) as f:
+            lines = f.read().splitlines()
+        lines = [l for l in lines if not (l.startswith(';') or l == '')]
+
+        f_out = open(top_out, 'w')
+
+        PAIR_SECTION = False
+        ATOMS_SECTION = False
+        n_atoms = 0
+        for line in lines:
+            if line.find('[') != -1:
+                ATOMS_SECTION = False
+                PAIR_SECTION = False
+            if line.find('[ atoms ]') != -1:
+                ATOMS_SECTION = True
+                n_atoms = 0
+                f_out.write(line + '\n')
+                continue
+            if line.find('[ pairs ]') != -1:
+                PAIR_SECTION = True
+                f_out.write('[ exclusions ]\n')
+                for i in range(1, n_atoms + 1):
+                    other_atoms = list(range(1, n_atoms + 1))
+                    other_atoms.remove(i)
+                    exclusions = [i] + other_atoms
+                    f_out.write(' '.join(list(map(str, exclusions))) + '\n')
+            if ATOMS_SECTION:
+                n_atoms += 1
+            if not PAIR_SECTION:
+                f_out.write(line + '\n')
+
+        f_out.close()
