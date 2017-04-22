@@ -26,7 +26,7 @@ def monitor_tasks():
         elif task.stage == Compute.Stage.RUNNING and task.status == Compute.Status.STARTED:
             task.check_finished()
 
-        for job in Job.query():
+        for job in Job.query:
             if job.status == Compute.Status.DONE and job.converged == None:
                 job.analyze()
 

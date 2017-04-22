@@ -7,11 +7,13 @@ nstvout            = %nstvout%
 nstxout-compressed = %nstxtcout%
 compressed-x-grps  = %xtcgrps%
 
+comm-mode = angular
+
 pbc     = no
 nstlist = 0
 ns-type = simple
 
-cutoff-scheme   = verlet
+cutoff-scheme   = group
 nstcalcenergy   = -1
 
 rlist           = 0
