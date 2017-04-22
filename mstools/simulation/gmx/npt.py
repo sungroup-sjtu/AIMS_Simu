@@ -11,6 +11,7 @@ class Npt(GmxSimulation):
         super().__init__(**kwargs)
         self.procedure = 'npt'
         self.requirement = []
+        self.logs = ['npt.log', 'cp.log']
 
     def build(self, minimize=False):
         print('Build coordinates using Packmol: %s molecules ...' % self.n_mol_list)
@@ -35,6 +36,15 @@ class Npt(GmxSimulation):
         commands.append(cmd)
         cmd = self.gmx.mdrun(name=self.procedure, nprocs=nproc, get_cmd=True)
         commands.append(cmd)
+        self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp_cp.mdp', T=T, P=P / Unit.bar,
+                                           nsteps=int(2E4), nstvout=4, restart=True)
+        cmd = self.gmx.grompp(mdp='grompp_cp.mdp', gro='npt.gro', top=top, tpr_out='cp.tpr',
+                              cpt='npt.cpt', get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name='cp', nprocs=nproc, get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.dos(trr='cp.trr', tpr='cp.tpr', T=T, get_cmd=True)
+        commands.append(cmd)
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
     def analyze(self, dirs=None):
@@ -57,10 +67,22 @@ class Npt(GmxSimulation):
             density_series = density_series.append(df.Density)
 
         converged, when = check_convergence(density_series)
+        if converged:
+            Cp = 0
+            try:
+                with open('dos.log') as f:
+                    lines = f.readlines()
+                for line in lines:
+                    if line.startswith('Heat capacity'):
+                        Cp = float(line.split()[2])
+            except:
+                pass
 
-        return converged, {
-            'temperature': np.mean(temp_series[when:]),
-            'pressure': np.mean(press_series[when:]),
-            'potential': np.mean(pe_series[when:]),
-            'density': np.mean(density_series[when:])
-        }
+            return converged, {'temperature': np.mean(temp_series[when:]),
+                               'pressure': np.mean(press_series[when:]),
+                               'potential': np.mean(pe_series[when:]),
+                               'density': np.mean(density_series[when:]),
+                               'cp': Cp
+                               }
+        else:
+            return converged, None

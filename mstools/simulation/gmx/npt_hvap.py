@@ -9,6 +9,7 @@ class NptHvap(Npt):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.procedure = 'npt-hvap'
+        self.logs = ['npt.log', 'hvap.log']
         self.requirement = []
 
     def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, nproc=1, jobname=None):

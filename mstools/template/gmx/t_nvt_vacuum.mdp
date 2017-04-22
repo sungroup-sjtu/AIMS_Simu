@@ -23,9 +23,6 @@ vdwtype         = cut-off
 rvdw            = 0
 DispCorr        = no
 
-constraints      = h-bonds
-constraint-algorithm = lincs
-
 Tcoupl          = V-rescale
 tc-grps         = System
 tau-t           = 0.1
@@ -39,3 +36,7 @@ ref-p           = %P%
 
 gen-vel         = %genvel%
 gen-temp        = %T%
+
+constraints      = h-bonds
+constraint-algorithm = lincs
+continuation     = %continuation%

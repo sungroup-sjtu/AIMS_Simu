@@ -8,7 +8,8 @@ from ...utils import check_convergence
 class NvtSingle(GmxSimulation):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.procedure = 'nvt-vacuum'
+        self.procedure = 'nvt-single'
+        self.logs = ['nvt-single.log']
         self.requirement = []
 
     def build(self, minimize=False):

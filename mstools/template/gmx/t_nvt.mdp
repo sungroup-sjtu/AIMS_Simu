@@ -16,9 +16,6 @@ rcoulomb        = 1.2
 rvdw            = 1.2
 DispCorr        = EnerPres
 
-constraints      = h-bonds
-constraint-algorithm = lincs
-
 Tcoupl          = V-rescale
 tc-grps         = System
 tau-t           = 0.1
@@ -32,3 +29,8 @@ ref-p           = %P%
 
 gen-vel         = %genvel%
 gen-temp        = %T%
+
+constraints      = h-bonds
+constraint-algorithm = lincs
+continuation     = %continuation%
+

@@ -32,8 +32,6 @@ def init_simulation(procedure):
         return simulationEngine.Npt(**kwargs)
     elif procedure == 'npt-hvap':
         return simulationEngine.NptHvap(**kwargs)
-    elif procedure == 'npt-cp':
-        return simulationEngine.NptCp(**kwargs)
     elif procedure == 'nvt-slab':
         return simulationEngine.NvtSlab(**kwargs)
     elif procedure == 'nvt-single':

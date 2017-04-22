@@ -17,8 +17,10 @@ class GMX:
         self.GMX_BIN = gmx_bin
 
     def grompp(self, mdp='grompp.mdp', gro='conf.gro', top='topol.top', tpr_out='md.tpr',
-               maxwarn=3, silent=False, get_cmd=False):
+               cpt=None, maxwarn=3, silent=False, get_cmd=False):
         cmd = '%s grompp -f %s -c %s -p %s -o %s -maxwarn %i' % (self.GMX_BIN, mdp, gro, top, tpr_out, maxwarn)
+        if cpt != None:
+            cmd = '%s -t %s' % (cmd, cpt)
         if get_cmd:
             return cmd
         else:
@@ -50,16 +52,22 @@ class GMX:
         self.grompp(gro=gro, top=top, tpr_out=name + '.tpr', silent=silent)
         self.mdrun(name=name, nprocs=nprocs, silent=silent)
 
+    def dos(self, trr, tpr, T, get_cmd=False, silent=False):
+        cmd = '%s dos -f %s -s %s -T %f' % (self.GMX_BIN, trr, tpr, T)
+        if get_cmd:
+            return cmd
+        else:
+            (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+            sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
+            sp.communicate()
+
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=1000, dt=0.001,
                                   nstenergy=1000, nstvout=0,
                                   nstxtcout=10000, xtcgrps='System',
-                                  genvel=True):
-
-        if T == None or P == None or nsteps == None:
-            raise GmxError('T, P, nsteps are required')
-
-        genvel = 'yes' if genvel else 'no'
+                                  restart=False):
+        genvel = 'no' if restart else 'yes'
+        continuation = 'yes' if restart else 'no'
 
         template = os.path.join(GMX.TEMPLATE_DIR, template)
         if not os.path.exists(template):
@@ -72,7 +80,7 @@ class GMX:
                         .replace('%dt%', str(dt)) \
                         .replace('%nstenergy%', str(nstenergy)).replace('%nstvout%', str(nstvout)) \
                         .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps)) \
-                        .replace('%genvel%', str(genvel)))
+                        .replace('%genvel%', genvel).replace('%continuation%', continuation))
 
     def energy(self, edr, properties: [str], begin=0, get_cmd=False):
         property_str = '\\n'.join(properties)

@@ -11,6 +11,7 @@ class GmxSimulation(Simulation):
     def __init__(self, packmol_bin=None, dff_root=None, gmx_bin=None, jobmanager=Local()):
         super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, jobmanager=jobmanager)
         self.gmx = GMX(gmx_bin=gmx_bin)
+        self.logs = []  # used for checking whether the job is successfully finished
 
     def export(self, ff='TEAM_LS', gro_out='conf.gro', top_out='topol.top', mdp_out='grompp.mdp',
                minimize=False, pbc=True):
@@ -28,18 +29,18 @@ class GmxSimulation(Simulation):
             else:
                 raise GmxError('Energy minimization failed')
 
-    def check_finished(self, log=None):
-        if log == None:
-            log = self.procedure + '.log'
-        if not os.path.exists(log):
-            return False
-        with open(log) as f:
-            lines = f.readlines()
-        try:
-            last_line = lines[-1]
-        except:
-            return False
-        if last_line.startswith('Finished mdrun'):
-            return True
-        else:
-            return False
+    def check_finished(self, logs=None):
+        if logs == None:
+            logs = self.logs
+        for log in logs:
+            if not os.path.exists(log):
+                return False
+            with open(log) as f:
+                lines = f.readlines()
+            try:
+                last_line = lines[-1]
+            except:
+                return False
+            if not last_line.startswith('Finished mdrun'):
+                return False
+        return True
