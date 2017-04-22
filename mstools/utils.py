@@ -108,5 +108,5 @@ def estimate_density_from_formula(f) -> float:
     return Formula.read(f).estimate_density()
 
 
-def check_converged(data_series: [float]) -> bool:
-    return True
+def check_convergence(data_series: [float]) -> (bool, float):
+    return True, 500 # picosecond

@@ -5,7 +5,7 @@ import numpy
 
 from .gmx import GmxSimulation
 from ...unit import Unit
-from ...utils import check_converged
+from ...utils import check_convergence
 
 
 class NptBinarySlab(GmxSimulation):
@@ -42,9 +42,9 @@ class NptBinarySlab(GmxSimulation):
         potential_series = df.Potential[500:]
         density_series = df.Density[500:]
 
-        converged = check_converged(potential_series)
+        converged = check_convergence(potential_series)
         if converged:
-            converged = check_converged(density_series)
+            converged = check_convergence(density_series)
 
         return converged, {
             'potential': numpy.mean(potential_series),

@@ -3,7 +3,7 @@ import shutil
 
 from .gmx import GmxSimulation
 from ...unit import Unit
-from ...utils import check_converged
+from ...utils import check_convergence
 
 
 class Npt(GmxSimulation):
@@ -39,24 +39,28 @@ class Npt(GmxSimulation):
 
     def analyze(self, dirs=None):
         if dirs is None:
-            dirs = ['.', ]
+            dirs = ['.']
         import numpy as np
+        import pandas as pd
         import panedr
 
         # TODO check convergence, utilizing previous cycles
-        df = panedr.edr_to_df(self.procedure + '.edr')
-        temperature_series = df.Temperature[500:]
-        pressure_series = df.Pressure[500:]
-        potential_series = df.Potential[500:]
-        density_series = df.Density[500:]
+        temp_series = pd.DataFrame()
+        press_series = pd.DataFrame()
+        pe_series = pd.DataFrame()
+        density_series = pd.DataFrame()
+        for dir in dirs:
+            df = panedr.edr_to_df(os.path.join(dir, self.procedure + '.edr'))
+            temp_series = temp_series.append(df.Temperature)
+            press_series = press_series.append(df.Pressure)
+            pe_series = pe_series.append(df.Potential)
+            density_series = density_series.append(df.Density)
 
-        converged = check_converged(potential_series)
-        if converged:
-            converged = check_converged(density_series)
+        converged, when = check_convergence(density_series)
 
         return converged, {
-            'temperature': np.mean(temperature_series),
-            'pressure': np.mean(pressure_series),
-            'potential': np.mean(potential_series),
-            'density': np.mean(density_series)
+            'temperature': np.mean(temp_series[when:]),
+            'pressure': np.mean(press_series[when:]),
+            'potential': np.mean(pe_series[when:]),
+            'density': np.mean(density_series[when:])
         }
