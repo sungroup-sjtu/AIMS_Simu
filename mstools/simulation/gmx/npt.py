@@ -45,10 +45,10 @@ class Npt(GmxSimulation):
         import panedr
 
         # TODO check convergence, utilizing previous cycles
-        temp_series = pd.DataFrame()
-        press_series = pd.DataFrame()
-        pe_series = pd.DataFrame()
-        density_series = pd.DataFrame()
+        temp_series = pd.Series()
+        press_series = pd.Series()
+        pe_series = pd.Series()
+        density_series = pd.Series()
         for dir in dirs:
             df = panedr.edr_to_df(os.path.join(dir, self.procedure + '.edr'))
             temp_series = temp_series.append(df.Temperature)

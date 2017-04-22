@@ -12,7 +12,8 @@ class GmxSimulation(Simulation):
         super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, jobmanager=jobmanager)
         self.gmx = GMX(gmx_bin=gmx_bin)
 
-    def export(self, ff='TEAM_LS', gro_out='conf.gro', top_out='topol.top', mdp_out='grompp.mdp', minimize=False):
+    def export(self, ff='TEAM_LS', gro_out='conf.gro', top_out='topol.top', mdp_out='grompp.mdp',
+               minimize=False, pbc=True):
         print('Checkout force field: %s ...' % ff)
         self.dff.checkout(self.msd, table=ff)
         print('Export GROMACS files ...')
@@ -20,7 +21,7 @@ class GmxSimulation(Simulation):
 
         if minimize:
             print('Energy minimize ...')
-            self.gmx.minimize(gro_out, top_out, name='em', silent=True)
+            self.gmx.minimize(gro_out, top_out, name='em', silent=True, pbc=pbc)
 
             if os.path.exists('em.gro'):
                 shutil.move('em.gro', gro_out)

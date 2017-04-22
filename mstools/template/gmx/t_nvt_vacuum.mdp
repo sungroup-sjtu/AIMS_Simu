@@ -7,7 +7,7 @@ nstvout            = %nstvout%
 nstxout-compressed = %nstxtcout%
 compressed-x-grps  = %xtcgrps%
 
-comm-mode = angular
+comm-mode = none; angular
 
 pbc     = no
 nstlist = 0
