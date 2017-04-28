@@ -1,4 +1,4 @@
-integrator      = md
+integrator      = sd
 dt              = %dt%
 nsteps          = %nsteps%
 
@@ -16,12 +16,12 @@ rcoulomb        = 1.2
 rvdw            = 1.2
 DispCorr        = EnerPres
 
-Tcoupl          = V-rescale
+Tcoupl          = no; V-rescale
 tc-grps         = System
-tau-t           = 0.1
+tau-t           = 2; 0.1
 ref-t           = %T%
 
-Pcoupl          = no; berendsen; parrinello-rahman
+Pcoupl          = berendsen; parrinello-rahman
 pcoupltype      = isotropic
 tau-p           = 0.5
 compressibility = 4.5e-5

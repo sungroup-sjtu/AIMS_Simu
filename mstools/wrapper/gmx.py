@@ -3,7 +3,7 @@ import shutil
 import subprocess
 from subprocess import Popen, PIPE
 
-from mstools.errors import GmxError
+from ..errors import GmxError
 
 
 class GMX:
@@ -52,19 +52,19 @@ class GMX:
         self.grompp(gro=gro, top=top, tpr_out=name + '.tpr', silent=silent)
         self.mdrun(name=name, nprocs=nprocs, silent=silent)
 
-    def dos(self, trr, tpr, T, get_cmd=False, silent=False):
+    def dos(self, trr, tpr, T, group='System', get_cmd=False, silent=False):
         cmd = '%s dos -f %s -s %s -T %f' % (self.GMX_BIN, trr, tpr, T)
         if get_cmd:
+            cmd = 'echo "%s" | %s' % (group, cmd)
             return cmd
         else:
             (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
-            sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
-            sp.communicate()
+            sp = Popen(cmd.split(), stdin=PIPE, stdout=stdout, stderr=stderr)
+            sp.communicate(input=group)
 
     @staticmethod
-    def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=1000, dt=0.001,
-                                  nstenergy=1000, nstvout=0,
-                                  nstxtcout=10000, xtcgrps='System',
+    def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=10000, dt=0.001,
+                                  nstenergy=100, nstvout=0, nstxtcout=10000, xtcgrps='System',
                                   restart=False):
         genvel = 'no' if restart else 'yes'
         continuation = 'yes' if restart else 'no'
@@ -238,29 +238,65 @@ class GMX:
 
         f_out = open(top_out, 'w')
 
-        PAIR_SECTION = False
-        ATOMS_SECTION = False
-        n_atoms = 0
-        for line in lines:
-            if line.find('[') != -1:
-                ATOMS_SECTION = False
-                PAIR_SECTION = False
-            if line.find('[ atoms ]') != -1:
-                ATOMS_SECTION = True
-                n_atoms = 0
-                f_out.write(line + '\n')
-                continue
-            if line.find('[ pairs ]') != -1:
-                PAIR_SECTION = True
-                f_out.write('[ exclusions ]\n')
-                for i in range(1, n_atoms + 1):
-                    other_atoms = list(range(1, n_atoms + 1))
-                    other_atoms.remove(i)
-                    exclusions = [i] + other_atoms
-                    f_out.write(' '.join(list(map(str, exclusions))) + '\n')
-            if ATOMS_SECTION:
-                n_atoms += 1
-            if not PAIR_SECTION:
-                f_out.write(line + '\n')
+        # PAIR_SECTION = False
+        # ATOMS_SECTION = False
+        # n_atoms = 0
+        # for line in lines:
+        #     if line.find('[') != -1:
+        #         ATOMS_SECTION = False
+        #         PAIR_SECTION = False
+        #     if line.find('[ atoms ]') != -1:
+        #         ATOMS_SECTION = True
+        #         n_atoms = 0
+        #         f_out.write(line + '\n')
+        #         continue
+        #     if line.find('[ pairs ]') != -1:
+        #         PAIR_SECTION = True
+        #         f_out.write('[ exclusions ]\n')
+        #         for i in range(1, n_atoms + 1):
+        #             other_atoms = list(range(1, n_atoms + 1))
+        #             other_atoms.remove(i)
+        #             exclusions = [i] + other_atoms
+        #             f_out.write(' '.join(list(map(str, exclusions))) + '\n')
+        #     if ATOMS_SECTION:
+        #         n_atoms += 1
+        #     if not PAIR_SECTION:
+        #         f_out.write(line + '\n')
+        #
+        # f_out.close()
 
-        f_out.close()
+        line_number_molecule = []
+        line_number_atom = []
+        line_number_system = 0
+        for n, line in enumerate(lines):
+            if line.find('[') != -1 and line.find('moleculetype') != -1:
+                line_number_molecule.append(n)
+            if line.find('[') != -1 and line.find('atoms') != -1:
+                line_number_atom.append(n)
+            if line.find('[') != -1 and line.find('system') != -1:
+                line_number_system = n
+
+        n_molecules = len(line_number_molecule)
+
+        for n in range(line_number_molecule[0]):
+            f_out.write(lines[n] + '\n')
+
+        for i in range(n_molecules):
+            for n in range(line_number_molecule[i], line_number_atom[i]):
+                f_out.write(lines[n] + '\n')
+            line_number_next_section = line_number_molecule[i + 1] if i < n_molecules - 1 else line_number_system
+            n_atoms = 0
+            f_out.write('[ atoms ]\n')
+            for n in range(line_number_atom[i] + 1, line_number_next_section):
+                line = lines[n]
+                if line.find('[') != -1 or line.startswith('#'):
+                    f_out.write('[ bonds ]\n[ exclusions ]\n')
+                    for i in range(1, n_atoms):
+                        exclusions = range(i, n_atoms + 1)
+                        f_out.write(' '.join(list(map(str, exclusions))) + '\n')
+                    break
+                f_out.write(line + '\n')
+                n_atoms += 1
+
+        for n in range(line_number_system, len(lines)):
+            f_out.write(lines[n] + '\n')

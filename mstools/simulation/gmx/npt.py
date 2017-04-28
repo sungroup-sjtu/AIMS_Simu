@@ -2,8 +2,8 @@ import os
 import shutil
 
 from .gmx import GmxSimulation
+from ...analyzer.series import is_converged
 from ...unit import Unit
-from ...utils import check_convergence
 
 
 class Npt(GmxSimulation):
@@ -11,7 +11,7 @@ class Npt(GmxSimulation):
         super().__init__(**kwargs)
         self.procedure = 'npt'
         self.requirement = []
-        self.logs = ['npt.log', 'cp.log']
+        self.logs = ['npt.log', 'hvap.log', 'cp.log']
 
     def build(self, minimize=False):
         print('Build coordinates using Packmol: %s molecules ...' % self.n_mol_list)
@@ -31,20 +31,42 @@ class Npt(GmxSimulation):
                     shutil.copy(os.path.join(model_dir, f), '.')
 
         commands = []
-        self.gmx.prepare_mdp_from_template('t_npt.mdp', T=T, P=P / Unit.bar, nsteps=int(1E6))
-        cmd = self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
+        # NPT equilibrium with Langevin thermostat and Berendsen barostat
+        self.gmx.prepare_mdp_from_template('t_npt_sd.mdp', mdp_out='grompp-eq.mdp', T=T, P=P / Unit.bar,
+                                           nsteps=int(5E5))
+        cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro=gro, top=top, tpr_out='eq.tpr', get_cmd=True)
         commands.append(cmd)
-        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nproc, get_cmd=True)
+        cmd = self.gmx.mdrun(name='eq', nprocs=nproc, get_cmd=True)
         commands.append(cmd)
-        self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp_cp.mdp', T=T, P=P / Unit.bar,
+
+        # NPT production with Velocity Rescaling thermostat and Parrinello-Rahman barostat
+        self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-npt.mdp', T=T, P=P / Unit.bar,
+                                           nsteps=int(1E6), nstxtcout=1000, restart=True)
+        cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top, tpr_out='npt.tpr',
+                              cpt='eq.cpt', get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name='npt', nprocs=nproc, get_cmd=True)
+        commands.append(cmd)
+
+        # Enthalpy of vaporization
+        top_hvap = 'topol-hvap.top'
+        self.gmx.generate_top_for_hvap(top, top_hvap)
+        cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name='hvap', nprocs=nproc, rerun='npt.xtc', get_cmd=True)
+        commands.append(cmd)
+
+        # Heat capacity using 2-Phase Thermodynamics
+        self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-cp.mdp', T=T, P=P / Unit.bar,
                                            nsteps=int(2E4), nstvout=4, restart=True)
-        cmd = self.gmx.grompp(mdp='grompp_cp.mdp', gro='npt.gro', top=top, tpr_out='cp.tpr',
+        cmd = self.gmx.grompp(mdp='grompp-cp.mdp', gro='npt.gro', top=top, tpr_out='cp.tpr',
                               cpt='npt.cpt', get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.mdrun(name='cp', nprocs=nproc, get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.dos(trr='cp.trr', tpr='cp.tpr', T=T, get_cmd=True)
         commands.append(cmd)
+
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
     def analyze(self, dirs=None):
@@ -59,14 +81,18 @@ class Npt(GmxSimulation):
         press_series = pd.Series()
         pe_series = pd.Series()
         density_series = pd.Series()
+        inter_series = pd.Series()
         for dir in dirs:
-            df = panedr.edr_to_df(os.path.join(dir, self.procedure + '.edr'))
+            df = panedr.edr_to_df(os.path.join(dir, 'npt.edr'))
             temp_series = temp_series.append(df.Temperature)
             press_series = press_series.append(df.Pressure)
             pe_series = pe_series.append(df.Potential)
             density_series = density_series.append(df.Density)
 
-        converged, when = check_convergence(density_series)
+            df = panedr.edr_to_df(os.path.join(dir, 'hvap.edr'))
+            inter_series = inter_series.append(df.Potential)
+
+        converged, when = is_converged(density_series)
         if converged:
             Cp = 0
             try:
@@ -82,6 +108,7 @@ class Npt(GmxSimulation):
                                'pressure': np.mean(press_series[when:]),
                                'potential': np.mean(pe_series[when:]),
                                'density': np.mean(density_series[when:]),
+                               'inter': np.mean(inter_series[when:]),
                                'cp': Cp
                                }
         else:

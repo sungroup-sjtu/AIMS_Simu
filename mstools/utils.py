@@ -106,7 +106,3 @@ def estimate_density_from_formula(f) -> float:
     from .formula import Formula
     # unit: g/mL
     return Formula.read(f).estimate_density()
-
-
-def check_convergence(data_series: [float]) -> (bool, float):
-    return True, 500 # picosecond

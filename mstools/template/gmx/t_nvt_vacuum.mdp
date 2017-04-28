@@ -1,13 +1,13 @@
-integrator      = md
+integrator      = sd
 dt              = %dt%
 nsteps          = %nsteps%
+
+comm-mode       = none; angular
 
 nstenergy          = %nstenergy%
 nstvout            = %nstvout%
 nstxout-compressed = %nstxtcout%
 compressed-x-grps  = %xtcgrps%
-
-comm-mode = none; angular
 
 pbc     = no
 nstlist = 0
@@ -23,9 +23,9 @@ vdwtype         = cut-off
 rvdw            = 0
 DispCorr        = no
 
-Tcoupl          = V-rescale
+Tcoupl          = no; V-rescale
 tc-grps         = System
-tau-t           = 0.1
+tau-t           = 2.0
 ref-t           = %T%
 
 Pcoupl          = no; berendsen; parrinello-rahman

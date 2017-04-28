@@ -1,15 +1,15 @@
 import os
 import shutil
 
+from mstools.analyzer.series import is_converged
 from .gmx import GmxSimulation
-from ...utils import check_convergence
 
 
-class NvtSingle(GmxSimulation):
+class NvtVacuum(GmxSimulation):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.procedure = 'nvt-single'
-        self.logs = ['nvt-single.log']
+        self.procedure = 'nvt-vacuum'
+        self.logs = ['nvt-vacuum.log']
         self.requirement = []
 
     def build(self, minimize=False):
@@ -43,8 +43,6 @@ class NvtSingle(GmxSimulation):
     def analyze(self, dirs=None):
         if dirs is None:
             dirs = ['.']
-        import numpy as np
-        import pandas as pd
         import panedr
 
         # TODO check convergence, utilizing previous cycles
@@ -55,7 +53,7 @@ class NvtSingle(GmxSimulation):
             temp_series = temp_series.append(df.Temperature)
             pe_series = pe_series.append(df.Potential)
 
-        converged, when = check_convergence(pe_series)
+        converged, when = is_converged(pe_series)
 
         return converged, {
             'temperature': np.mean(temp_series[when:]),

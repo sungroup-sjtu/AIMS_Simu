@@ -30,12 +30,12 @@ def init_simulation(procedure):
 
     if procedure == 'npt':
         return simulationEngine.Npt(**kwargs)
-    elif procedure == 'npt-hvap':
-        return simulationEngine.NptHvap(**kwargs)
+    elif procedure == 'nvt':
+        return simulationEngine.Nvt(**kwargs)
     elif procedure == 'nvt-slab':
         return simulationEngine.NvtSlab(**kwargs)
-    elif procedure == 'nvt-single':
-        return simulationEngine.NvtSingle(**kwargs)
+    elif procedure == 'nvt-vacuum':
+        return simulationEngine.NvtVacuum(**kwargs)
     else:
         raise Exception('Unknown simulation procedure')
 
