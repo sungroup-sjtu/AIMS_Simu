@@ -20,7 +20,7 @@ class NptBinarySlab(GmxSimulation):
         self.dff.build_box_after_packmol(self.mol2_list, self.n_mol_list, self.msd, mol_corr='init.pdb',
                                              length=self.length)
 
-    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, nproc=1, jobname=None):
+    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None, **kwargs):
         if os.path.abspath(model_dir) != os.getcwd():
             shutil.copy(os.path.join(model_dir, gro), gro)
             shutil.copy(os.path.join(model_dir, top), top)
@@ -28,11 +28,12 @@ class NptBinarySlab(GmxSimulation):
                 if f.endswith('.itp'):
                     shutil.copy(os.path.join(model_dir, f), '.')
 
+        nprocs = self.jobmanager.nprocs
         commands = []
         self.gmx.prepare_mdp_from_template('t_npt.mdp', T=T, P=P / Unit.bar, nsteps=int(1E6))
         cmd = self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
         commands.append(cmd)
-        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nproc, get_cmd=True)
+        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 

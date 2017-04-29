@@ -24,7 +24,7 @@ class NvtVacuum(GmxSimulation):
                                          length=self.length)
         self.export(minimize=True, pbc=False)
 
-    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, nproc=1, jobname=None):
+    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None, **kwargs):
         if os.path.abspath(model_dir) != os.getcwd():
             shutil.copy(os.path.join(model_dir, gro), gro)
             shutil.copy(os.path.join(model_dir, top), top)
