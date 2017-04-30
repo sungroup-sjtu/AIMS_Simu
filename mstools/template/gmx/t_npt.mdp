@@ -3,6 +3,7 @@ dt              = %dt%
 nsteps          = %nsteps%
 
 nstenergy          = %nstenergy%
+nstxout            = %nstxout%
 nstvout            = %nstvout%
 nstxout-compressed = %nstxtcout%
 compressed-x-grps  = %xtcgrps%

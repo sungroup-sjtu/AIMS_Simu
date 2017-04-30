@@ -23,7 +23,7 @@ class ClusterConfig(BaseConfig):
     DFF_ROOT = '/share/apps/dff/msdserver'
     PACKMOL_BIN = '/share/apps/tools/packmol'
     LMP_BIN = '/share/apps/lammps/lmp-stable'
-    GMX_BIN = '/share/apps/gromacs/2016.2/bin/gmx'
+    GMX_BIN = '/share/apps/gromacs/2016.3/bin/gmx'
 
     JOB_MANAGER = 'torque'
     JOB_QUEUE = 'cpu'

@@ -44,6 +44,8 @@ class NvtVacuum(GmxSimulation):
         if dirs is None:
             dirs = ['.']
         import panedr
+        import pandas as pd
+        import numpy as np
 
         # TODO check convergence, utilizing previous cycles
         temp_series = pd.Series()

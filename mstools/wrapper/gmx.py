@@ -18,7 +18,8 @@ class GMX:
 
     def grompp(self, mdp='grompp.mdp', gro='conf.gro', top='topol.top', tpr_out='md.tpr',
                cpt=None, maxwarn=3, silent=False, get_cmd=False):
-        cmd = '%s grompp -f %s -c %s -p %s -o %s -maxwarn %i' % (self.GMX_BIN, mdp, gro, top, tpr_out, maxwarn)
+        cmd = '%s -quiet -nobackup grompp -f %s -c %s -p %s -o %s -maxwarn %i' % (
+            self.GMX_BIN, mdp, gro, top, tpr_out, maxwarn)
         if cpt != None:
             cmd = '%s -t %s' % (cmd, cpt)
         if get_cmd:
@@ -28,13 +29,16 @@ class GMX:
             sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
             sp.communicate()
 
-    def mdrun(self, name='md', nprocs=1, rerun: str = None, silent=False, get_cmd=False):
-        cmd = '%s mdrun -deffnm %s' % (self.GMX_BIN, name)
+    def mdrun(self, name='md', nprocs=1, rerun: str = None, extend=False, silent=False, get_cmd=False):
+        cmd = '%s -quiet -nobackup mdrun -deffnm %s' % (self.GMX_BIN, name)
         if nprocs > 1:
             cmd = 'mpirun -np %i %s' % (nprocs, cmd)
 
-        if rerun != None:
+        if rerun is not None:
             cmd = '%s -rerun %s' % (cmd, rerun)
+
+        if extend:
+            cmd = '%s -cpi %s' % (cmd, name + '.cpt')
 
         if get_cmd:
             return cmd
@@ -52,8 +56,8 @@ class GMX:
         self.grompp(gro=gro, top=top, tpr_out=name + '.tpr', silent=silent)
         self.mdrun(name=name, nprocs=nprocs, silent=silent)
 
-    def dos(self, trr, tpr, T, group='System', get_cmd=False, silent=False):
-        cmd = '%s dos -f %s -s %s -T %f' % (self.GMX_BIN, trr, tpr, T)
+    def dos(self, trr, tpr, T, group='System', log_out='dos.log', get_cmd=False, silent=False):
+        cmd = '%s -quiet -nobackup dos -f %s -s %s -T %f -g %s' % (self.GMX_BIN, trr, tpr, T, log_out)
         if get_cmd:
             cmd = 'echo "%s" | %s' % (group, cmd)
             return cmd
@@ -64,7 +68,7 @@ class GMX:
 
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=10000, dt=0.001,
-                                  nstenergy=100, nstvout=0, nstxtcout=10000, xtcgrps='System',
+                                  nstenergy=100, nstxout=0, nstvout=0, nstxtcout=10000, xtcgrps='System',
                                   restart=False):
         genvel = 'no' if restart else 'yes'
         continuation = 'yes' if restart else 'no'
@@ -77,14 +81,14 @@ class GMX:
             with open(mdp_out, 'w') as f_mdp:
                 f_mdp.write(
                     f_t.read().replace('%T%', str(T)).replace('%P%', str(P)).replace('%nsteps%', str(int(nsteps))) \
-                        .replace('%dt%', str(dt)) \
-                        .replace('%nstenergy%', str(nstenergy)).replace('%nstvout%', str(nstvout)) \
+                        .replace('%dt%', str(dt)).replace('%nstenergy%', str(nstenergy)) \
+                        .replace('%nstxout%', str(nstxout)).replace('%nstvout%', str(nstvout)) \
                         .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps)) \
                         .replace('%genvel%', genvel).replace('%continuation%', continuation))
 
     def energy(self, edr, properties: [str], begin=0, get_cmd=False):
         property_str = '\\n'.join(properties)
-        cmd = '%s energy -f %s -b %s' % (self.GMX_BIN, edr, str(begin))
+        cmd = '%s -quiet -nobackup energy -f %s -b %s' % (self.GMX_BIN, edr, str(begin))
         if get_cmd:
             cmd = 'echo "%s" | %s' % (property_str, cmd)
             return cmd
@@ -117,8 +121,13 @@ class GMX:
         return box
 
     @staticmethod
-    def scale_box(gro, new_gro, new_box: [float]):
-        n = 0
+    def scale_box(gro, gro_out, new_box: [float]):
+        '''
+        Scale gro box to desired size.
+        The coordinate of all atoms are scaled.
+        The velocities are not modified.
+        Only support rectangular box
+        '''
         NAtoms = 0
         nresidue = []
         residue = []
@@ -128,45 +137,44 @@ class GMX:
         vxyz = []
         box = []
         if not os.path.exists(gro):
-            gro = gro + '.gro'
-        if not os.path.exists(gro):
             raise GmxError('gro not found')
-        with open(gro) as f:
-            for line in f:
-                n += 1
-                if n == 1:
-                    continue
-                if n == 2:
-                    NAtoms = int(line.strip())
-                    continue
-                if n > 2 and n <= 2 + NAtoms:
-                    nresidue.append(int(line[:5]))
-                    residue.append(line[5:10])
-                    element.append(line[10:15])
-                    natom.append(int(line[15:20]))
-                    x = float(line[20:28])
-                    y = float(line[28:36])
-                    z = float(line[36:44])
-                    vx = float(line[44:52])
-                    vy = float(line[52:60])
-                    vz = float(line[60:68])
-                    xyz.append([x, y, z])
-                    vxyz.append([vx, vy, vz])
-                if n == 3 + NAtoms:
-                    box = [float(word) for word in line.strip().split()[:3]]
-                    break
+        with open(gro) as f_gro:
+            lines = f_gro.read().splitlines()
+
+        for i, line in enumerate(lines):
+            n = i + 1
+            if n == 1:
+                continue
+            if n == 2:
+                NAtoms = int(line.strip())
+                continue
+            if n > 2 and n <= 2 + NAtoms:
+                nresidue.append(int(line[:5]))
+                residue.append(line[5:10])
+                element.append(line[10:15])
+                natom.append(int(line[15:20]))
+                x = float(line[20:28])
+                y = float(line[28:36])
+                z = float(line[36:44])
+                vx = float(line[44:52])
+                vy = float(line[52:60])
+                vz = float(line[60:68])
+                xyz.append([x, y, z])
+                vxyz.append([vx, vy, vz])
+            if n == 3 + NAtoms:
+                box = [float(word) for word in line.strip().split()[:3]]
+                break
 
         scale = [new_box[i] / box[i] for i in range(3)]
         xyz = [[i[0] * scale[0], i[1] * scale[1], i[2] * scale[2]] for i in xyz]
-        vxyz = [[i[0] * scale[0], i[1] * scale[1], i[2] * scale[2]] for i in vxyz]
 
-        with open(new_gro, 'w') as f:
-            f.write('Scaled box\n%i\n' % NAtoms)
+        with open(gro_out, 'w') as f_out:
+            f_out.write('Scaled box\n%i\n' % NAtoms)
             for i in range(NAtoms):
-                f.write('%5i%5s%5s%5i%8.3f%8.3f%8.3f%8.4f%8.4f%8.4f\n'
-                        % (nresidue[i], residue[i], element[i], natom[i],
-                           xyz[i][0], xyz[i][1], xyz[i][2], vxyz[i][0], vxyz[i][1], vxyz[i][2]))
-            f.write('%f %f %f\n' % (new_box[0], new_box[1], new_box[2]))
+                f_out.write('%5i%5s%5s%5i%8.3f%8.3f%8.3f%8.4f%8.4f%8.4f\n'
+                            % (nresidue[i], residue[i], element[i], natom[i],
+                               xyz[i][0], xyz[i][1], xyz[i][2], vxyz[i][0], vxyz[i][1], vxyz[i][2]))
+            f_out.write('%f %f %f\n' % (new_box[0], new_box[1], new_box[2]))
 
     @staticmethod
     def generate_top(itp, molecules, numbers):
@@ -238,33 +246,6 @@ class GMX:
 
         f_out = open(top_out, 'w')
 
-        # PAIR_SECTION = False
-        # ATOMS_SECTION = False
-        # n_atoms = 0
-        # for line in lines:
-        #     if line.find('[') != -1:
-        #         ATOMS_SECTION = False
-        #         PAIR_SECTION = False
-        #     if line.find('[ atoms ]') != -1:
-        #         ATOMS_SECTION = True
-        #         n_atoms = 0
-        #         f_out.write(line + '\n')
-        #         continue
-        #     if line.find('[ pairs ]') != -1:
-        #         PAIR_SECTION = True
-        #         f_out.write('[ exclusions ]\n')
-        #         for i in range(1, n_atoms + 1):
-        #             other_atoms = list(range(1, n_atoms + 1))
-        #             other_atoms.remove(i)
-        #             exclusions = [i] + other_atoms
-        #             f_out.write(' '.join(list(map(str, exclusions))) + '\n')
-        #     if ATOMS_SECTION:
-        #         n_atoms += 1
-        #     if not PAIR_SECTION:
-        #         f_out.write(line + '\n')
-        #
-        # f_out.close()
-
         line_number_molecule = []
         line_number_atom = []
         line_number_system = 0
@@ -300,3 +281,16 @@ class GMX:
 
         for n in range(line_number_system, len(lines)):
             f_out.write(lines[n] + '\n')
+
+    def slice_gro_from_traj(self, trr, tpr, gro_out, begin, end, dt, silent=True):
+        cmd = '%s -quiet -nobackup -f %s -s %s -o %s -b %s -e %s -dt %s' % (self.GMX_BIN, trr, tpr, gro_out,
+                                                                            str(begin), str(end), str(dt))
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen(cmd.split(), stdin=PIPE, stdout=stdout, stderr=stderr)
+        sp.communicate(input='System')
+
+    def extend_tpr(self, tpr, extend, silent=True):
+        cmd = '%s -quiet convert-tpr -s %s -o %s -extend %s' % (self.GMX_BIN, tpr, tpr, str(extend))
+        (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+        sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
+        sp.communicate()

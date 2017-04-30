@@ -5,6 +5,7 @@ nsteps          = %nsteps%
 comm-mode       = none; angular
 
 nstenergy          = %nstenergy%
+nstxout            = %nstxout%
 nstvout            = %nstvout%
 nstxout-compressed = %nstxtcout%
 compressed-x-grps  = %xtcgrps%

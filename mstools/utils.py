@@ -37,33 +37,19 @@ def cd_or_create_and_cd(dir):
         raise Exception('Cannot read directory: %s' % dir)
 
 
-def get_T_list_from_range(t_min: int, t_max: int, interval: int = None, number: int = None) -> [int]:
-    t_min = max(1, t_min)
-    t_max = max(t_min, t_max)
-    if t_min == t_max:
-        return [t_min]
-
-    if number != None:
-        if number <= 1:
-            interval = t_max - t_min
-        else:
-            interval = math.ceil((t_max - t_min) / (number - 1))
-    elif interval == None:
+def get_T_list_from_range(t_min: int, t_max: int, interval: int = None) -> [int]:
+    if interval == None:
         interval = 20
-
     interval = max(5, interval)
 
-    if interval > t_max - t_min:
+    if interval >= t_max - t_min:
         return [t_min, t_max]
 
-    T_list = []
-    i = 0
-    while True:
-        t = t_min + i * interval
-        T_list.append(t)
-        if t >= t_max:
-            break
-        i += 1
+    i_min = math.floor(t_min / interval)
+    i_max = math.ceil(t_max / interval)
+    T_list = [i * interval for i in range(i_min, i_max + 1)]
+    if i_min == 0:
+        T_list[0] = 1
 
     return T_list
 

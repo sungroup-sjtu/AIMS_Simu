@@ -72,7 +72,6 @@ class Compute(db.Model):
             t_min = state.get('t_min')
             t_max = state.get('t_max')
             t_interval = state.get('t_interval')
-            t_number = state.get('t_number')
             p_min = state.get('p_min')
             p_max = state.get('p_max')
 
@@ -86,7 +85,6 @@ class Compute(db.Model):
                     task.t_min = t_min
                     task.t_max = t_max
                     task.t_interval = t_interval
-                    task.t_number = t_number
                     if t_min == None or t_max == None:
                         raise Exception('Invalid temperature')
                 else:
@@ -117,11 +115,13 @@ class Compute(db.Model):
         STARTED = 1
         DONE = 9
         FAILED = -1
+        ANALYZED = 10
 
         text = {
             STARTED: 'Started',
             DONE: 'Done',
-            FAILED: 'Failed'
+            FAILED: 'Failed',
+            ANALYZED: 'Analyzed',
         }
 
 
@@ -136,7 +136,6 @@ class Task(db.Model):
     t_min = Column(Integer, nullable=True)
     t_max = Column(Integer, nullable=True)
     t_interval = Column(Integer, nullable=True)
-    t_number = Column(Integer, nullable=True)
     p_min = Column(Integer, nullable=True)
     p_max = Column(Integer, nullable=True)
     name = NotNullColumn(String(200), default=random_string)
@@ -166,7 +165,6 @@ class Task(db.Model):
                  Task.t_min == self.t_min,
                  Task.t_max == self.t_max,
                  Task.t_interval == self.t_interval,
-                 Task.t_number == self.t_number,
                  Task.p_min == self.p_max,
                  Task.p_max == self.p_max
                  )
@@ -205,11 +203,11 @@ class Task(db.Model):
         if not os.path.exists(os.path.join(self.dir, 'build')):
             raise Exception('Should build simulation box first')
 
-        if self.t_min == None or self.t_max == None:
+        if self.t_min is None or self.t_max is None:
             T_list = [None]
         else:
-            T_list = get_T_list_from_range(self.t_min, self.t_max, self.t_interval, self.t_number)
-        if self.p_min == None or self.p_max == None:
+            T_list = get_T_list_from_range(self.t_min, self.t_max, self.t_interval)
+        if self.p_min is None or self.p_max is None:
             P_list = [None]
         else:
             P_list = get_P_list_from_range(self.p_min, self.p_max)
@@ -220,7 +218,7 @@ class Task(db.Model):
                         and_(Job.task_id == self.id,
                              Job.t == t,
                              Job.p == p)
-                ).first() != None:
+                ).first() is not None:
                     continue
                 job = Job()
                 job.task_id = self.id
@@ -288,9 +286,8 @@ class Job(db.Model):
     name = NotNullColumn(String(200), default=random_string)
     cycle = NotNullColumn(Integer, default=1)
     status = NotNullColumn(Integer, default=Compute.Status.STARTED)
-    converged = Column(Boolean, nullable=True)
+    converged = NotNullColumn(Boolean, default=False)
     result = Column(Text, nullable=True)
-    next_cycle_started = NotNullColumn(Boolean, default=False)
 
     task = db.relationship(Task)
 
@@ -316,28 +313,6 @@ class Job(db.Model):
     def is_running(self) -> bool:
         return jobmanager.get_info(self.name)
 
-    @property
-    def next_cycle(self):
-        return Job.query.filter(
-            and_(
-                Job.task_id == self.task_id,
-                Job.t == self.t,
-                Job.p == self.p,
-                Job.cycle == self.cycle + 1
-            )
-        ).first()
-
-    @property
-    def previous_cycle(self):
-        return Job.query.filter(
-            and_(
-                Job.task_id == self.task_id,
-                Job.t == self.t,
-                Job.p == self.p,
-                Job.cycle == self.cycle - 1
-            )
-        ).first()
-
     def prepare(self):
         prior_job: Job = self.prior_job
         if prior_job != None:
@@ -361,106 +336,112 @@ class Job(db.Model):
         simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name,
                            prior_job_dir=prior_job_dir, prior_job_result=prior_job_result)
 
-        def run(self):
-            try:
-                os.chdir(self.dir)
-            except:
-                raise Exception('Should prepare job first')
+    def run(self):
+        try:
+            os.chdir(self.dir)
+        except:
+            raise Exception('Should prepare job first')
 
-            simulation = init_simulation(self.task.procedure)
-            simulation.run()
+        simulation = init_simulation(self.task.procedure)
+        simulation.run()
 
-        def check_finished(self) -> bool:
-            if self.status in (Compute.Status.DONE, Compute.Status.FAILED):
-                return True
-            if self.is_running:
-                return False
+    def extend(self):
+        if self.status == Compute.Status.STARTED:
+            print('Job is still running')
+            return
+        if self.status == Compute.Status.FAILED:
+            print('Job failed, will not extend')
+            return
+        if self.converged:
+            print('Already converged, no need to extend')
+            return
 
-            try:
-                os.chdir(self.dir)
-            except:
-                raise Exception('Should prepare job first')
+        try:
+            os.chdir(self.dir)
+        except:
+            raise
 
-            simulation = init_simulation(self.task.procedure)
-            if simulation.check_finished():
-                self.status = Compute.Status.DONE
-            else:
-                self.status = Compute.Status.FAILED
-            db.session.commit()
+        simulation = init_simulation(self.task.procedure)
+        simulation.extend(jobname=self.name)
+        simulation.run()
+
+        self.cycle += 1
+        self.status = Compute.Status.STARTED
+        db.session.commit()
+
+    def check_finished(self) -> bool:
+        if self.status in (Compute.Status.DONE, Compute.Status.FAILED):
             return True
+        if self.is_running:
+            return False
 
-        def analyze(self):
-            if self.status == Compute.Status.STARTED:
-                print('Job is still running')
-            if self.status == Compute.Status.FAILED:
-                print('Job failed, will not perform analyze')
+        try:
+            os.chdir(self.dir)
+        except:
+            raise Exception('Should prepare job first')
 
-            try:
-                os.chdir(self.dir)
-            except:
-                raise
+        simulation = init_simulation(self.task.procedure)
+        if simulation.check_finished():
+            self.status = Compute.Status.DONE
+        else:
+            self.status = Compute.Status.FAILED
+        db.session.commit()
+        return True
 
-            simulation = init_simulation(self.task.procedure)
-            dirs = [self.dir]
-            if self.cycle > 1:
-                previous_job = self.previous_cycle
-                for i in range(self.cycle, 1, -1):
-                    dirs.append(previous_job.dir)
-                    previous_job = previous_job.previous_cycle
-            try:
-                converged, result = simulation.analyze(dirs)
-            except Exception as e:
-                print('Analyze failed: %s %s' % (self, str(e)))
-            else:
-                self.converged = converged
-                if converged:
-                    self.result = json.dumps(result)
-                db.session.commit()
+    def analyze(self):
+        if self.converged:
+            print('Already converged')
+            return
+        if self.status == Compute.Status.STARTED:
+            print('Job is still running')
+            return
+        if self.status == Compute.Status.FAILED:
+            print('Job failed, will not perform analyze')
+            return
 
-        def start_next_cycle(self):
-            if self.converged == None or self.converged:
-                print('New cycle can only be started if this cycle does not converge')
-                return
+        try:
+            os.chdir(self.dir)
+        except:
+            raise
 
-            if self.next_cycle_started:
-                print('Next cycle already started')
-                return
+        simulation = init_simulation(self.task.procedure)
+        dirs = [self.dir]
+        try:
+            converged, result = simulation.analyze(dirs)
+        except Exception as e:
+            print('Analyze failed: %s %s' % (self, str(e)))
+            self.status = Compute.Status.FAILED
+        else:
+            self.status = Compute.Status.ANALYZED
+            self.converged = converged
+            if converged:
+                self.result = json.dumps(result)
 
-            self.next_cycle_started = True
+        db.session.commit()
 
-            job = Job()
-            job.task_id = self.task_id
-            job.t = self.t
-            job.p = self.p
-            job.cycle = self.cycle + 1
-            db.session.add(job)
+    def remove(self):
+        try:
+            jobmanager.kill_job(self.name)
+        except Exception as e:
+            print(str(e))
+
+        try:
+            shutil.rmtree(self.dir)
+        except:
+            print('Cannot remove folder: %s' % self.dir)
+        else:
+            db.session.delete(self)
             db.session.commit()
 
-            job.prepare()
-            job.run()
 
-        def remove(self):
-            try:
-                jobmanager.kill_job(self.name)
-            except Exception as e:
-                print(str(e))
+class TaskThread(Thread):
+    def __init__(self, app, compute_id: int):
+        super().__init__()
+        self.app = app
+        self.compute_id = compute_id
 
-            try:
-                shutil.rmtree(self.dir)
-            except:
-                print('Cannot remove folder: %s' % self.dir)
-            else:
-                db.session.delete(self)
-                db.session.commit()
-
-    class TaskThread(Thread):
-        def __init__(self, app, compute_id: int):
-            super().__init__()
-            self.app = app
-            self.compute_id = compute_id
-
-        def run(self):
-            with self.app.app_context():
-                for task in Task.query.filter(Task.compute_id == self.compute_id):
-                    task.build()
-                    task.run()
+    def run(self):
+        with self.app.app_context():
+            for task in Task.query.filter(Task.compute_id == self.compute_id):
+                task.build()
+                task.run()

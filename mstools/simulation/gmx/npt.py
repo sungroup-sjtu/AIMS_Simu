@@ -42,7 +42,8 @@ class Npt(GmxSimulation):
 
         # NPT production with Velocity Rescaling thermostat and Parrinello-Rahman barostat
         self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-npt.mdp', T=T, P=P / Unit.bar,
-                                           nsteps=int(1E6), nstxtcout=1000, restart=True)
+                                           nsteps=int(1E6), nstxout=int(1E5), nstvout=int(1E5),
+                                           nstxtcout=1000, restart=True)
         cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top, tpr_out='npt.tpr',
                               cpt='eq.cpt', get_cmd=True)
         commands.append(cmd)
@@ -54,6 +55,23 @@ class Npt(GmxSimulation):
         self.gmx.generate_top_for_hvap(top, top_hvap)
         cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
         commands.append(cmd)
+        cmd = self.gmx.mdrun(name='hvap', nprocs=nprocs, rerun='npt.xtc', get_cmd=True)
+        commands.append(cmd)
+
+        self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
+
+    def extend(self, extend=1000, jobname=None):
+        '''
+        extend 1000 ps
+        '''
+        self.gmx.extend_tpr('npt.tpr', extend)
+
+        nprocs = self.jobmanager.nprocs
+        commands = []
+        # Extending NPT production with Velocity Rescaling thermostat and Parrinello-Rahman barostat
+        cmd = self.gmx.mdrun(name='npt', nprocs=nprocs, extend=True, get_cmd=True)
+        commands.append(cmd)
+        # Rerun Enthalpy of vaporization
         cmd = self.gmx.mdrun(name='hvap', nprocs=nprocs, rerun='npt.xtc', get_cmd=True)
         commands.append(cmd)
 
@@ -84,22 +102,11 @@ class Npt(GmxSimulation):
 
         converged, when = is_converged(density_series)
         if converged:
-            Cp = 0
-            try:
-                with open('dos.log') as f:
-                    lines = f.readlines()
-                for line in lines:
-                    if line.startswith('Heat capacity'):
-                        Cp = float(line.split()[2])
-            except:
-                pass
-
             return converged, {'temperature': np.mean(temp_series[when:]),
                                'pressure': np.mean(press_series[when:]),
                                'potential': np.mean(pe_series[when:]),
                                'density': np.mean(density_series[when:]),
                                'inter': np.mean(inter_series[when:]),
-                               'cp': Cp
                                }
         else:
             return converged, None

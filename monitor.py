@@ -27,12 +27,11 @@ def monitor_tasks():
             task.check_finished()
 
         for job in Job.query:
-            if job.status == Compute.Status.DONE and job.converged == None:
+            if job.status == Compute.Status.DONE and not job.converged:
                 job.analyze()
 
-            elif job.status == Compute.Status.DONE and job.converged == False:
-                if not job.next_cycle_started:
-                    job.start_next_cycle()
+            elif job.status == Compute.Status.ANALYZED and job.converged == False:
+                job.extend()
 
 
 if __name__ == '__main__':
