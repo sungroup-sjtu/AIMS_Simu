@@ -1,9 +1,8 @@
 import os
 import shutil
-from typing import Dict
 
 from .gmx import GmxSimulation
-from ...analyzer.series import is_converged
+from ...analyzer import is_converged, block_average
 from ...unit import Unit
 
 
@@ -81,36 +80,36 @@ class Npt(GmxSimulation):
     def analyze(self, dirs=None):
         if dirs is None:
             dirs = ['.']
-        import numpy as np
         import pandas as pd
         import panedr
 
-        # TODO check convergence, utilizing previous cycles
+        # TODO check structure freezing
         temp_series = pd.Series()
         press_series = pd.Series()
-        pe_series = pd.Series()
+        potential_series = pd.Series()
         density_series = pd.Series()
-        inter_series = pd.Series()
+        e_inter_series = pd.Series()
         for dir in dirs:
             df = panedr.edr_to_df(os.path.join(dir, 'npt.edr'))
             temp_series = temp_series.append(df.Temperature)
             press_series = press_series.append(df.Pressure)
-            pe_series = pe_series.append(df.Potential)
+            potential_series = potential_series.append(df.Potential)
             density_series = density_series.append(df.Density)
 
             df = panedr.edr_to_df(os.path.join(dir, 'hvap.edr'))
-            inter_series = inter_series.append(df.Potential)
+            e_inter_series = e_inter_series.append(df.Potential)
 
         converged, when = is_converged(density_series)
+
         if converged:
             return {
                 'simulation_length': density_series.index[-1],
                 'converged_from': when,
-                'temperature': np.mean(temp_series[when:]),
-                'pressure': np.mean(press_series[when:]),
-                'potential': np.mean(pe_series[when:]),
-                'density': np.mean(density_series[when:]),
-                'inter': np.mean(inter_series[when:]),
+                'temperature': block_average(temp_series.loc[when:]),
+                'pressure': block_average(press_series.loc[when:]),
+                'potential': block_average(potential_series.loc[when:]),
+                'density': block_average(density_series.loc[when:]),
+                'e_inter': block_average(e_inter_series.loc[when:]),
             }
         else:
             return None

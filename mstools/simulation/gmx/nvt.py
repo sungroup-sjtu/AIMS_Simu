@@ -31,7 +31,7 @@ class Nvt(GmxSimulation):
         tpr = os.path.join(prior_job_dir, 'npt.tpr')
         simulation_length = prior_job_result['simulation_length']
         converged_from = prior_job_result['converged_from']
-        dt = math.floor((simulation_length - converged_from) / 400) * 100 # the dt should be 100 ps at least
+        dt = math.floor((simulation_length - converged_from) / 400) * 100  # the dt should be 100 ps at least
         begin = simulation_length - 4 * dt
         self.gmx.slice_gro_from_traj(trr, tpr, 'conf.gro', begin, simulation_length, dt)
 
@@ -60,16 +60,16 @@ class Nvt(GmxSimulation):
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
     def analyze(self, dirs=None):
-        cv = 0
+        import numpy as np
+        cv_list = []
         for i in range(5):
             with open('dos%i.log' % i) as f_dos:
                 lines = f_dos.readlines()
             for line in lines:
                 if line.startswith('Heat capacity'):
-                    cv += float(line.split()[2])
+                    cv_list.append(float(line.split()[2]))
                     break
             else:
                 raise Exception('Heat capacity not found')
 
-        cv /= 5
-        return {'cv': cv}
+        return {'cv': [np.mean(cv_list), np.std(cv_list, ddof=1) / math.sqrt(5)]}
