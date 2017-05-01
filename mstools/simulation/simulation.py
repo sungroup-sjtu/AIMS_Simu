@@ -29,7 +29,7 @@ class Simulation():
     def check_finished(self):
         pass
 
-    def analyze(self) -> (bool, {str: float}):
+    def analyze(self) -> {str: float}:
         pass
 
     def set_system(self, smiles_list: [str], n_atoms: int):

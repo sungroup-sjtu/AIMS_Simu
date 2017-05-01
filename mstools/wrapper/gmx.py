@@ -294,3 +294,16 @@ class GMX:
         (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
         sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
         sp.communicate()
+
+    def get_length_of_traj(self, traj) -> float:
+        cmd = '%s -quiet check -f %s' % (self.GMX_BIN, traj)
+        sp = Popen(cmd.split(), stdout=PIPE, stderr=PIPE)
+        out, err = sp.communicate()
+
+        # The output of gmx check are in stderr
+        for line in err.decode().splitlines():
+            if line.startswith('Last frame'):
+                length = float(line.split()[-1])
+                return length
+
+        raise Exception('Cannot open trajectory')

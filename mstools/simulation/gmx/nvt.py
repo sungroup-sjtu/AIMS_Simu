@@ -1,4 +1,5 @@
 import os, shutil
+import math
 from typing import Dict
 from .gmx import GmxSimulation
 from ...unit import Unit
@@ -28,7 +29,11 @@ class Nvt(GmxSimulation):
         # Slice structures from prior NPT trajectory, named conf0.gro, conf1.gro ...
         trr = os.path.join(prior_job_dir, 'npt.trr')
         tpr = os.path.join(prior_job_dir, 'npt.tpr')
-        self.gmx.slice_gro_from_traj(trr, tpr, 'conf.gro', 60, 100, 10)
+        simulation_length = prior_job_result['simulation_length']
+        converged_from = prior_job_result['converged_from']
+        dt = math.floor((simulation_length - converged_from) / 400) * 100 # the dt should be 100 ps at least
+        begin = simulation_length - 4 * dt
+        self.gmx.slice_gro_from_traj(trr, tpr, 'conf.gro', begin, simulation_length, dt)
 
         # Scale gro box for NVT simulation
         box = prior_job_result['box']
@@ -62,6 +67,9 @@ class Nvt(GmxSimulation):
             for line in lines:
                 if line.startswith('Heat capacity'):
                     cv += float(line.split()[2])
-            raise Exception('Heat capacity not found')
+                    break
+            else:
+                raise Exception('Heat capacity not found')
+
         cv /= 5
-        return True, {'cv': cv}
+        return {'cv': cv}

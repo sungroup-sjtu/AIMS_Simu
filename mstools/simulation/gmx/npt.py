@@ -1,5 +1,6 @@
 import os
 import shutil
+from typing import Dict
 
 from .gmx import GmxSimulation
 from ...analyzer.series import is_converged
@@ -102,11 +103,14 @@ class Npt(GmxSimulation):
 
         converged, when = is_converged(density_series)
         if converged:
-            return converged, {'temperature': np.mean(temp_series[when:]),
-                               'pressure': np.mean(press_series[when:]),
-                               'potential': np.mean(pe_series[when:]),
-                               'density': np.mean(density_series[when:]),
-                               'inter': np.mean(inter_series[when:]),
-                               }
+            return {
+                'simulation_length': density_series.index[-1],
+                'converged_from': when,
+                'temperature': np.mean(temp_series[when:]),
+                'pressure': np.mean(press_series[when:]),
+                'potential': np.mean(pe_series[when:]),
+                'density': np.mean(density_series[when:]),
+                'inter': np.mean(inter_series[when:]),
+            }
         else:
-            return converged, None
+            return None

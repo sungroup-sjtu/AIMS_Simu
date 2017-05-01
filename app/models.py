@@ -407,14 +407,17 @@ class Job(db.Model):
         simulation = init_simulation(self.task.procedure)
         dirs = [self.dir]
         try:
-            converged, result = simulation.analyze(dirs)
+            result = simulation.analyze(dirs)
         except Exception as e:
             print('Analyze failed: %s %s' % (self, str(e)))
             self.status = Compute.Status.FAILED
         else:
             self.status = Compute.Status.ANALYZED
-            self.converged = converged
-            if converged:
+            if result is None:
+                self.converged = False
+                self.result = None
+            else:
+                self.converged = True
                 self.result = json.dumps(result)
 
         db.session.commit()
