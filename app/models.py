@@ -296,7 +296,7 @@ class Job(db.Model):
 
     @property
     def dir(self) -> str:
-        dir_name = '%i-%i-%i' % (self.t or 0, self.p or 0, self.cycle)
+        dir_name = '%i-%i' % (self.t or 0, self.p or 0)
         return os.path.join(self.task.dir, dir_name)
 
     @property

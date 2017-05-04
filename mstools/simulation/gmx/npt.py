@@ -11,7 +11,7 @@ class Npt(GmxSimulation):
         super().__init__(**kwargs)
         self.procedure = 'npt'
         self.requirement = []
-        self.logs = ['npt.log', 'hvap.log', 'cp.log']
+        self.logs = ['npt.log', 'hvap.log']
 
     def build(self, minimize=False):
         print('Build coordinates using Packmol: %s molecules ...' % self.n_mol_list)
@@ -32,10 +32,19 @@ class Npt(GmxSimulation):
 
         nprocs = self.jobmanager.nprocs
         commands = []
+        # NVT annealing from 0 to 2000 K to target T with Langevin thermostat
+        self.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-anneal.mdp', T=T,
+                                           nsteps=int(1E5), nstxtcout=0)
+        cmd = self.gmx.grompp(mdp='grompp-anneal.mdp', gro=gro, top=top, tpr_out='anneal.tpr', get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name='anneal', nprocs=nprocs, get_cmd=True)
+        commands.append(cmd)
+
         # NPT equilibrium with Langevin thermostat and Berendsen barostat
         self.gmx.prepare_mdp_from_template('t_npt_sd.mdp', mdp_out='grompp-eq.mdp', T=T, P=P / Unit.bar,
-                                           nsteps=int(5E5))
-        cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro=gro, top=top, tpr_out='eq.tpr', get_cmd=True)
+                                           nsteps=int(4E5), nstxtcout=0, restart=True)
+        cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro='anneal.gro', top=top, tpr_out='eq.tpr',
+                              cpt='anneal.cpt', get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.mdrun(name='eq', nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
@@ -50,7 +59,7 @@ class Npt(GmxSimulation):
         cmd = self.gmx.mdrun(name='npt', nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
 
-        # Enthalpy of vaporization
+        # Rerun enthalpy of vaporization
         top_hvap = 'topol-hvap.top'
         self.gmx.generate_top_for_hvap(top, top_hvap)
         cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
@@ -60,9 +69,9 @@ class Npt(GmxSimulation):
 
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
-    def extend(self, extend=1000, jobname=None):
+    def extend(self, extend=500, jobname=None):
         '''
-        extend 1000 ps
+        extend simulation for 500 ps
         '''
         self.gmx.extend_tpr('npt.tpr', extend)
 
@@ -71,7 +80,8 @@ class Npt(GmxSimulation):
         # Extending NPT production with Velocity Rescaling thermostat and Parrinello-Rahman barostat
         cmd = self.gmx.mdrun(name='npt', nprocs=nprocs, extend=True, get_cmd=True)
         commands.append(cmd)
-        # Rerun Enthalpy of vaporization
+
+        # Rerun enthalpy of vaporization
         cmd = self.gmx.mdrun(name='hvap', nprocs=nprocs, rerun='npt.xtc', get_cmd=True)
         commands.append(cmd)
 

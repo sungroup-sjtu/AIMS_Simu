@@ -2,3 +2,7 @@ flask
 flask-sqlalchemy
 sqlalchemy
 openbabel
+numpy
+pandas
+scipy
+panedr

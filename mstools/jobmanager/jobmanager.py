@@ -1,5 +1,5 @@
 class JobManager:
-    def __init__(self, queue=None, nprocs=None):
+    def __init__(self, queue=None, nprocs=1):
         self.queue = queue
         self.nprocs = nprocs
 

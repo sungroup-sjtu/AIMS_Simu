@@ -44,7 +44,7 @@ class Nvt(GmxSimulation):
         nprocs = self.jobmanager.nprocs
         commands = []
         # Heat capacity using 2-Phase Thermodynamics
-        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-cv.mdp', T=T, P=P / Unit.bar,
+        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-cv.mdp', T=T,
                                            nsteps=int(4E4), nstvout=4, restart=True)
         for i in range(5):
             gro_nvt = 'conf%i.gro' % i
@@ -60,7 +60,6 @@ class Nvt(GmxSimulation):
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
 
     def analyze(self, dirs=None):
-        import numpy as np
         cv_list = []
         for i in range(5):
             with open('dos%i.log' % i) as f_dos:
@@ -72,4 +71,5 @@ class Nvt(GmxSimulation):
             else:
                 raise Exception('Heat capacity not found')
 
+        import numpy as np
         return {'cv': [np.mean(cv_list), np.std(cv_list, ddof=1) / math.sqrt(5)]}
