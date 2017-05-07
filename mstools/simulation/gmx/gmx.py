@@ -14,11 +14,14 @@ class GmxSimulation(Simulation):
         self.logs = []  # used for checking whether the job is successfully finished
 
     def export(self, ff='TEAM_LS', gro_out='conf.gro', top_out='topol.top', mdp_out='grompp.mdp',
-               minimize=False, pbc=True):
-        print('Checkout force field: %s ...' % ff)
-        self.dff.checkout(self.msd, table=ff)
-        print('Export GROMACS files ...')
-        self.dff.export_gmx(self.msd, ff + '.ppf', gro_out, top_out, mdp_out)
+               minimize=False, pbc=True, ppf=None):
+        print('Generate GROMACS files ...')
+        if ppf == None:
+            self.dff.checkout(self.msd, table=ff)
+            self.dff.export_gmx(self.msd, ff + '.ppf', gro_out, top_out, mdp_out)
+        else:
+            self.dff.checkout(self.msd, table=ff, ppf_out='tmp.ppf')
+            self.dff.export_gmx(self.msd, ppf, gro_out, top_out, mdp_out)
 
         if minimize:
             print('Energy minimize ...')
