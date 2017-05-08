@@ -52,7 +52,7 @@ class Target():
         self.einter = (8.314 * self.T - self.hvap) * n_mol
         self.wEinter = self.wHvap / n_mol
 
-    def build(self, n_atoms=3000, ppf_file=None):
+    def build(self, n_atoms=3000, ppf=None):
         pdb = 'mol.pdb'
         mol2 = 'mol.mol2'
         py_mol = create_mol_from_smiles(self.smiles, pdb_out=pdb, mol2_out=mol2)
@@ -65,7 +65,7 @@ class Target():
 
         print('Create box using DFF ...')
         simulation.dff.build_box_after_packmol([mol2], [n_mol], 'init.msd', mol_corr='init.pdb', length=length)
-        simulation.export(ppf=ppf_file, minimize=True)
+        simulation.export(ppf=ppf, minimize=True)
 
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', T=self.T, nsteps=int(5E5), nstxtcout=0)
@@ -293,7 +293,7 @@ def build(ppf_file):
     for p in targets:
         print(p.dir)
         cd_or_create_and_cd(p.dir)
-        p.build(ppf_file)
+        p.build(ppf=ppf_file)
 
 
 def run_nvt():
