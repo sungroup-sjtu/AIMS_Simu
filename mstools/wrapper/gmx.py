@@ -69,7 +69,7 @@ class GMX:
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=10000, dt=0.001,
                                   nstenergy=100, nstxout=0, nstvout=0, nstxtcout=10000, xtcgrps='System',
-                                  restart=False):
+                                  restart=False, anneal='single'):
         genvel = 'no' if restart else 'yes'
         continuation = 'yes' if restart else 'no'
 
@@ -84,7 +84,8 @@ class GMX:
                         .replace('%dt%', str(dt)).replace('%nstenergy%', str(nstenergy)) \
                         .replace('%nstxout%', str(nstxout)).replace('%nstvout%', str(nstvout)) \
                         .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps)) \
-                        .replace('%genvel%', genvel).replace('%continuation%', continuation))
+                        .replace('%genvel%', genvel).replace('%continuation%', continuation) \
+                        .replace('%ANNEAL%', anneal))
 
     def energy(self, edr, properties: [str], begin=0, get_cmd=False):
         property_str = '\\n'.join(properties)
