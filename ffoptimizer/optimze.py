@@ -54,7 +54,7 @@ class Target():
         self.einter = (8.314 * self.T - self.hvap) * n_mol
         self.wEinter = self.wHvap / n_mol
 
-    def build(self, n_atoms=3000, ppf=None):
+    def build(self, n_atoms=3000):
         pdb = 'mol.pdb'
         mol2 = 'mol.mol2'
         py_mol = create_mol_from_smiles(self.smiles, pdb_out=pdb, mol2_out=mol2)
@@ -67,7 +67,7 @@ class Target():
 
         print('Create box using DFF ...')
         simulation.dff.build_box_after_packmol([mol2], [n_mol], 'init.msd', mol_corr='init.pdb', length=length)
-        simulation.export(ppf=ppf, minimize=True)
+        simulation.export(minimize=True)
 
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=1000, nsteps=int(4E5), nstxtcout=0)
@@ -106,10 +106,44 @@ class Target():
         ei = simulation.gmx.get_property('hvap.edr', 'Potential', begin=20)
         return (pressure - self.P) ** 2 * self.wDensity ** 2 + (ei - self.einter) ** 2 * self.wEinter
 
+    def diff(self, ppf_file, para_k, para_v):
+        P_list = []
+        EI_list = []
+
+        if para_k.endswith('r0'):
+            h = 0.05
+        else:
+            h = 0.01
+
+        for i in [-2, -1, 1, 2]:
+            new_v = para_v + i * h
+            ppf = PPF(ppf_file)
+            ppf.set_lj_para({para_k: new_v})
+            ppf.write('rerun.ppf')
+            simulation.export(ppf='rerun.ppf', top_out='diff.top', minimize=False)
+            nprocs = simulation.jobmanager.nprocs
+
+            simulation.gmx.grompp(top='diff.top', tpr_out='diff.tpr')
+            simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='nvt.trr')
+
+            top_hvap = 'diff-hvap.top'
+            simulation.gmx.generate_top_for_hvap('diff.top', top_hvap)
+            simulation.gmx.grompp(top=top_hvap, tpr_out='diff-hvap.tpr')
+            simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='nvt.trr')
+
+            pressure = simulation.gmx.get_property('diff.edr', 'Pressure', begin=20)
+            ei = simulation.gmx.get_property('diff-hvap.edr', 'Potential', begin=20)
+            P_list.append(pressure)
+            EI_list.append(ei)
+
+        diff_P = (P_list[0] - 8 * P_list[1] + 8 * P_list[2] - P_list[3]) / 12 / h
+        diff_EI = (EI_list[0] - 8 * EI_list[1] + 8 * EI_list[2] - EI_list[3]) / 12 / h
+        return diff_P, diff_EI
+
 
 class PPF():
-    def __init__(self, ppf_file):
-        with open(ppf_file) as f:
+    def __init__(self, ppf):
+        with open(ppf) as f:
             self.terms = f.read().splitlines()
 
     @property
@@ -198,12 +232,13 @@ def read_data(filename):
     return targets
 
 
-def build(datafile, ppf_file):
+def build(datafile):
     targets = read_data(datafile)
     for p in targets:
         print(p.dir)
         cd_or_create_and_cd(p.dir)
-        p.build(ppf_file)
+        if not os.path.exists('eq.gro'):
+            p.build()
 
 
 def run_nvt(datafile):
@@ -237,14 +272,12 @@ def optimize(datafile, ppf_file):
 
 
 if __name__ == '__main__':
-    data_file = sys.argv[1]
+    datafile = sys.argv[1]
     cmd = sys.argv[2]
-    ppf_file = None
-    if len(sys.argv) == 4:
-        ppf_file = os.path.abspath(sys.argv[3])
     if cmd == 'build':
-        build(data_file, ppf_file)
+        build(datafile)
     if cmd == 'run':
-        run_nvt(data_file)
+        run_nvt(datafile)
     if cmd == 'optimize':
-        optimize(data_file, ppf_file)
+        ppf_file = os.path.abspath(sys.argv[3])
+        optimize(datafile, ppf_file)
