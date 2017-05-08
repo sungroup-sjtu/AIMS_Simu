@@ -65,7 +65,8 @@ class Target():
 
         print('Create box using DFF ...')
         simulation.dff.build_box_after_packmol([mol2], [n_mol], 'init.msd', mol_corr='init.pdb', length=length)
-        simulation.export(ppf=ppf, minimize=True)
+        shutil.copy(ppf, 'TEAM_LS.ppf')
+        simulation.export(ppf='TEAM_LS.ppf', minimize=True)
 
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', T=self.T, nsteps=int(5E5), nstxtcout=0)
