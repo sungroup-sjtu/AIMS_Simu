@@ -36,7 +36,7 @@ class Target():
         self.wHvap = None
 
     def __repr__(self):
-        return '%s,%i' %(self.smiles, self.T)
+        return '%s,%i' % (self.smiles, self.T)
 
     @property
     def dir(self):
@@ -52,7 +52,7 @@ class Target():
         self.einter = (8.314 * self.T - self.hvap) * n_mol
         self.wEinter = self.wHvap / n_mol
 
-    def build(self, n_atoms=3000):
+    def build(self, n_atoms=3000, ppf_file=None):
         pdb = 'mol.pdb'
         mol2 = 'mol.mol2'
         py_mol = create_mol_from_smiles(self.smiles, pdb_out=pdb, mol2_out=mol2)
@@ -65,7 +65,7 @@ class Target():
 
         print('Create box using DFF ...')
         simulation.dff.build_box_after_packmol([mol2], [n_mol], 'init.msd', mol_corr='init.pdb', length=length)
-        simulation.export(minimize=True)
+        simulation.export(ppf=ppf_file, minimize=True)
 
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', T=self.T, nsteps=int(5E5), nstxtcout=0)
@@ -109,7 +109,7 @@ class Target():
         ei = simulation.gmx.get_property('hvap.edr', 'Potential', begin=100)
         return 8.314 * self.T / 1000 - ei / self.n_mol
 
-    def get_pres_hvap_from_paras(self, d:OrderedDict = None)->(float, float):
+    def get_pres_hvap_from_paras(self, d: OrderedDict = None) -> (float, float):
         paras = copy.copy(d)
         os.chdir(self.dir)
         ppf = PPF('TEAM_LS.ppf')
@@ -139,7 +139,7 @@ class Target():
         hvap = 8.314 * self.T / 1000 - ei / self.n_mol
         return pres, hvap
 
-    def get_dPres_dHvap_from_paras(self, d:OrderedDict)->([float], [float]):
+    def get_dPres_dHvap_from_paras(self, d: OrderedDict) -> ([float], [float]):
         paras = copy.copy(d)
         dPres = []
         dHvap = []
@@ -149,8 +149,7 @@ class Target():
             dHvap.append(dH)
         return dPres, dHvap
 
-
-    def get_dPres_dHvap_for_para(self, d:OrderedDict, k)->(float, float):
+    def get_dPres_dHvap_for_para(self, d: OrderedDict, k) -> (float, float):
         paras = copy.copy(d)
         v = paras[k]
         pres_list = []
@@ -168,27 +167,27 @@ class Target():
             if not ppf.set_lj_para(paras):
                 return 0, 0
             ppf.write('rerun.ppf')
-            #print('    %s %10.5f %10.5f' %(para_k, v, new_v))
-            top = 'diff%i.top' %i
+            # print('    %s %10.5f %10.5f' %(para_k, v, new_v))
+            top = 'diff%i.top' % i
             simulation.dff.export_gmx('init.msd', 'rerun.ppf', top_out=top)
             nprocs = simulation.jobmanager.nprocs
 
             # Pres
             simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(2E5), nstxtcout=0)
-            simulation.gmx.grompp(top=top, tpr_out='diff%i.tpr' %i, silent=True)
-            simulation.gmx.mdrun(name='diff%i' %i, nprocs=nprocs, rerun='nvt.trr', silent=True)
+            simulation.gmx.grompp(top=top, tpr_out='diff%i.tpr' % i, silent=True)
+            simulation.gmx.mdrun(name='diff%i' % i, nprocs=nprocs, rerun='nvt.trr', silent=True)
 
-            pres = simulation.gmx.get_property('diff%i.edr' %i, 'Pressure', begin=100)
+            pres = simulation.gmx.get_property('diff%i.edr' % i, 'Pressure', begin=100)
             pres_list.append(pres)
 
             # HVap
             top_hvap = 'diff%i-hvap.top'
             simulation.gmx.generate_top_for_hvap(top, top_hvap)
 
-            simulation.gmx.grompp(top=top_hvap, tpr_out='diff%i-hvap.tpr' %i, silent=True)
-            simulation.gmx.mdrun(name='diff%i-hvap' %i, nprocs=nprocs, rerun='nvt.trr', silent=True)
+            simulation.gmx.grompp(top=top_hvap, tpr_out='diff%i-hvap.tpr' % i, silent=True)
+            simulation.gmx.mdrun(name='diff%i-hvap' % i, nprocs=nprocs, rerun='nvt.trr', silent=True)
 
-            ei = simulation.gmx.get_property('diff%i-hvap.edr' %i, 'Potential', begin=100)
+            ei = simulation.gmx.get_property('diff%i-hvap.edr' % i, 'Potential', begin=100)
             hvap = 8.314 * self.T / 1000 - ei / self.n_mol
             hvap_list.append(hvap)
 
@@ -290,12 +289,11 @@ def read_data(filename):
     return targets
 
 
-def build():
+def build(ppf_file):
     for p in targets:
         print(p.dir)
         cd_or_create_and_cd(p.dir)
-        if not os.path.exists('eq.gro'):
-            p.build()
+        p.build(ppf_file)
 
 
 def run_nvt():
@@ -330,7 +328,7 @@ def optimize_():
             dPres[-1].append(dP)
             dHvap[-1].append(dH)
 
-    print('\nRSQ = %.1f' %rsq_total)
+    print('\nRSQ = %.1f' % rsq_total)
     print('Parameter', end='')
     for j, target in enumerate(targets):
         print(' ', target, end='')
@@ -338,7 +336,7 @@ def optimize_():
     for (i, k) in enumerate(adj_lj_paras.keys()):
         print(k, end='')
         for j, target in enumerate(targets):
-            print(' %.1f %.1f' %(dPres[j][i], dHvap[j][i]), end='')
+            print(' %.1f %.1f' % (dPres[j][i], dHvap[j][i]), end='')
         print('')
 
 
@@ -358,15 +356,17 @@ def func(x):
         df.append(dHvap)
     print('CURRENT', x)
     print('RESIDUE:', list(map(lambda x: round(x, 1), f)))
-    print('RSQ:', round(np.sum(list(map(lambda x: x**2, f))), 1))
+    print('RSQ:', round(np.sum(list(map(lambda x: x ** 2, f))), 1))
     print('DIRECTIVE:')
     for l in df:
         print(list(map(lambda x: round(x, 1), l)))
 
     return f, df
 
+
 def print_result(x, f):
     print(x, f)
+
 
 def optimize():
     print(adj_lj_paras)
@@ -376,20 +376,22 @@ def optimize():
     print(sol.success)
     print(sol.message)
 
+
 if __name__ == '__main__':
     datafile = sys.argv[1]
-    cmd = sys.argv[2]
     global targets
     targets = read_data(datafile)
+    cmd = sys.argv[2]
+    ppf_file = None
+    if len(sys.argv) == 4:
+        ppf_file = os.path.abspath(sys.argv[3])
 
     if cmd == 'build':
-        build()
+        build(ppf_file)
     if cmd == 'run':
         run_nvt()
     if cmd == 'optimize':
-        ppf = PPF(sys.argv[3])
+        ppf = PPF(ppf_file)
         global adj_lj_paras
         adj_lj_paras = ppf.adj_lj_paras
-
         optimize()
-
