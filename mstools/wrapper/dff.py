@@ -48,6 +48,21 @@ class DFF:
         if err.decode() != '':
             raise DffError('Checkout failed: %s' % err.decode())
 
+    def set_charge(self, models: [str], ppf):
+        model_path = []
+        for model in models:
+            model_path.append(os.path.abspath(model))
+        ppf = os.path.abspath(ppf)
+        log = os.path.abspath('setcharge.dfo')
+        dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_set_charge.dfi')).read()
+        dfi = dfi.replace('%MODELS%', '\n'.join(model_path)).replace('%PPF%', ppf).replace('%LOG%', log)
+        with open('setcharge.dfi', 'w') as f:
+            f.write(dfi)
+        sp = subprocess.Popen([self.DFFJOB_BIN, 'setcharge'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        out, err = sp.communicate()
+        if err.decode() != '':
+            raise DffError('Set charge failed: %s' % err.decode())
+
     def export_lammps(self, model, ppf, data_out='data', lmp_out='in.lmp'):
         model = os.path.abspath(model)
         ppf = os.path.abspath(ppf)
