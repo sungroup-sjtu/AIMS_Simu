@@ -30,16 +30,18 @@ class DFF:
     def convert_model_to_msd(self, model, msd_out):
         pass
 
-    def checkout(self, model, db=None, table='TEAM_MS', ppf_out=None):
+    def checkout(self, models: [str], db=None, table='TEAM_LS', ppf_out=None):
         if db == None:
             db = os.path.join(self.DFF_ROOT, 'database/TEAMFF.dffdb')
         if ppf_out == None:
             ppf_out = table + '.ppf'
-        model = os.path.abspath(model)
+        model_path = []
+        for model in models:
+            model_path.append(os.path.abspath(model))
         db = os.path.abspath(db)
         ppf_out = os.path.abspath(ppf_out)
         dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_checkout.dfi')).read()
-        dfi = dfi.replace('%DATABASE%', db).replace('%TABLE%', table).replace('%MODEL%', model) \
+        dfi = dfi.replace('%DATABASE%', db).replace('%TABLE%', table).replace('%MODELS%', '\n'.join(model_path)) \
             .replace('%OUTPUT%', ppf_out).replace('%LOG%', os.path.abspath('checkout.dfo'))
         with open('checkout.dfi', 'w') as f:
             f.write(dfi)

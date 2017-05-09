@@ -17,10 +17,11 @@ class GmxSimulation(Simulation):
                minimize=False, pbc=True, ppf=None):
         print('Generate GROMACS files ...')
         if ppf == None:
-            self.dff.checkout(self.msd, table=ff)
+            self.dff.checkout([self.msd], table=ff)
             self.dff.export_gmx(self.msd, ff + '.ppf', gro_out, top_out, mdp_out)
         else:
-            self.dff.checkout(self.msd, table=ff, ppf_out='_tmp.ppf')
+            self.dff.checkout([self.msd], table=ff, ppf_out='_tmp.ppf')
+            self.dff.set_charge([self.msd], ppf)
             self.dff.export_gmx(self.msd, ppf, gro_out, top_out, mdp_out)
 
         if minimize:
