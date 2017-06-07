@@ -157,6 +157,7 @@ def init_db(filename):
         words = line.split()
 
         target = Target()
+        target.name = words[0]
         target.smiles = words[1]
         target.T = int(words[2])
         target.P = int(words[3])
@@ -207,4 +208,3 @@ if __name__ == '__main__':
     if cmd == 'plot':
         ppfs = sys.argv[2:]
         plot(ppfs)
-G

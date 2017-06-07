@@ -76,14 +76,12 @@ class Packmol:
             with open('build.inp', 'w') as f:
                 f.write(inp)
 
-            # TODO subprocess PIPE not work on Mac, do not know why
-            if sys.platform == 'darwin':
-                if silent:
-                    os.system(self.PACKMOL_BIN + ' < build.inp > /dev/null')
-                else:
-                    os.system(self.PACKMOL_BIN + ' < build.inp')
-
+            # TODO subprocess PIPE not work for Packmol new version, do not know why
+            if silent:
+                os.system(self.PACKMOL_BIN + ' < build.inp > /dev/null')
             else:
-                (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
-                sp = subprocess.Popen([self.PACKMOL_BIN], stdin=PIPE, stdout=stdout, stderr=stderr)
-                sp.communicate(input=inp.encode())
+                os.system(self.PACKMOL_BIN + ' < build.inp')
+
+            # (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
+            # sp = subprocess.Popen([self.PACKMOL_BIN], stdin=PIPE, stdout=stdout, stderr=stderr)
+            # sp.communicate(input=inp.encode())

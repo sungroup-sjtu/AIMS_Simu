@@ -6,7 +6,7 @@ from collections import OrderedDict
 from functools import partial
 
 import pybel
-from sqlalchemy import Column, Integer, Text, Float
+from sqlalchemy import Column, Integer, Text, Float,String
 
 NotNullColumn = partial(Column, nullable=False)
 
@@ -28,6 +28,7 @@ simulation = GmxSimulation(**kwargs)
 class Target(DB.Base):
     __tablename__ = 'target'
     id = NotNullColumn(Integer, primary_key=True)
+    name = NotNullColumn(String(200))
     smiles = NotNullColumn(Text)
     n_mol = Column(Integer, nullable=True)
     T = NotNullColumn(Integer)
@@ -38,11 +39,11 @@ class Target(DB.Base):
     wHvap = NotNullColumn(Float)
 
     def __repr__(self):
-        return '<Target: %i %s %s>' % (self.id, self.smiles, self.t)
+        return '<Target: %s %s %i>' % (self.name, self.smiles, self.t)
 
     @property
     def dir(self):
-        return os.path.join(Config.WORK_DIR, 'NVT-%i-%i' % (self.id, self.T))
+        return os.path.join(Config.WORK_DIR, 'NVT-%s-%i' % (self.name, self.T))
 
     def calc_n_mol(self, n_atoms=3000, n_mol=100):
         py_mol = pybel.readstring('smi', self.smiles)
@@ -95,7 +96,7 @@ class Target(DB.Base):
         cmd = simulation.gmx.mdrun(name='hvap', nprocs=nprocs, rerun='nvt.trr', get_cmd=True)
         commands.append(cmd)
 
-        simulation.jobmanager.generate_sh(os.getcwd(), commands, name='%i-%i' % (self.id, self.T))
+        simulation.jobmanager.generate_sh(os.getcwd(), commands, name='%s-%i' % (self.name, self.T))
         simulation.run()
 
     def get_pres_hvap_from_paras(self, ppf_file=None, d: OrderedDict = None) -> (float, float):
@@ -208,7 +209,7 @@ class Target(DB.Base):
 
     @property
     def dir_npt(self):
-        return os.path.join(Config.WORK_DIR, 'NPT-%i' % (self.id))
+        return os.path.join(Config.WORK_DIR, 'NPT-%s' % (self.name))
 
     def run_npt(self, ppf=None):
         cd_or_create_and_cd(self.dir_npt)
