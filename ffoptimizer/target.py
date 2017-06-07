@@ -74,7 +74,7 @@ class Target(DB.Base):
         nprocs = simulation.jobmanager.nprocs
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-eq.mdp', T=self.T,
-                                                 nsteps=int(2E5), dt=0.002, nstxtcout=0)
+                                                 nsteps=int(4E5), dt=0.001, nstxtcout=0)
         cmd = simulation.gmx.grompp(mdp='grompp-eq.mdp', tpr_out='eq.tpr', get_cmd=True)
         commands.append(cmd)
         cmd = simulation.gmx.mdrun(name='eq', nprocs=nprocs, get_cmd=True)
