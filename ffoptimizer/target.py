@@ -74,15 +74,15 @@ class Target(DB.Base):
         nprocs = simulation.jobmanager.nprocs
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-eq.mdp', T=self.T,
-                                                 nsteps=int(2E5), dt=2, nstxtcout=0)
+                                                 nsteps=int(2E5), dt=0.002, nstxtcout=0)
         cmd = simulation.gmx.grompp(mdp='grompp-eq.mdp', tpr_out='eq.tpr', get_cmd=True)
         commands.append(cmd)
         cmd = simulation.gmx.mdrun(name='eq', nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
 
         simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-nvt.mdp', T=self.T,
-                                                 nsteps=int(1E5), dt=2, restart=True,
-                                                 nstxout=200, nstvout=200, nstxtcout=0)
+                                                 nsteps=int(2E5), dt=0.002, restart=True,
+                                                 nstxout=500, nstvout=500, nstxtcout=0)
         cmd = simulation.gmx.grompp(mdp='grompp-nvt.mdp', gro='eq.gro', tpr_out='nvt.tpr', cpt='eq.cpt', get_cmd=True)
         commands.append(cmd)
         cmd = simulation.gmx.mdrun(name='nvt', nprocs=nprocs, get_cmd=True)
@@ -121,7 +121,7 @@ class Target(DB.Base):
         nprocs = simulation.jobmanager.nprocs
 
         # Press
-        simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(1E5), dt=2, nstxtcout=0)
+        simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(2E5), dt=0.002, nstxtcout=0)
         simulation.gmx.grompp(top=top, tpr_out='diff.tpr', silent=True)
         simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='nvt.trr', silent=True)
 
@@ -185,7 +185,7 @@ class Target(DB.Base):
             nprocs = simulation.jobmanager.nprocs
 
             # Pres
-            simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(1E5), dt=2, nstxtcout=0)
+            simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(2E5), dt=0.002, nstxtcout=0)
             simulation.gmx.grompp(top=top, tpr_out='diff%i.tpr' % i, silent=True)
             simulation.gmx.mdrun(name='diff%i' % i, nprocs=nprocs, rerun='nvt.trr', silent=True)
 
