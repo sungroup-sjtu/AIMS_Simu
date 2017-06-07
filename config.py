@@ -11,7 +11,6 @@ class BaseConfig:
     SQLALCHEMY_TRACK_MODIFICATIONS = True
 
     SIMULATION_ENGINE = 'gmx'
-    # SIMULATION_ENGINE = 'lammps'
 
     JOB_MANAGER = 'local'
     NPROC_PER_JOB = 1
@@ -32,17 +31,17 @@ class ClusterConfig(BaseConfig):
 
 class MacConfig(BaseConfig):
     WORK_DIR = '/tmp/MSDServer/'
-    DFF_ROOT = '/Users/zheng/Projects/DFF7.2'
-    PACKMOL_BIN = '/Users/zheng/Projects/DFF7.2/bin32m/Packmol/packmol.exe'
-    LMP_BIN = '/Users/zheng/Projects/DFF7.2/bin32m/Lammps/lammps'
+    DFF_ROOT = '/Users/zheng/Projects/DFF/Developing'
+    PACKMOL_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Packmol/packmol.exe'
+    LMP_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Lammps/lammps'
     GMX_BIN = '/usr/local/bin/gmx'
 
 
 class XPSConfig(BaseConfig):
     WORK_DIR = 'D:/Download/Temp'
-    DFF_ROOT = 'D:/Projects/DFF7.2'
-    PACKMOL_BIN = 'D:/Projects/DFF7.2/bin32w/Packmol/packmol.exe'
-    LMP_BIN = 'D:/Projects/DFF7.2/bin32w/Lammps/lammps.exe'
+    DFF_ROOT = 'D:/Projects/DFF/Developing'
+    PACKMOL_BIN = 'D:/Projects/DFF/Developing/bin32w/Packmol/packmol.exe'
+    LMP_BIN = 'D:/Projects/DFF/Developing/bin32w/Lammps/lammps.exe'
     GMX_BIN = None
 
 
