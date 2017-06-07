@@ -6,7 +6,7 @@ from collections import OrderedDict
 from functools import partial
 
 import pybel
-from sqlalchemy import Column, Integer, Text, Float,String
+from sqlalchemy import Column, Integer, Text, Float, String
 
 NotNullColumn = partial(Column, nullable=False)
 
@@ -37,13 +37,18 @@ class Target(DB.Base):
     hvap = NotNullColumn(Float)
     wDensity = NotNullColumn(Float)
     wHvap = NotNullColumn(Float)
+    cycle = NotNullColumn(Integer, default=0)
 
     def __repr__(self):
         return '<Target: %s %s %i>' % (self.name, self.smiles, self.t)
 
     @property
     def dir(self):
-        return os.path.join(Config.WORK_DIR, 'NVT-%s-%i' % (self.name, self.T))
+        base_dir = os.path.join(Config.WORK_DIR, 'NVT-%s-%i' % (self.name, self.T))
+        if self.cycle == 0:
+            return base_dir
+        else:
+            return os.path.join(base_dir, str(self.cycle))
 
     def calc_n_mol(self, n_atoms=3000, n_mol=100):
         py_mol = pybel.readstring('smi', self.smiles)
@@ -54,22 +59,29 @@ class Target(DB.Base):
 
     def build(self, ppf=None):
         cd_or_create_and_cd(self.dir)
-        pdb = 'mol.pdb'
-        mol2 = 'mol.mol2'
-        py_mol = create_mol_from_smiles(self.smiles, pdb_out=pdb, mol2_out=mol2)
-        mass = py_mol.molwt * self.n_mol
-        length = (10 / 6.022 * mass / self.density) ** (1 / 3)  # assume cubic box
+        if self.cycle == 0:
+            pdb = 'mol.pdb'
+            mol2 = 'mol.mol2'
+            py_mol = create_mol_from_smiles(self.smiles, pdb_out=pdb, mol2_out=mol2)
+            mass = py_mol.molwt * self.n_mol
+            length = (10 / 6.022 * mass / self.density) ** (1 / 3)  # assume cubic box
 
-        print('Build coordinates using Packmol: %s molecules ...' % self.n_mol)
-        simulation.packmol.build_box([pdb], [self.n_mol], 'init.pdb', length=length - 2, silent=True)
+            print('Build coordinates using Packmol: %s molecules ...' % self.n_mol)
+            simulation.packmol.build_box([pdb], [self.n_mol], 'init.pdb', length=length - 2, tolerance=1.7, silent=True)
 
-        print('Create box using DFF ...')
-        simulation.dff.build_box_after_packmol([mol2], [self.n_mol], 'init.msd', mol_corr='init.pdb', length=length)
-        if ppf is not None:
-            shutil.copy(ppf, 'TEAM_LS.ppf')
-            simulation.export(ppf='TEAM_LS.ppf', minimize=True)
+            print('Create box using DFF ...')
+            simulation.dff.build_box_after_packmol([mol2], [self.n_mol], 'init.msd', mol_corr='init.pdb', length=length)
+            if ppf is not None:
+                shutil.copy(ppf, 'TEAM_LS.ppf')
+                simulation.export(ppf='TEAM_LS.ppf', minimize=True)
+            else:
+                simulation.export(minimize=True)
+
         else:
-            simulation.export(minimize=True)
+            simulation.msd = '../init.msd'
+            shutil.copy(ppf, 'TEAM_LS.ppf')
+            simulation.export(ppf='TEAM_LS.ppf', minimize=False)
+            shutil.copy('../nvt.gro', 'conf.gro')
 
         nprocs = simulation.jobmanager.nprocs
         commands = []
@@ -193,7 +205,7 @@ class Target(DB.Base):
             pres_list.append(pres)
 
             # HVap
-            top_hvap = 'diff%i-hvap.top'
+            top_hvap = 'diff%i-hvap.top' % i
             simulation.gmx.generate_top_for_hvap(top, top_hvap)
 
             simulation.gmx.grompp(top=top_hvap, tpr_out='diff%i-hvap.tpr' % i, silent=True)
@@ -222,7 +234,7 @@ class Target(DB.Base):
             length = (10 / 6.022 * mass / (self.density - 0.1)) ** (1 / 3)  # assume cubic box
 
             print('Build coordinates using Packmol: %s molecules ...' % self.n_mol)
-            simulation.packmol.build_box([pdb], [self.n_mol], 'init.pdb', length=length - 2, silent=True)
+            simulation.packmol.build_box([pdb], [self.n_mol], 'init.pdb', length=length - 2, tolerance=1.7, silent=True)
 
             print('Create box using DFF ...')
             simulation.dff.build_box_after_packmol([mol2], [self.n_mol], 'init.msd', mol_corr='init.pdb', length=length)

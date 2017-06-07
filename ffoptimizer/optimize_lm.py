@@ -76,17 +76,18 @@ def optimize(ppf_file):
         elif k.endswith('bi'):
             params.add(k, value=v, min=-1, max=1)
 
-    params_init = copy.deepcopy(params)
-
     minimize = Minimizer(residual, params, iter_cb=print_result)
-    result = minimize.leastsq(Dfun=dfunc)
+    result = minimize.leastsq(Dfun=dfunc, ftol=0.01)
+    print(result.lmdif_message)
 
-    print('INIT PARAMETERS:')
-    for k, v in params_init.items():
-        print('\t', k, round(v.value, 5))
-    res_init = residual(params_init)
-    print('INIT RESIDUE:', list(map(lambda x: round(x, 1), res_init)))
-    print('INIT RSQ:', round(np.sum(list(map(lambda x: x ** 2, res_init))), 1))
+    # print('INIT PARAMETERS:')
+    # for k, v in params_init.items():
+    #     print('\t', k, round(v.value, 5))
+    # res_init = residual(params)
+    # print('INIT RESIDUE:', list(map(lambda x: round(x, 1), res_init)))
+    # print('INIT RSQ:', round(np.sum(list(map(lambda x: x ** 2, res_init))), 1))
+
+    return result.params
 
 
 def run_npt(ppf_file):
@@ -183,6 +184,7 @@ def init_db(filename):
 
 
 if __name__ == '__main__':
+    CWD = os.getcwd()
     DB.conn()
     cmd = sys.argv[1]
     if cmd == 'init':
@@ -199,7 +201,19 @@ if __name__ == '__main__':
         ppf = PPF(ppf_file)
         global adj_lj_paras
         adj_lj_paras = ppf.adj_lj_paras
-        optimize(ppf_file)
+        params_out = optimize(ppf_file)
+
+        cycle = DB.session.query(Target).first().cycle + 1
+        DB.session.query(Target).all().update({'cycle': cycle})
+        DB.session.commit()
+
+        paras = OrderedDict()
+        for k, v in params_out.items():
+            paras[k] = v.value
+        ppf.set_lj_para(paras)
+        ppf_out = os.path.join(CWD, 'opt-%i.ppf' % cycle)
+        ppf.write(ppf_out)
+        build(os.path.abspath(ppf_out))
 
     if cmd == 'npt':
         ppf_file = os.path.abspath(sys.argv[2])
