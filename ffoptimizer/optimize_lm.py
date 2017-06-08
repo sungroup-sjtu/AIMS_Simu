@@ -57,9 +57,9 @@ def optimize(ppf_file):
         txt = '\nITERATION:%i\n' % iter
         txt += 'PARAMETERS:\n'
         for k, v in params.items():
-            txt += '\t%s%.5f\n' % (k, v.value)
-        txt += 'RESIDUE: %s\n', list(map(lambda x: round(x, 1), res))
-        txt += 'RSQ: %f\n\n', np.sum(map(lambda x: x ** 2, res))
+            txt += '\t%s %10.5f\n' % (k, v.value)
+        txt += 'RESIDUE: %s\n' % list(map(lambda x: round(x, 1), res))
+        txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
 
         print(txt)
         with open('Opt.log', 'a') as log:
@@ -75,7 +75,7 @@ def optimize(ppf_file):
             params.add(k, value=v, min=-1, max=1)
 
     minimize = Minimizer(residual, params, iter_cb=print_result)
-    result = minimize.leastsq(Dfun=dfunc, ftol=0.01)
+    result = minimize.leastsq(Dfun=dfunc, ftol=0.05)
     print(result.lmdif_message, '\n')
 
     return result.params

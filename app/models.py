@@ -314,7 +314,7 @@ class Job(db.Model):
         return jobmanager.get_info(self.name)
 
     def prepare(self):
-        prior_job: Job = self.prior_job
+        prior_job = self.prior_job
         if prior_job != None:
             if not prior_job.converged:
                 print('Prior job has not finished, this job will not be prepared now')

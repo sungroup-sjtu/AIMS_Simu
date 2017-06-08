@@ -40,7 +40,7 @@ class Target(DB.Base):
     cycle = NotNullColumn(Integer, default=0)
 
     def __repr__(self):
-        return '<Target: %s %s %i>' % (self.name, self.smiles, self.t)
+        return '<Target: %s %s %i>' % (self.name, self.smiles, self.T)
 
     @property
     def dir(self):
@@ -252,5 +252,5 @@ class Target(DB.Base):
         cd_or_create_and_cd('%i-%i' % (self.T, self.P))
 
         npt = Npt(**kwargs)
-        npt.prepare(model_dir='..', T=self.T, P=self.P, jobname=str(self))
+        npt.prepare(model_dir='..', T=self.T, P=self.P, dt=0.002, jobname='NPT-%s-%i' %(self.name, self.T))
         npt.run()

@@ -22,7 +22,7 @@ class Npt(GmxSimulation):
                                          length=self.length)
         self.export(minimize=minimize)
 
-    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None, **kwargs):
+    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', dt=0.001, T=None, P=None, jobname=None, **kwargs):
         if os.path.abspath(model_dir) != os.getcwd():
             shutil.copy(os.path.join(model_dir, gro), gro)
             shutil.copy(os.path.join(model_dir, top), top)
@@ -34,7 +34,7 @@ class Npt(GmxSimulation):
         commands = []
         # NVT annealing from 0 to 2000 K to target T with Langevin thermostat
         self.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-anneal.mdp', T=T,
-                                           nsteps=int(5E4), nstxtcout=0)
+                                           nsteps=int(1E5), nstxtcout=0)
         cmd = self.gmx.grompp(mdp='grompp-anneal.mdp', gro=gro, top=top, tpr_out='anneal.tpr', get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.mdrun(name='anneal', nprocs=nprocs, get_cmd=True)
@@ -51,7 +51,7 @@ class Npt(GmxSimulation):
 
         # NPT production with Velocity Rescaling thermostat and Parrinello-Rahman barostat
         self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-npt.mdp', T=T, P=P / Unit.bar,
-                                           nsteps=int(5E5), nstxout=int(1E4), nstvout=int(1E4),
+                                           dt=dt, nsteps=int(5E5), nstxout=int(1E4), nstvout=int(1E4),
                                            nstxtcout=1000, restart=True)
         cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top, tpr_out='npt.tpr',
                               cpt='eq.cpt', get_cmd=True)
