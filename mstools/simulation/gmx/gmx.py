@@ -26,7 +26,7 @@ class GmxSimulation(Simulation):
 
         if minimize:
             print('Energy minimize ...')
-            self.gmx.minimize(gro_out, top_out, name='em', silent=True, pbc=pbc)
+            self.gmx.minimize(gro_out, top_out, name='em', silent=True, pbc=pbc, nprocs=self.jobmanager.nprocs)
 
             if os.path.exists('em.gro'):
                 shutil.move('em.gro', gro_out)

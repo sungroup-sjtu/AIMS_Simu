@@ -32,7 +32,7 @@ constraints      = h-bonds
 constraint-algorithm = lincs
 continuation     = %continuation%
 
-annealing         = %ANNEAL%
+annealing         = %anneal%
 annealing_npoints = 5
 annealing_time    = 0 20 60 80 100
 annealing_temp    = 0 2000 2000 %T% %T%

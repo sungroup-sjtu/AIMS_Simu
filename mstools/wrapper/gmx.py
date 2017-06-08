@@ -30,9 +30,7 @@ class GMX:
             sp.communicate()
 
     def mdrun(self, name='md', nprocs=1, rerun: str = None, extend=False, silent=False, get_cmd=False):
-        cmd = '%s -quiet -nobackup mdrun -deffnm %s' % (self.GMX_BIN, name)
-        if nprocs > 1:
-            cmd = 'mpirun -np %i %s' % (nprocs, cmd)
+        cmd = '%s -quiet -nobackup mdrun -ntomp %i -deffnm %s' % (self.GMX_BIN, nprocs, name)
 
         if rerun is not None:
             cmd = '%s -rerun %s' % (cmd, rerun)
@@ -69,13 +67,33 @@ class GMX:
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=10000, dt=0.001,
                                   nstenergy=100, nstxout=0, nstvout=0, nstxtcout=10000, xtcgrps='System',
-                                  restart=False, anneal='single'):
-        genvel = 'no' if restart else 'yes'
-        continuation = 'yes' if restart else 'no'
-
+                                  restart=False, anneal='single', sd=True, berendsen=False):
         template = os.path.join(GMX.TEMPLATE_DIR, template)
         if not os.path.exists(template):
             raise GmxError('mdp template not found')
+
+        if sd:
+            integrator = 'sd'
+            tcoupl = 'no'
+            tau_t = '2'
+        else:
+            integrator = 'md'
+            tcoupl = 'v-rescale'
+            tau_t = '0.1'
+
+        if berendsen:
+            pcoupl = 'berendsen'
+            tau_p = '0.5'
+        else:
+            pcoupl = 'parrinello-rahman'
+            tau_p = '2'
+
+        if restart:
+            genvel = 'no'
+            continuation = 'yes'
+        else:
+            genvel = 'yes'
+            continuation = 'no'
 
         with open(template) as f_t:
             with open(mdp_out, 'w') as f_mdp:
@@ -85,7 +103,9 @@ class GMX:
                         .replace('%nstxout%', str(nstxout)).replace('%nstvout%', str(nstvout)) \
                         .replace('%nstxtcout%', str(nstxtcout)).replace('%xtcgrps%', str(xtcgrps)) \
                         .replace('%genvel%', genvel).replace('%continuation%', continuation) \
-                        .replace('%ANNEAL%', anneal))
+                        .replace('%integrator%', integrator).replace('%tcoupl%', tcoupl).replace('%tau-t%', tau_t) \
+                        .replace('%pcoupl%', pcoupl).replace('%tau-p%', tau_p) \
+                        .replace('%anneal%', anneal))
 
     def energy(self, edr, properties: [str], begin=0, get_cmd=False):
         property_str = '\\n'.join(properties)

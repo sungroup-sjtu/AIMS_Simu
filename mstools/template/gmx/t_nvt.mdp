@@ -1,4 +1,4 @@
-integrator      = md
+integrator      = %integrator%; sd; md
 dt              = %dt%
 nsteps          = %nsteps%
 
@@ -17,9 +17,9 @@ rcoulomb        = 1.2
 rvdw            = 1.2
 DispCorr        = EnerPres
 
-Tcoupl          = V-rescale
+Tcoupl          = %tcoupl%; no; V-rescale
 tc-grps         = System
-tau-t           = 0.1
+tau-t           = %tau-t%; 2; 0.1
 ref-t           = %T%
 
 Pcoupl          = no; berendsen; parrinello-rahman
