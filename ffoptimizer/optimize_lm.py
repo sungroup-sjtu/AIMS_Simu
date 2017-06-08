@@ -16,6 +16,7 @@ from ffoptimizer.target import Target, simulation
 
 from sqlalchemy import and_
 
+CWD = os.getcwd()
 
 def build(ppf_file):
     for target in DB.session.query(Target).all():
@@ -62,7 +63,7 @@ def optimize(ppf_file):
         txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
 
         print(txt)
-        with open('Opt.log', 'a') as log:
+        with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
             log.write(txt)
 
     params = Parameters()
@@ -90,30 +91,31 @@ def plot(ppfs):
     ppfs = [ppf[:-4] for ppf in ppfs]
     props = dict()
     for target in DB.session.query(Target).all():
-        if not target.id in props.keys():
-            props[target.id] = {'smiles': target.smiles, 'T': [], 'd_exp': [], 'h_exp': [],
+        if not target.name in props.keys():
+            props[target.name] = {'smiles': target.smiles, 'T': [], 'd_exp': [], 'h_exp': [],
                                 'd_sim': OrderedDict(), 'h_sim': OrderedDict()}
-        props[target.id]['T'].append(target.T)
-        props[target.id]['d_exp'].append(target.density)
-        props[target.id]['h_exp'].append(target.hvap)
+        props[target.name]['T'].append(target.T)
+        props[target.name]['d_exp'].append(target.density)
+        props[target.name]['h_exp'].append(target.hvap)
 
         for ppf in ppfs:
-            if ppf not in props[target.id]['d_sim'].keys():
-                props[target.id]['d_sim'][ppf] = []
-                props[target.id]['h_sim'][ppf] = []
+            if ppf not in props[target.name]['d_sim'].keys():
+                props[target.name]['d_sim'][ppf] = []
+                props[target.name]['h_sim'][ppf] = []
 
             os.chdir(target.dir_npt)
             os.chdir(ppf)
             os.chdir('%i-%i' % (target.T, target.P))
             density = simulation.gmx.get_property('npt.edr', 'Density', begin=250)
             density /= 1000
+            print(os.getcwd())
             ei = simulation.gmx.get_property('hvap.edr', 'Potential', begin=250)
             hvap = 8.314 * target.T / 1000 - ei / target.n_mol
 
-            props[target.id]['d_sim'][ppf].append(density)
-            props[target.id]['h_sim'][ppf].append(hvap)
+            props[target.name]['d_sim'][ppf].append(density)
+            props[target.name]['h_sim'][ppf].append(hvap)
 
-    os.chdir(sys.path[0])
+    os.chdir(CWD)
     import pylab
     pylab.rcParams.update({'font.size': 16})
     for tid, prop in props.items():
@@ -125,8 +127,8 @@ def plot(ppfs):
         y_mean = np.mean(prop['d_exp'])
         pylab.ylim(y_mean - 0.2, y_mean + 0.2)
         pylab.legend()
-        pylab.title('Density %i %s (g/mL)' % (tid, prop['smiles']))
-        pylab.savefig('density-%02i.png' % tid)
+        pylab.title('Density %2s %s (g/mL)' % (tid, prop['smiles']))
+        pylab.savefig('density-%2s.png' % tid)
 
         pylab.figure()
         pylab.plot(prop['T'], prop['h_exp'], '--')
@@ -134,10 +136,10 @@ def plot(ppfs):
             marker = 'x' if ppf.endswith('init') else 'o'
             pylab.plot(prop['T'], points, marker, label=ppf)
         y_mean = np.mean(prop['h_exp'])
-        pylab.ylim(y_mean - 10, y_mean + 10)
+        pylab.ylim(y_mean - 20, y_mean + 20)
         pylab.legend()
-        pylab.title('HVap %i %s (kJ/mol)' % (tid, prop['smiles']))
-        pylab.savefig('hvap-%02i.png' % tid)
+        pylab.title('HVap %2s %s (kJ/mol)' % (tid, prop['smiles']))
+        pylab.savefig('hvap-%2s.png' % tid)
 
 
 def init_db(filename):
@@ -175,7 +177,6 @@ def init_db(filename):
 
 
 if __name__ == '__main__':
-    CWD = os.getcwd()
     DB.conn()
     cmd = sys.argv[1]
     if cmd == 'init':
