@@ -50,6 +50,24 @@ class DFF:
         if err.decode() != '':
             raise DffError('Checkout failed: %s' % err.decode())
 
+    def typing(self, models: [str], rule='TEAM_LS'):
+        model_path = []
+        for model in models:
+            model_path.append(os.path.abspath(model))
+        if rule == 'TEAM_LS':
+            rule = os.path.join(self.DFF_ROOT, 'database/TEAMFF.ref/TEAM_LS/TEAM_LS.ext')
+        else:
+            rule = os.path.abspath(rule)
+        log = os.path.abspath('typing.dfo')
+        dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_typing.dfi')).read()
+        dfi = dfi.replace('%MODELS%', '\n'.join(model_path)).replace('%RULE%', rule).replace('%LOG%', log)
+        with open('typing.dfi', 'w') as f:
+            f.write(dfi)
+        sp = subprocess.Popen([self.DFFJOB_BIN, 'typing'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        out, err = sp.communicate()
+        if err.decode() != '':
+            raise DffError('Typing failed: %s' % err.decode())
+
     def set_charge(self, models: [str], ppf):
         model_path = []
         for model in models:

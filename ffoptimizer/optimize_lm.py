@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-
 import sys
 import os
 from collections import OrderedDict
 
 import numpy as np
-import copy
 from lmfit import Parameters, Minimizer
 
 sys.path.append('..')
@@ -36,9 +34,6 @@ def optimize(ppf_file):
             pres, hvap = target.get_pres_hvap_from_paras(ppf_file, paras)
             f.append((pres - target.P) * target.wDensity)
             f.append((hvap - target.hvap) * target.wHvap)
-        # print('CURRENT', params)
-        # print('RESIDUE:', list(map(lambda x: round(x, 1), f)))
-        # print('RSQ:', round(np.sum(list(map(lambda x: x ** 2, f))), 1))
 
         return f
 
@@ -58,14 +53,17 @@ def optimize(ppf_file):
 
         return df
 
-    def print_result(params: Parameters, iter: int, resid: [float]):
-        print('\nITERATION:', iter)
-        print('PARAMETERS:')
+    def print_result(params: Parameters, iter: int, res: [float]):
+        txt = '\nITERATION:%i\n' % iter
+        txt += 'PARAMETERS:\n'
         for k, v in params.items():
-            print('\t', k, round(v.value, 5))
-        print('RESIDUE:', list(map(lambda x: round(x, 1), resid)))
-        print('RSQ:', round(np.sum(list(map(lambda x: x ** 2, resid))), 1))
-        print('')
+            txt += '\t%s%.5f\n' % (k, v.value)
+        txt += 'RESIDUE: %s\n', list(map(lambda x: round(x, 1), res))
+        txt += 'RSQ: %f\n\n', np.sum(map(lambda x: x ** 2, res))
+
+        print(txt)
+        with open('Opt.log', 'a') as log:
+            log.write(txt)
 
     params = Parameters()
     for k, v in adj_lj_paras.items():
@@ -78,14 +76,7 @@ def optimize(ppf_file):
 
     minimize = Minimizer(residual, params, iter_cb=print_result)
     result = minimize.leastsq(Dfun=dfunc, ftol=0.01)
-    print(result.lmdif_message)
-
-    # print('INIT PARAMETERS:')
-    # for k, v in params_init.items():
-    #     print('\t', k, round(v.value, 5))
-    # res_init = residual(params)
-    # print('INIT RESIDUE:', list(map(lambda x: round(x, 1), res_init)))
-    # print('INIT RSQ:', round(np.sum(list(map(lambda x: x ** 2, res_init))), 1))
+    print(result.lmdif_message, '\n')
 
     return result.params
 
@@ -204,14 +195,14 @@ if __name__ == '__main__':
         params_out = optimize(ppf_file)
 
         cycle = DB.session.query(Target).first().cycle + 1
-        DB.session.query(Target).all().update({'cycle': cycle})
+        DB.session.query(Target).update({'cycle': cycle})
         DB.session.commit()
 
         paras = OrderedDict()
         for k, v in params_out.items():
             paras[k] = v.value
         ppf.set_lj_para(paras)
-        ppf_out = os.path.join(CWD, 'opt-%i.ppf' % cycle)
+        ppf_out = os.path.join(CWD, 'TEAM-opt-%i.ppf' % cycle)
         ppf.write(ppf_out)
         build(os.path.abspath(ppf_out))
 

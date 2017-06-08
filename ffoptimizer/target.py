@@ -78,7 +78,7 @@ class Target(DB.Base):
                 simulation.export(minimize=True)
 
         else:
-            simulation.msd = '../init.msd'
+            shutil.copy('../init.msd', 'init.msd')
             shutil.copy(ppf, 'TEAM_LS.ppf')
             simulation.export(ppf='TEAM_LS.ppf', minimize=False)
             shutil.copy('../nvt.gro', 'conf.gro')
