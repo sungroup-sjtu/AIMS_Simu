@@ -15,17 +15,19 @@ from mstools.simulation.gmx import GmxSimulation, Npt
 from config import Config
 from app import jobmanager
 
-from ffoptimizer.db import DB
-from ffoptimizer.ppf import PPF
-
-# jobmanager.queue = 'fast'
-# jobmanager.nprocs = 6
 kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
           'gmx_bin': Config.GMX_BIN, 'jobmanager': jobmanager}
 simulation = GmxSimulation(**kwargs)
 
+from ffoptimizer.ppf import PPF
 
-class Target(DB.Base):
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+metadata = Base.metadata
+
+
+class Target(Base):
     __tablename__ = 'target'
     id = NotNullColumn(Integer, primary_key=True)
     name = NotNullColumn(String(200))
@@ -86,7 +88,7 @@ class Target(DB.Base):
         nprocs = simulation.jobmanager.nprocs
         commands = []
         simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-eq.mdp', T=self.T,
-                                                 nsteps=int(4E5), dt=0.001, nstxtcout=0)
+                                                 nsteps=int(3E5), dt=0.001, nstxtcout=0)
         cmd = simulation.gmx.grompp(mdp='grompp-eq.mdp', tpr_out='eq.tpr', get_cmd=True)
         commands.append(cmd)
         cmd = simulation.gmx.mdrun(name='eq', nprocs=nprocs, get_cmd=True)
@@ -153,7 +155,6 @@ class Target(DB.Base):
 
     def get_dPres_dHvap_from_paras(self, ppf_file, d: OrderedDict) -> ([float], [float]):
         paras = copy.copy(d)
-        os.chdir(self.dir)
         dPres = []
         dHvap = []
         for k, v in paras.items():
@@ -241,16 +242,22 @@ class Target(DB.Base):
 
         cd_or_create_and_cd(os.path.basename('%s' % ppf)[:-4])
 
-        if not os.path.exists('conf.gro'):
-            simulation.msd = '../init.msd'
-            if ppf is not None:
-                shutil.copy(ppf, 'TEAM_LS.ppf')
-                simulation.export(ppf='TEAM_LS.ppf', minimize=True)
-            else:
-                simulation.export(minimize=True)
+        simulation.msd = '../init.msd'
+        simulation.export(ppf=ppf, minimize=True)
 
         cd_or_create_and_cd('%i-%i' % (self.T, self.P))
 
         npt = Npt(**kwargs)
-        npt.prepare(model_dir='..', T=self.T, P=self.P, dt=0.002, jobname='NPT-%s-%i' %(self.name, self.T))
+        npt.prepare(model_dir='..', T=self.T, P=self.P, dt=0.002, jobname='NPT-%s-%i' % (self.name, self.T))
         npt.run()
+
+    def get_npt_result(self, subdir) -> (float, float):
+        os.chdir(self.dir_npt)
+        os.chdir(subdir)
+        os.chdir('%i-%i' % (self.T, self.P))
+        print(os.getcwd())
+        density = simulation.gmx.get_property('npt.edr', 'Density', begin=250)
+        density /= 1000
+        ei = simulation.gmx.get_property('hvap.edr', 'Potential', begin=250)
+        hvap = 8.314 * self.T / 1000 - ei / self.n_mol
+        return density, hvap

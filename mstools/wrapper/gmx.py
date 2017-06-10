@@ -45,8 +45,8 @@ class GMX:
             sp = Popen(cmd.split(), stdout=stdout, stderr=stderr)
             sp.communicate()
 
-    def minimize(self, gro, top, nprocs=1, silent=False, name='em', pbc=True):
-        if pbc:
+    def minimize(self, gro, top, nprocs=1, silent=False, name='em', vacuum=False):
+        if not vacuum:
             self.prepare_mdp_from_template('t_em.mdp')
         else:
             self.prepare_mdp_from_template('t_em_vacuum.mdp')

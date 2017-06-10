@@ -1,10 +1,11 @@
+import os
 from collections import OrderedDict
 from typing import Dict
 
 
 class PPF():
-    def __init__(self, ppf):
-        with open(ppf) as f:
+    def __init__(self, ppf_file):
+        with open(ppf_file) as f:
             self.terms = f.read().splitlines()
 
     @property
@@ -95,5 +96,3 @@ class PPF():
         with open(ppf_out, 'w') as f:
             for term in self.terms:
                 f.write(term + '\n')
-
-

@@ -22,7 +22,7 @@ class NvtVacuum(GmxSimulation):
         print('Create box using DFF ...')
         self.dff.build_box_after_packmol(self.mol2_list, self.n_mol_list, self.msd, mol_corr='init.pdb',
                                          length=self.length)
-        self.export(minimize=True, pbc=False)
+        self.export(minimize=True, vacuum=False)
 
     def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None, **kwargs):
         if os.path.abspath(model_dir) != os.getcwd():

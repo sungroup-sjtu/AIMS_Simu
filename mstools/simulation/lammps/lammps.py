@@ -7,6 +7,7 @@ from ...errors import LammpsError
 from ...jobmanager import Local
 from ...utils import create_mol_from_smiles
 from ...wrapper import Packmol, DFF, Lammps
+from ...unit import Unit
 
 
 class LammpsSimulation(Simulation):
@@ -14,25 +15,19 @@ class LammpsSimulation(Simulation):
         super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, jobmanager=jobmanager)
         self.LMP_BIN = lmp_bin
 
-    def build(self, smiles, n_atoms=3000, density=1.0, ff='TEAM_LS',
-              data_out='data', in_lmp='em.lmp',
-              minimize=False):
-        py_mol = create_mol_from_smiles(smiles, 'mol.pdb')
-        n_atom_per_mol = len(py_mol.atoms)
-        number = math.ceil(n_atoms / n_atom_per_mol)  # A total of 3000 atoms
-        length = (10 / 6.022 * py_mol.molwt * number / density) ** (1 / 3)
+    def build(self, minimize=False):
+        print('Build coordinates using Packmol: %s molecules ...' % self.n_mol_list)
+        self.packmol.build_box(self.pdb_list, self.n_mol_list, 'init.pdb', length=self.length - 2, silent=True)
 
-        self.n_mol = number
-        packmol = Packmol(packmol_bin=self.PACKMOL_BIN)
-        print('Build coordinates using packmol: ~ %i atoms ...' % n_atoms)
-        packmol.build_box(['mol.pdb'], [number], 'init.pdb', length=length - 2)
-        dff = DFF(dff_root=self.DFF_ROOT)
-        print('Create box using DFF...')
-        dff.build_box_after_packmol('mol.pdb', number, 'init.msd', mol_corr='init.pdb', length=length)
-        print('Checkout force field: %s ...' % ff)
-        dff.checkout('init.msd', table=ff)
+        print('Create box using DFF ...')
+        self.dff.build_box_after_packmol(self.mol2_list, self.n_mol_list, self.msd, mol_corr='init.pdb',
+                                         length=self.length)
+        self.export(minimize=minimize)
+
+    def export(self, ff='TEAM_LS', data_out='data', in_lmp='em.lmp', minimize=False):
         print('Export lammps files...')
-        dff.export_lammps('init.msd', ff + '.ppf', data_out, in_lmp)
+        self.dff.checkout(['init.msd'], table=ff)
+        self.dff.export_lammps('init.msd', ff + '.ppf', data_out, in_lmp)
 
         if minimize:
             lammps = Lammps(self.LMP_BIN)
@@ -44,8 +39,8 @@ class LammpsSimulation(Simulation):
             else:
                 raise LammpsError('Energy minimization failed')
 
-    def prepare(self):
+    def prepare(self, model_dir='.', T=None, P=None):
         shutil.copy('build/em.data', 'em.data')
         special, bond, angle, dihedral, improper = Lammps.get_intra_style_from_lmp('build/em.lmp')
-        Lammps.prepare_lmp_from_template('t_npt.lmp', 'in.lmp', 'em.data', self.t, self.p / Unit.bar, int(1E3),
-                                         self.n_mol, special, bond, angle, dihedral, improper)
+        Lammps.prepare_lmp_from_template('t_npt.lmp', 'in.lmp', 'em.data', T, P / Unit.bar, int(1E3),
+                                         self.n_mol_list[0], special, bond, angle, dihedral, improper)

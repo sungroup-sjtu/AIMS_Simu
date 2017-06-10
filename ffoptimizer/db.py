@@ -1,33 +1,33 @@
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
-class DB:
-    DBFILE = 'ffoptimizer.db'
-    Base = declarative_base()
-    engine = None
-    session = None
+from ffoptimizer.target import metadata
 
-    @staticmethod
-    def conn():
-        url = 'sqlite:///' + DB.DBFILE
+
+class DB():
+    def __init__(self, dbfile):
+        self.dbfile = dbfile
+        self.engine = None
+        self.session = None
+
+    def conn(self):
+        url = 'sqlite:///' + self.dbfile
         try:
-            DB.engine = create_engine(url, echo=False)
-            Session = sessionmaker(DB.engine)
-            DB.session = Session()
+            self.engine = create_engine(url, echo=False)
+            Session = sessionmaker(self.engine)
+            self.session = Session()
         except Exception as e:
             print(str(e))
             return False
 
         try:
-            DB.Base.metadata.create_all(DB.engine)
+            metadata.create_all(self.engine)
         except Exception as e:
             print(str(e))
             return False
         else:
             return True
 
-    @staticmethod
-    def close():
-        DB.session.close()
-        DB.engine.dispose()
+    def close(self):
+        self.session.close()
+        self.engine.dispose()
