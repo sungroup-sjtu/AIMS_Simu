@@ -1,3 +1,4 @@
+define          = -DFLEXIBLE
 integrator      = steep
 emtol           = 100
 nsteps          = -1

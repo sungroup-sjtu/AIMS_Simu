@@ -31,6 +31,6 @@ ref-p           = %P%
 gen-vel         = %genvel%
 gen-temp        = %T%
 
-constraints      = h-bonds
+constraints      = %constraints%; h-bonds
 constraint-algorithm = lincs
 continuation     = %continuation%

@@ -67,26 +67,35 @@ class GMX:
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=10000, dt=0.001,
                                   nstenergy=100, nstxout=0, nstvout=0, nstxtcout=10000, xtcgrps='System',
-                                  restart=False, anneal='single', sd=True, berendsen=False):
+                                  restart=False, tcoupl='langevin', pcoupl='parrinello-rahman', constraints='h-bonds'):
         template = os.path.join(GMX.TEMPLATE_DIR, template)
         if not os.path.exists(template):
             raise GmxError('mdp template not found')
 
-        if sd:
+        if tcoupl.lower() == 'langevin':
             integrator = 'sd'
             tcoupl = 'no'
             tau_t = '2'
-        else:
+        elif tcoupl.lower() == 'nose-hoover':
+            integrator = 'md-vv'
+            tcoupl = 'nose-hoover'
+            tau_t = '0.5'
+        elif tcoupl.lower() == 'v-rescale':
             integrator = 'md'
             tcoupl = 'v-rescale'
-            tau_t = '0.1'
-
-        if berendsen:
-            pcoupl = 'berendsen'
-            tau_p = '0.5'
+            tau_t = '0.5'
         else:
-            pcoupl = 'parrinello-rahman'
+            raise Exception('tcoupl not good, should be one of langvein, nose-hoover, v-rescale')
+
+        if pcoupl.lower() == 'berendsen':
+            tau_p = '0.5'
+        elif pcoupl.lower() == 'parrinello-rahman':
             tau_p = '2'
+        elif pcoupl.lower() == 'mttk':
+            tau_p = '2'
+            constraints = 'none'
+        else:
+            raise Exception('pcoupl not good, should be one of berendsen, parrinello-rahman, mttk')
 
         if restart:
             genvel = 'no'
@@ -105,7 +114,7 @@ class GMX:
                         .replace('%genvel%', genvel).replace('%continuation%', continuation) \
                         .replace('%integrator%', integrator).replace('%tcoupl%', tcoupl).replace('%tau-t%', tau_t) \
                         .replace('%pcoupl%', pcoupl).replace('%tau-p%', tau_p) \
-                        .replace('%anneal%', anneal))
+                        .replace('%constraints%', constraints))
 
     def energy(self, edr, properties: [str], begin=0, get_cmd=False):
         property_str = '\\n'.join(properties)
