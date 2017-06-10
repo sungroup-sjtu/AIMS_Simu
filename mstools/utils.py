@@ -27,7 +27,7 @@ def random_string(length=8):
 def cd_or_create_and_cd(dir):
     if not os.path.exists(dir):
         try:
-            os.mkdir(dir)
+            os.makedirs(dir)
         except:
             raise Exception('Cannot create directory: %s' % dir)
 

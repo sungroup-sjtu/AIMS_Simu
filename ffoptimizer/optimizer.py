@@ -26,7 +26,7 @@ class Optimizer():
 
     def build(self, ppf_file):
         for target in self.db.session.query(Target).all():
-            print(target.dir)
+            print(target.dir_nvt)
             target.build(ppf=ppf_file)
 
     def optimize(self, ppf_file):

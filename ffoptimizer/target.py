@@ -45,8 +45,8 @@ class Target(Base):
         return '<Target: %s %s %i>' % (self.name, self.smiles, self.T)
 
     @property
-    def dir(self):
-        base_dir = os.path.join(Config.WORK_DIR, 'NVT-%s-%i' % (self.name, self.T))
+    def dir_nvt(self):
+        base_dir = os.path.join(Config.WORK_DIR, 'NVT-%s' % self.name, str(self.T))
         if self.cycle == 0:
             return base_dir
         else:
@@ -60,7 +60,7 @@ class Target(Base):
             self.n_mol = n_mol
 
     def build(self, ppf=None):
-        cd_or_create_and_cd(self.dir)
+        cd_or_create_and_cd(self.dir_nvt)
         if self.cycle == 0:
             pdb = 'mol.pdb'
             mol2 = 'mol.mol2'
@@ -115,7 +115,7 @@ class Target(Base):
 
     def get_pres_hvap_from_paras(self, ppf_file=None, d: OrderedDict = None) -> (float, float):
         paras = copy.copy(d)
-        os.chdir(self.dir)
+        os.chdir(self.dir_nvt)
         if ppf_file is not None:
             ppf = PPF(ppf_file)
         else:
@@ -165,7 +165,7 @@ class Target(Base):
 
     def get_dPres_dHvap_for_para(self, ppf_file, d: OrderedDict, k) -> (float, float):
         paras = copy.copy(d)
-        os.chdir(self.dir)
+        os.chdir(self.dir_nvt)
         v = paras[k]
         pres_list = []
         hvap_list = []
@@ -221,11 +221,11 @@ class Target(Base):
         return dPres, dHvap
 
     @property
-    def dir_npt(self):
+    def dir_base_npt(self):
         return os.path.join(Config.WORK_DIR, 'NPT-%s' % (self.name))
 
     def run_npt(self, ppf=None):
-        cd_or_create_and_cd(self.dir_npt)
+        cd_or_create_and_cd(self.dir_base_npt)
 
         if not os.path.exists('init.msd'):
             pdb = 'mol.pdb'
@@ -252,7 +252,7 @@ class Target(Base):
         npt.run()
 
     def get_npt_result(self, subdir) -> (float, float):
-        os.chdir(self.dir_npt)
+        os.chdir(self.dir_base_npt)
         os.chdir(subdir)
         os.chdir('%i-%i' % (self.T, self.P))
         print(os.getcwd())

@@ -297,7 +297,7 @@ class Job(db.Model):
     @property
     def dir(self) -> str:
         dir_name = '%i-%i' % (self.t or 0, self.p or 0)
-        return os.path.join(self.task.dir, dir_name)
+        return os.path.join(self.task.dir_nvt, dir_name)
 
     @property
     def prior_job(self):
@@ -327,7 +327,7 @@ class Job(db.Model):
             prior_job_result = None
 
         try:
-            os.chdir(self.task.dir)
+            os.chdir(self.task.dir_nvt)
         except:
             raise Exception('Should build simulation box first')
 
