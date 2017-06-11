@@ -130,11 +130,16 @@ class Optimizer():
                 params.add(k, value=v, min=-1, max=1)
 
         res = residual(params)
-        jacobian = derivative(params)
 
         txt = '\nResidual:\n'
         for r in res:
             txt += '%f\n' % r
+        print(txt)
+        with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+            log.write(txt)
+
+        jacobian = derivative(params)
+
         txt = '\nJacobian Matrix:\n'
         for l in jacobian:
             txt += '%s\n' % l

@@ -338,11 +338,11 @@ class Target(Base):
 
         df = panedr.edr_to_df('npt.edr')
         dens_series = df.Density
-        dens_series = dens_series.loc[dPene_series]
+        dens_series = dens_series.loc[dPene_series.index]
 
         df = panedr.edr_to_df('hvap.edr')
         hvap_series = df.Potential
-        hvap_series = hvap_series.loc[dPene_series]
+        hvap_series = hvap_series.loc[dPene_series.index]
 
         dens_dPene = dens_series * dPene_series
         hvap_dPene = hvap_series * dPene_series
