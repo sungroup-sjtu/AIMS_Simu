@@ -7,9 +7,9 @@ from .jobmanager import JobManager
 class Torque(JobManager):
     def __init__(self, queue, nprocs):
         super().__init__(queue=queue, nprocs=nprocs)
-        self.sh = 'job_torque.sh'
-        self.out = 'job_torque.out'
-        self.err = 'job_torque.err'
+        self.sh = '_job_torque.sh'
+        self.out = '_job_torque.out'
+        self.err = '_job_torque.err'
 
     def generate_sh(self, workdir, commands, name):
         with open(self.sh, 'w') as f:

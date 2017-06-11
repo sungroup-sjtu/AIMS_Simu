@@ -6,6 +6,7 @@ from collections import OrderedDict
 from functools import partial
 
 import pybel
+import panedr
 from sqlalchemy import Column, Integer, Text, Float, String
 
 NotNullColumn = partial(Column, nullable=False)
@@ -59,7 +60,7 @@ class Target(Base):
         if self.n_mol < n_mol:
             self.n_mol = n_mol
 
-    def build(self, ppf=None):
+    def build_nvt(self, ppf=None):
         cd_or_create_and_cd(self.dir_nvt)
         if self.cycle == 0:
             pdb = 'mol.pdb'
@@ -248,7 +249,8 @@ class Target(Base):
         cd_or_create_and_cd('%i-%i' % (self.T, self.P))
 
         npt = Npt(**kwargs)
-        npt.prepare(model_dir='..', T=self.T, P=self.P, dt=0.002, jobname='NPT-%s-%i' % (self.name, self.T))
+        npt.prepare(model_dir='..', T=self.T, P=self.P, jobname='NPT-%s-%i' % (self.name, self.T),
+                    dt=0.002, nst_eq=int(2E5), nst_run=int(1E5), nst_trr=200)
         npt.run()
 
     def get_npt_result(self, subdir) -> (float, float):
@@ -261,3 +263,90 @@ class Target(Base):
         ei = simulation.gmx.get_property('hvap.edr', 'Potential', begin=250)
         hvap = 8.314 * self.T / 1000 - ei / self.n_mol
         return density, hvap
+
+    def get_dDens_dHvap_from_paras(self, ppf_file, d: OrderedDict):
+        paras = copy.copy(d)
+        dDens = []
+        dHvap = []
+        for k, v in paras.items():
+            dD, dH = self.get_dDens_dHvap_from_para(ppf_file, paras, k)
+            dDens.append(dD)
+            dHvap.append(dH)
+        return dDens, dHvap
+
+    def get_dDens_dHvap_from_para(self, ppf_file, d: OrderedDict, k) -> (float, float):
+        paras = copy.copy(d)
+
+        os.chdir(self.dir_base_npt)
+        subdir = os.path.basename(ppf_file)[:-4]
+        os.chdir(subdir)
+        os.chdir('%i-%i' % (self.T, self.P))
+
+        v = paras[k]
+        pene_series_list = []
+        hvap_series_list = []
+
+        if k.endswith('r0'):
+            delta = 0.02
+        elif k.endswith('e0'):
+            delta = 0.01
+        elif k.endswith('bi'):
+            delta = 0.02
+        else:
+            raise Exception('Unknown parameter: ' + k)
+
+        for i in [-1, 1]:
+            new_v = v + i * delta
+            paras[k] = new_v
+            if ppf_file is not None:
+                ppf = PPF(ppf_file)
+            else:
+                ppf = PPF('TEAM_LS.ppf')
+            if not ppf.set_lj_para(paras):
+                return 0, 0
+            ppf.write('diff.ppf')
+            # print('    %s %10.5f %10.5f' %(k, v, new_v))
+            top = 'diff.top'
+
+            shutil.copy('init.msd', 'diff.msd')
+            simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
+            simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
+            nprocs = simulation.jobmanager.nprocs
+
+            # Pres
+            simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top, tpr_out='diff.tpr', silent=True)
+            simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
+
+            df = panedr.edr_to_df('diff.edr')
+            pene_series = df.Potential
+            pene_series_list.append(pene_series)
+
+            # HVap
+            top_hvap = 'diff-hvap.top'
+            simulation.gmx.generate_top_for_hvap(top, top_hvap)
+
+            simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
+            simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
+
+            df = panedr.edr_to_df('diff.edr')
+            eint_series = df.Potential
+            hvap_series = 8.314 * self.T / 1000 - eint_series / self.n_mol
+            hvap_series_list.append(hvap_series)
+
+        dPene_series = (pene_series_list[1] - pene_series_list[0]) / 2 / delta
+        dHvap_series = (hvap_series_list[1] - hvap_series_list[0]) / 2 / delta
+
+        df = panedr.edr_to_df('npt.edr')
+        dens_series = df.Density
+        dens_series = dens_series.loc[dens_series.index in dPene_series]
+
+        df = panedr.edr_to_df('hvap.edr')
+        hvap_series = df.Potential
+        hvap_series = hvap_series.loc[hvap_series.index in dPene_series]
+
+        dens_dPene = dens_series * dPene_series
+        hvap_dPene = hvap_series * dPene_series
+
+        dDdP = -1 / 8.314 / self.T * (dens_dPene.mean() - dens_series.mean() * dPene_series.mean())
+        dHdP = dHvap_series.mean() - 1 / 8.314 / self.T * (hvap_dPene.mean() - hvap_series.mean() * dPene_series.mean())
+        return dDdP, dHdP

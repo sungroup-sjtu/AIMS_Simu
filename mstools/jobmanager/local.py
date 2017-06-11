@@ -4,7 +4,7 @@ from .jobmanager import JobManager
 class Local(JobManager):
     def __init__(self):
         super().__init__()
-        self.sh = 'job_local.sh'
+        self.sh = '_job_local.sh'
 
     def generate_sh(self, workdir, commands, name=None):
         with open(self.sh, 'w') as f:

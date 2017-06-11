@@ -182,7 +182,7 @@ class Task(db.Model):
         simulation = init_simulation(self.procedure)
         try:
             simulation.set_system(json.loads(self.smiles_list), n_atoms=3000)
-            simulation.build(minimize=True)
+            simulation.build_nvt(minimize=True)
             self.n_mol_list = json.dumps(simulation.n_mol_list)
         except:
             self.status = Compute.Status.FAILED
@@ -446,5 +446,5 @@ class TaskThread(Thread):
     def run(self):
         with self.app.app_context():
             for task in Task.query.filter(Task.compute_id == self.compute_id):
-                task.build()
+                task.build_nvt()
                 task.run()

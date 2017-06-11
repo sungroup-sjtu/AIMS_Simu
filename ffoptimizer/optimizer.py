@@ -24,12 +24,12 @@ class Optimizer():
         self.db = DB(db_file)
         self.db.conn()
 
-    def build(self, ppf_file):
+    def build_nvt(self, ppf_file):
         for target in self.db.session.query(Target).all():
             print(target.dir_nvt)
-            target.build(ppf=ppf_file)
+            target.build_nvt(ppf=ppf_file)
 
-    def optimize(self, ppf_file):
+    def optimize_nvt(self, ppf_file):
         def residual(params: Parameters):
             paras = OrderedDict()
             for k, v in params.items():
@@ -92,6 +92,73 @@ class Optimizer():
 
         return result.params
 
+    def optimize_npt(self, ppf_file):
+        def residual(params: Parameters):
+            paras = OrderedDict()
+            for k, v in params.items():
+                paras[k] = v.value
+
+            f = []
+            for target in self.db.session.query(Target).all():
+                dens, hvap = target.get_npt_result(os.path.basename(ppf_file)[:-4])
+                f.append((dens - target.density) * target.wDensity)
+                f.append((hvap - target.hvap) * target.wHvap)
+
+            return f
+
+        def dfunc(params: Parameters):
+            paras = OrderedDict()
+            for k, v in params.items():
+                paras[k] = v.value
+
+            jacobian = []
+            for target in self.db.session.query(Target).all():
+                dDens, dHvap = target.get_dPres_dHvap_from_paras(ppf_file, paras)
+                jacobian.append([i * target.wDensity for i in dDens])
+                jacobian.append([i * target.wHvap for i in dHvap])
+
+            txt = '\nDERIVATIVE:\n'
+            for l in jacobian:
+                txt += '%s\n' % list(map(lambda x: round(x, 1), l))
+
+            print(txt)
+            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+                log.write(txt)
+
+            return jacobian
+
+        def print_result(params: Parameters, iter: int, res: [float]):
+            txt = '\nITERATION:%i\n' % iter
+            txt += 'PARAMETERS:\n'
+            for k, v in params.items():
+                txt += '\t%s %10.5f\n' % (k, v.value)
+            txt += 'RESIDUE: %s\n' % list(map(lambda x: round(x, 1), res))
+            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
+
+            print(txt)
+            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+                log.write(txt)
+
+        ppf = PPF(ppf_file)
+        params = Parameters()
+        for k, v in ppf.adj_lj_paras.items():
+            if k.endswith('r0'):
+                params.add(k, value=v, min=2, max=5)
+            elif k.endswith('e0'):
+                params.add(k, value=v, min=0.01, max=3)
+            elif k.endswith('bi'):
+                params.add(k, value=v, min=-1, max=1)
+
+        # minimize = Minimizer(residual, params, iter_cb=print_result)
+        # result = minimize.leastsq(Dfun=dfunc, ftol=0.1)
+        # print(result.lmdif_message, '\n')
+        #
+        # return result.params
+
+        res = residual(params)
+        jacobian = dfunc(params)
+        print(res, jacobian)
+
     def run_npt(self, ppf_file):
         for target in self.db.session.query(Target).all():
             target.run_npt(ppf_file)
@@ -119,9 +186,10 @@ class Optimizer():
 
         os.chdir(CWD)
         import pylab
-        pylab.rcParams.update({'font.size': 16})
+        pylab.rcParams.update({'font.size': 12})
         for tid, prop in props.items():
-            pylab.figure()
+            pylab.figure(figsize=(6, 8))
+            pylab.subplot(211)
             pylab.plot(prop['T'], prop['d_exp'], '--')
             for ppf, points in prop['d_sim'].items():
                 marker = 'x' if ppf.endswith('init') else 'o'
@@ -130,9 +198,8 @@ class Optimizer():
             pylab.ylim(y_mean - 0.2, y_mean + 0.2)
             pylab.legend()
             pylab.title('Density %s %s (g/mL)' % (tid, prop['smiles']))
-            pylab.savefig('density-%s.png' % tid)
 
-            pylab.figure()
+            pylab.subplot(212)
             pylab.plot(prop['T'], prop['h_exp'], '--')
             for ppf, points in prop['h_sim'].items():
                 marker = 'x' if ppf.endswith('init') else 'o'
@@ -141,7 +208,7 @@ class Optimizer():
             pylab.ylim(y_mean - 20, y_mean + 20)
             pylab.legend()
             pylab.title('HVap %s %s (kJ/mol)' % (tid, prop['smiles']))
-            pylab.savefig('hvap-%s.png' % tid)
+            pylab.savefig('property-%s.png' % tid)
 
     def init_db(self, filename):
         with open(filename) as f:
@@ -184,15 +251,15 @@ if __name__ == '__main__':
     if cmd == 'init':
         optimizer.init_db(sys.argv[2])
 
-    if cmd == 'build':
+    if cmd == 'build-nvt':
         ppf_file = None
         if len(sys.argv) == 3:
             ppf_file = os.path.abspath(sys.argv[2])
-        optimizer.build(ppf_file)
+        optimizer.build_nvt(ppf_file)
 
-    if cmd == 'optimize':
+    if cmd == 'optimize-nvt':
         ppf_file = os.path.abspath(sys.argv[2])
-        params_out = optimizer.optimize(ppf_file)
+        params_out = optimizer.optimize_nvt(ppf_file)
 
         cycle = optimizer.db.session.query(Target).first().cycle + 1
         optimizer.db.session.query(Target).update({'cycle': cycle})
@@ -206,7 +273,11 @@ if __name__ == '__main__':
         ppf.set_lj_para(paras)
         ppf_out = os.path.join(CWD, 'TEAM-opt-%i.ppf' % cycle)
         ppf.write(ppf_out)
-        optimizer.build(os.path.abspath(ppf_out))
+        optimizer.build_nvt(os.path.abspath(ppf_out))
+
+    if cmd == 'optimize-npt':
+        ppf_file = os.path.abspath(sys.argv[2])
+        optimizer.optimize_npt(ppf_file)
 
     if cmd == 'npt':
         ppf_file = os.path.abspath(sys.argv[2])

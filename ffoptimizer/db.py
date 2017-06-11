@@ -5,15 +5,14 @@ from ffoptimizer.target import metadata
 
 
 class DB():
-    def __init__(self, dbfile):
-        self.dbfile = dbfile
+    def __init__(self, db_file):
+        self.url = 'sqlite:///' + db_file
         self.engine = None
         self.session = None
 
     def conn(self):
-        url = 'sqlite:///' + self.dbfile
         try:
-            self.engine = create_engine(url, echo=False)
+            self.engine = create_engine(self.url, echo=False)
             Session = sessionmaker(self.engine)
             self.session = Session()
         except Exception as e:
