@@ -98,46 +98,26 @@ class Optimizer():
             for k, v in params.items():
                 paras[k] = v.value
 
-            f = []
+            res = []
             for target in self.db.session.query(Target).all():
                 dens, hvap = target.get_npt_result(os.path.basename(ppf_file)[:-4])
-                f.append((dens - target.density) * target.wDensity)
-                f.append((hvap - target.hvap) * target.wHvap)
+                res.append((dens - target.density) / target.density * 100 * target.wDensity)
+                res.append((hvap - target.hvap) / target.hvap * 100 * target.wHvap)
 
-            return f
+            return res
 
-        def dfunc(params: Parameters):
+        def derivative(params: Parameters):
             paras = OrderedDict()
             for k, v in params.items():
                 paras[k] = v.value
 
             jacobian = []
             for target in self.db.session.query(Target).all():
-                dDens, dHvap = target.get_dPres_dHvap_from_paras(ppf_file, paras)
-                jacobian.append([i * target.wDensity for i in dDens])
-                jacobian.append([i * target.wHvap for i in dHvap])
-
-            txt = '\nDERIVATIVE:\n'
-            for l in jacobian:
-                txt += '%s\n' % list(map(lambda x: round(x, 1), l))
-
-            print(txt)
-            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-                log.write(txt)
+                dDens, dHvap = target.get_dDens_dHvap_from_paras(ppf_file, paras)
+                jacobian.append([i / target.density * 100 * target.wDensity for i in dDens])
+                jacobian.append([i / target.hvap * 100 * target.wHvap for i in dHvap])
 
             return jacobian
-
-        def print_result(params: Parameters, iter: int, res: [float]):
-            txt = '\nITERATION:%i\n' % iter
-            txt += 'PARAMETERS:\n'
-            for k, v in params.items():
-                txt += '\t%s %10.5f\n' % (k, v.value)
-            txt += 'RESIDUE: %s\n' % list(map(lambda x: round(x, 1), res))
-            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
-
-            print(txt)
-            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-                log.write(txt)
 
         ppf = PPF(ppf_file)
         params = Parameters()
@@ -149,15 +129,18 @@ class Optimizer():
             elif k.endswith('bi'):
                 params.add(k, value=v, min=-1, max=1)
 
-        # minimize = Minimizer(residual, params, iter_cb=print_result)
-        # result = minimize.leastsq(Dfun=dfunc, ftol=0.1)
-        # print(result.lmdif_message, '\n')
-        #
-        # return result.params
-
         res = residual(params)
-        jacobian = dfunc(params)
-        print(res, jacobian)
+        jacobian = derivative(params)
+
+        txt = '\nResidual:\n'
+        for r in res:
+            txt += '%f\n' % r
+        txt = '\nJacobian Matrix:\n'
+        for l in jacobian:
+            txt += '%s\n' % l
+        print(txt)
+        with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+            log.write(txt)
 
     def run_npt(self, ppf_file):
         for target in self.db.session.query(Target).all():

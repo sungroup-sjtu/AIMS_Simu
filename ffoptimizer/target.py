@@ -308,7 +308,7 @@ class Target(Base):
             # print('    %s %10.5f %10.5f' %(k, v, new_v))
             top = 'diff.top'
 
-            shutil.copy('init.msd', 'diff.msd')
+            shutil.copy('../../init.msd', 'diff.msd')
             simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
             simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
             nprocs = simulation.jobmanager.nprocs
@@ -338,11 +338,11 @@ class Target(Base):
 
         df = panedr.edr_to_df('npt.edr')
         dens_series = df.Density
-        dens_series = dens_series.loc[dens_series.index in dPene_series]
+        dens_series = dens_series.loc[dPene_series]
 
         df = panedr.edr_to_df('hvap.edr')
         hvap_series = df.Potential
-        hvap_series = hvap_series.loc[hvap_series.index in dPene_series]
+        hvap_series = hvap_series.loc[dPene_series]
 
         dens_dPene = dens_series * dPene_series
         hvap_dPene = hvap_series * dPene_series
