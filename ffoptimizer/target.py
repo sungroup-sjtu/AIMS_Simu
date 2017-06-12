@@ -53,7 +53,7 @@ class Target(Base):
         else:
             return os.path.join(base_dir, str(self.cycle))
 
-    def calc_n_mol(self, n_atoms=3000, n_mol=80):
+    def calc_n_mol(self, n_atoms=3000, n_mol=0):
         py_mol = pybel.readstring('smi', self.smiles)
         py_mol.addh()
         self.n_mol = math.ceil(n_atoms / len(py_mol.atoms))
@@ -345,3 +345,32 @@ class Target(Base):
         dDdP = -1 / 8.314 / self.T * (dens_dPene.mean() - dens_series.mean() * dPene_series.mean())
         dHdP = dHvap_series.mean() - 1 / 8.314 / self.T * (hvap_dPene.mean() - hvap_series.mean() * dPene_series.mean())
         return dDdP, dHdP
+
+    def npt_finished(self, ppf_file) -> bool:
+        subdir = os.path.basename(ppf_file)[:-4]
+        log_hvap = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), 'hvap.log')
+        if not os.path.exists(log_hvap):
+            return False
+
+        with open(log_hvap) as f:
+            lines = f.read().splitlines()
+        if not lines[-1].startswith('Finished mdrun'):
+            return False
+
+        return True
+
+    def npt_started(self, ppf_file) -> bool:
+        subdir = os.path.basename(ppf_file)[:-4]
+        sh_job = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), jobmanager.sh)
+        if os.path.exists(sh_job):
+            return True
+
+        return False
+
+    def clear_npt_result(self, ppf_file):
+        subdir = os.path.basename(ppf_file)[:-4]
+        log_hvap = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), 'hvap.log')
+        sh_job = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), jobmanager.sh)
+        os.remove(log_hvap)
+        os.remove(sh_job)
+
