@@ -378,3 +378,11 @@ class Target(Base):
         shutil.move(log_hvap, log_hvap + '.bak')
         shutil.move(sh_job, sh_job + '.bak')
 
+
+class Result(Base):
+    __tablename__ = 'result'
+    id = NotNullColumn(Integer, primary_key=True)
+    ppf = NotNullColumn(String(200))
+    parameter = Column(Text, nullable=True)
+    residual = Column(Text, nullable=True)
+    jacobian = Column(Text, nullable=True)

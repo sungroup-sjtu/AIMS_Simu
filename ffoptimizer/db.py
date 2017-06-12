@@ -1,7 +1,7 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
-from ffoptimizer.target import metadata
+from ffoptimizer.models import metadata
 
 
 class DB():

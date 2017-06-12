@@ -4,6 +4,7 @@
 import sys
 import os
 import time
+import json
 from collections import OrderedDict
 
 import numpy as np
@@ -13,7 +14,7 @@ sys.path.append('..')
 
 from ffoptimizer.ppf import PPF
 from ffoptimizer.db import DB
-from ffoptimizer.target import Target
+from ffoptimizer.models import Target, Result
 
 from sqlalchemy import and_
 
@@ -72,7 +73,7 @@ class Optimizer():
                 txt += '\t%s %10.5f\n' % (k, v.value)
             txt += 'RESIDUE:\n'
             for r in res:
-                txt += '%10.2f\n' %r
+                txt += '%10.2f\n' % r
             txt += 'RSQ: %f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
 
             print(txt)
@@ -96,7 +97,20 @@ class Optimizer():
         return result.params
 
     def optimize_npt(self, ppf_file):
+        log_file = os.path.join(CWD, 'Opt-%s.log' % os.path.basename(ppf_file)[:-4])
+
         def residual(params: Parameters):
+            ### if result exist in database, ignore calculation
+            result = self.db.session.query(Result).filter(
+                and_(
+                    Result.ppf == ppf_file,
+                    Result.parameter == str(params)
+                )).first()
+            if result is not None:
+                R = result.residual
+                if R is not None:
+                    return json.loads(R)
+
             ### save ppf file and run NPT
             ppf = PPF(ppf_file)
             paras = OrderedDict()
@@ -110,31 +124,53 @@ class Optimizer():
                     target.run_npt(ppf_file)
             ###
 
-            FINISHED = False
-            while not FINISHED:
-                current_time = time.strftime('%m-%d %H:%M')
-                print(current_time + ' Checking job status')
+            while True:
                 FINISHED = True
                 for target in self.db.session.query(Target).all():
                     if not target.npt_finished(ppf_file):
                         FINISHED = False
-                if not FINISHED:
-                    print(' ' * 12 + 'Still running. Wait ...')
+
+                if FINISHED:
+                    break
+                else:
+                    current_time = time.strftime('%m-%d %H:%M')
+                    print(current_time + ' Job still running. Wait ...')
                     time.sleep(60)
 
-            res = []
+            R = []
             paras = OrderedDict()
             for k, v in params.items():
                 paras[k] = v.value
 
             for target in self.db.session.query(Target).all():
                 dens, hvap = target.get_npt_result(os.path.basename(ppf_file)[:-4])
-                res.append((dens - target.density) / target.density * 100 * target.wDensity)
-                res.append((hvap - target.hvap) / target.hvap * 100 * target.wHvap)
+                R.append((dens - target.density) / target.density * 100 * target.wDensity)  # deviation  percent
+                R.append((hvap - target.hvap) / target.hvap * 100 * target.wHvap)  # deviation percent
 
-            return res
+            ### save result to database
+            if result is None:
+                result = Result(ppf=ppf_file, parameter=str(params))
+
+            result.residual = json.dumps(R)
+            self.db.session.add(result)
+            self.db.session.commit()
+            ###
+
+            return R
 
         def jacobian(params: Parameters):
+            ### if result exist in database, ignore calculation
+            result = self.db.session.query(Result).filter(
+                and_(
+                    Result.ppf == ppf_file,
+                    Result.parameter == str(params)
+                )).first()
+            if result is not None:
+                J = result.jacobian
+                if J is not None:
+                    return json.loads(J)
+            ###
+
             paras = OrderedDict()
             for k, v in params.items():
                 paras[k] = v.value
@@ -142,35 +178,46 @@ class Optimizer():
             J = []
             for target in self.db.session.query(Target).all():
                 dDens, dHvap = target.get_dDens_dHvap_from_paras(ppf_file, paras)
-                J.append([i / target.density * 100 * target.wDensity for i in dDens])
-                J.append([i / target.hvap * 100 * target.wHvap for i in dHvap])
+                J.append([i / target.density * 100 * target.wDensity for i in dDens])  # deviation  percent
+                J.append([i / target.hvap * 100 * target.wHvap for i in dHvap])  # deviation  percent
 
-            # save Jacobian to log
+            ### save result to database
+            if result is None:
+                result = Result(ppf=ppf_file, parameter=str(params))
+
+            result.jacobian = json.dumps(J)
+            self.db.session.add(result)
+            self.db.session.commit()
+            ###
+
+            ### write Jacobian to log
             txt = '\nJACOBIAN MATRIX:\n'
             for row in J:
                 for item in row:
                     txt += '%8.2f' % item
                 txt += '\n'
             print(txt)
-            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+            with open(log_file, 'a') as log:
                 log.write(txt)
             ###
 
             return J
 
-        def print_result(params: Parameters, iter: int, res: [float]):
-            txt = '\nITERATION:%i\n' % iter
+        def callback(params: Parameters, iter: int, res: [float]):
+            txt = '\nITERATION: %i\n' % iter
             txt += 'PARAMETERS:\n'
             for k, v in params.items():
                 txt += '\t%s %10.5f\n' % (k, v.value)
-            txt += 'RESIDUE: %s\n' % list(map(lambda x: round(x, 1), res))
+            txt += 'RESIDUE:\n'
+            for r in res:
+                txt += '%8.2f\n' % r
             txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
 
             print(txt)
-            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+            with open(log_file, 'a') as log:
                 log.write(txt)
 
-            # clear hvap.log and job.sh for next iteration
+            ### rename hvap.log and job.sh for next iteration
             for target in self.db.session.query(Target).all():
                 target.clear_npt_result(ppf_file)
                 ###
@@ -185,7 +232,7 @@ class Optimizer():
             elif k.endswith('bi'):
                 params.add(k, value=v, min=-1, max=1)
 
-        minimize = Minimizer(residual, params, iter_cb=print_result)
+        minimize = Minimizer(residual, params, iter_cb=callback)
         result = minimize.leastsq(Dfun=jacobian, ftol=0.0001)
         print(result.lmdif_message, '\n')
 
@@ -229,7 +276,7 @@ class Optimizer():
         # with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
         #     log.write('\n%s\n' % paras)
 
-    def run_npt(self, ppf_file):
+    def npt(self, ppf_file):
         for target in self.db.session.query(Target).all():
             target.run_npt(ppf_file)
 
@@ -351,7 +398,7 @@ if __name__ == '__main__':
 
     if cmd == 'npt':
         ppf_file = os.path.abspath(sys.argv[2])
-        optimizer.run_npt(ppf_file)
+        optimizer.npt(ppf_file)
 
     if cmd == 'plot':
         ppfs = sys.argv[2:]
