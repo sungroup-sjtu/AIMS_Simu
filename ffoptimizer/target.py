@@ -53,7 +53,7 @@ class Target(Base):
         else:
             return os.path.join(base_dir, str(self.cycle))
 
-    def calc_n_mol(self, n_atoms=3000, n_mol=100):
+    def calc_n_mol(self, n_atoms=3000, n_mol=80):
         py_mol = pybel.readstring('smi', self.smiles)
         py_mol.addh()
         self.n_mol = math.ceil(n_atoms / len(py_mol.atoms))
@@ -172,11 +172,11 @@ class Target(Base):
         hvap_list = []
 
         if k.endswith('r0'):
-            delta = 0.02
-        elif k.endswith('e0'):
             delta = 0.01
+        elif k.endswith('e0'):
+            delta = 0.001
         elif k.endswith('bi'):
-            delta = 0.02
+            delta = 0.005
         else:
             raise Exception('Unknown parameter: ' + k)
 
@@ -250,7 +250,7 @@ class Target(Base):
 
         npt = Npt(**kwargs)
         npt.prepare(model_dir='..', T=self.T, P=self.P, jobname='NPT-%s-%i' % (self.name, self.T),
-                    dt=0.002, nst_eq=int(2E5), nst_run=int(1E5), nst_trr=200)
+                    dt=0.002, nst_eq=int(2E5), nst_run=int(1E5), nst_trr=500, nst_xtc=500)
         npt.run()
 
     def get_npt_result(self, subdir) -> (float, float):
@@ -258,9 +258,9 @@ class Target(Base):
         os.chdir(subdir)
         os.chdir('%i-%i' % (self.T, self.P))
         print(os.getcwd())
-        density = simulation.gmx.get_property('npt.edr', 'Density', begin=250)
+        density = simulation.gmx.get_property('npt.edr', 'Density')
         density /= 1000
-        ei = simulation.gmx.get_property('hvap.edr', 'Potential', begin=250)
+        ei = simulation.gmx.get_property('hvap.edr', 'Potential')
         hvap = 8.314 * self.T / 1000 - ei / self.n_mol
         return density, hvap
 
@@ -287,21 +287,19 @@ class Target(Base):
         hvap_series_list = []
 
         if k.endswith('r0'):
-            delta = 0.02
-        elif k.endswith('e0'):
             delta = 0.01
+        elif k.endswith('e0'):
+            delta = 0.001
         elif k.endswith('bi'):
-            delta = 0.02
+            delta = 0.005
         else:
             raise Exception('Unknown parameter: ' + k)
 
         for i in [-1, 1]:
             new_v = v + i * delta
             paras[k] = new_v
-            if ppf_file is not None:
-                ppf = PPF(ppf_file)
-            else:
-                ppf = PPF('TEAM_LS.ppf')
+            # TODO return 0, 0 if nothing changed
+            ppf = PPF(ppf_file)
             if not ppf.set_lj_para(paras):
                 return 0, 0
             ppf.write('diff.ppf')
@@ -318,8 +316,7 @@ class Target(Base):
             simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
 
             df = panedr.edr_to_df('diff.edr')
-            pene_series = df.Potential
-            pene_series_list.append(pene_series)
+            pene_series_list.append(df.Potential)
 
             # HVap
             top_hvap = 'diff-hvap.top'
@@ -328,7 +325,7 @@ class Target(Base):
             simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
             simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
 
-            df = panedr.edr_to_df('diff.edr')
+            df = panedr.edr_to_df('diff-hvap.edr')
             eint_series = df.Potential
             hvap_series = 8.314 * self.T / 1000 - eint_series / self.n_mol
             hvap_series_list.append(hvap_series)
@@ -337,12 +334,10 @@ class Target(Base):
         dHvap_series = (hvap_series_list[1] - hvap_series_list[0]) / 2 / delta
 
         df = panedr.edr_to_df('npt.edr')
-        dens_series = df.Density
-        dens_series = dens_series.loc[dPene_series.index]
+        dens_series = df.Density.loc[dPene_series.index]
 
         df = panedr.edr_to_df('hvap.edr')
-        hvap_series = df.Potential
-        hvap_series = hvap_series.loc[dPene_series.index]
+        hvap_series = df.Potential.loc[dPene_series.index]
 
         dens_dPene = dens_series * dPene_series
         hvap_dPene = hvap_series * dPene_series

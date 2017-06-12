@@ -93,6 +93,8 @@ class Optimizer():
         return result.params
 
     def optimize_npt(self, ppf_file):
+        import numpy as np
+
         def residual(params: Parameters):
             paras = OrderedDict()
             for k, v in params.items():
@@ -106,7 +108,7 @@ class Optimizer():
 
             return res
 
-        def derivative(params: Parameters):
+        def jacobian(params: Parameters):
             paras = OrderedDict()
             for k, v in params.items():
                 paras[k] = v.value
@@ -130,22 +132,40 @@ class Optimizer():
                 params.add(k, value=v, min=-1, max=1)
 
         res = residual(params)
+        R = np.array([[i] for i in res]) # y * 1; convert list to column vector
 
-        txt = '\nResidual:\n'
-        for r in res:
-            txt += '%f\n' % r
+        txt = '\nRESIDUAL:\n'
+        for r in R:
+            txt += '%8.1f\n' % r
         print(txt)
         with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
             log.write(txt)
 
-        jacobian = derivative(params)
+        J = np.array(jacobian(params)) # y * x
 
-        txt = '\nJacobian Matrix:\n'
-        for l in jacobian:
-            txt += '%s\n' % l
+        txt = '\nJACOBIAN MATRIX:\n'
+        for l in J:
+            for i in l:
+                txt += '%8.1f' % i
+            txt += '\n'
         print(txt)
         with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
             log.write(txt)
+
+        Jtrans = np.transpose(J) # x * y
+        JtransJ = Jtrans.dot(J) # x * x
+        JtransR = Jtrans.dot(R) # x * 1
+        dPara = np.linalg.inv(JtransJ).dot(JtransR) # x * 1
+        print(JtransJ)
+        print(JtransR)
+        print(dPara)
+
+        paras = OrderedDict()
+        for i, k in enumerate(params.keys()):
+            paras[k] = params[k].value + dPara[i][0]
+        print(paras)
+        with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
+            log.write('\n%s\n' %paras)
 
     def run_npt(self, ppf_file):
         for target in self.db.session.query(Target).all():
