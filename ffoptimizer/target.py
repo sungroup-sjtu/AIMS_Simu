@@ -250,7 +250,7 @@ class Target(Base):
 
         npt = Npt(**kwargs)
         npt.prepare(model_dir='..', T=self.T, P=self.P, jobname='NPT-%s-%i' % (self.name, self.T),
-                    dt=0.002, nst_eq=int(2E5), nst_run=int(1E5), nst_trr=500, nst_xtc=500)
+                    dt=0.002, nst_eq=int(2E5), nst_run=int(2E5), nst_trr=500, nst_xtc=500)
         npt.run()
 
     def get_npt_result(self, subdir) -> (float, float):
@@ -353,8 +353,12 @@ class Target(Base):
             return False
 
         with open(log_hvap) as f:
-            lines = f.read().splitlines()
-        if not lines[-1].startswith('Finished mdrun'):
+            lines = f.readlines()
+        try:
+            last_line = lines[-1]
+        except:
+            return False
+        if not last_line.startswith('Finished mdrun'):
             return False
 
         return True
@@ -371,6 +375,6 @@ class Target(Base):
         subdir = os.path.basename(ppf_file)[:-4]
         log_hvap = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), 'hvap.log')
         sh_job = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), jobmanager.sh)
-        os.remove(log_hvap)
-        os.remove(sh_job)
+        shutil.move(log_hvap, log_hvap + '.bak')
+        shutil.move(sh_job, sh_job + '.bak')
 

@@ -70,8 +70,10 @@ class Optimizer():
             txt += 'PARAMETERS:\n'
             for k, v in params.items():
                 txt += '\t%s %10.5f\n' % (k, v.value)
-            txt += 'RESIDUE: %s\n' % list(map(lambda x: round(x, 1), res))
-            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
+            txt += 'RESIDUE:\n'
+            for r in res:
+                txt += '%10.2f\n' %r
+            txt += 'RSQ: %f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
 
             print(txt)
             with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
@@ -95,16 +97,30 @@ class Optimizer():
 
     def optimize_npt(self, ppf_file):
         def residual(params: Parameters):
+            ### save ppf file and run NPT
+            ppf = PPF(ppf_file)
+            paras = OrderedDict()
+            for k, v in params.items():
+                paras[k] = v.value
+            ppf.set_lj_para(paras)
+            ppf.write(ppf_file)
+
+            for target in self.db.session.query(Target).all():
+                if not target.npt_started(ppf_file):
+                    target.run_npt(ppf_file)
+            ###
+
             FINISHED = False
             while not FINISHED:
+                current_time = time.strftime('%m-%d %H:%M')
+                print(current_time + ' Checking job status')
                 FINISHED = True
                 for target in self.db.session.query(Target).all():
-                    if not target.npt_finished():
+                    if not target.npt_finished(ppf_file):
                         FINISHED = False
-                    if not target.npt_started():
-                        target.run_npt(ppf_file)
                 if not FINISHED:
-                    time.sleep(30)
+                    print(' ' * 12 + 'Still running. Wait ...')
+                    time.sleep(60)
 
             res = []
             paras = OrderedDict()
@@ -154,14 +170,7 @@ class Optimizer():
             with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
                 log.write(txt)
 
-            # save ppf file, clear hvap.log and job.sh for next iteration
-            ppf = PPF(ppf_file)
-            paras = OrderedDict()
-            for k, v in params.items():
-                paras[k] = v.value
-            ppf.set_lj_para(paras)
-            ppf.write(ppf_file)
-
+            # clear hvap.log and job.sh for next iteration
             for target in self.db.session.query(Target).all():
                 target.clear_npt_result(ppf_file)
                 ###
