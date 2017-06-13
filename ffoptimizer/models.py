@@ -40,18 +40,10 @@ class Target(Base):
     hvap = NotNullColumn(Float)
     wDensity = NotNullColumn(Float)
     wHvap = NotNullColumn(Float)
-    cycle = NotNullColumn(Integer, default=0)
+    iteration = NotNullColumn(Integer, default=0)
 
     def __repr__(self):
         return '<Target: %s %s %i>' % (self.name, self.smiles, self.T)
-
-    @property
-    def dir_nvt(self):
-        base_dir = os.path.join(Config.WORK_DIR, 'NVT-%s' % self.name, str(self.T))
-        if self.cycle == 0:
-            return base_dir
-        else:
-            return os.path.join(base_dir, str(self.cycle))
 
     def calc_n_mol(self, n_atoms=3000, n_mol=0):
         py_mol = pybel.readstring('smi', self.smiles)
@@ -60,172 +52,15 @@ class Target(Base):
         if self.n_mol < n_mol:
             self.n_mol = n_mol
 
-    def build_nvt(self, ppf=None):
-        cd_or_create_and_cd(self.dir_nvt)
-        if self.cycle == 0:
-            pdb = 'mol.pdb'
-            mol2 = 'mol.mol2'
-            py_mol = create_mol_from_smiles(self.smiles, pdb_out=pdb, mol2_out=mol2)
-            mass = py_mol.molwt * self.n_mol
-            length = (10 / 6.022 * mass / self.density) ** (1 / 3)  # assume cubic box
-
-            print('Build coordinates using Packmol: %s molecules ...' % self.n_mol)
-            simulation.packmol.build_box([pdb], [self.n_mol], 'init.pdb', length=length - 2, tolerance=1.7, silent=True)
-
-            print('Create box using DFF ...')
-            simulation.dff.build_box_after_packmol([mol2], [self.n_mol], 'init.msd', mol_corr='init.pdb', length=length)
-            if ppf is not None:
-                shutil.copy(ppf, 'TEAM_LS.ppf')
-                simulation.export(ppf='TEAM_LS.ppf', minimize=True)
-            else:
-                simulation.export(minimize=True)
-
-        else:
-            shutil.copy('../init.msd', 'init.msd')
-            shutil.copy(ppf, 'TEAM_LS.ppf')
-            simulation.export(ppf='TEAM_LS.ppf', minimize=False)
-            shutil.copy('../nvt.gro', 'conf.gro')
-
-        nprocs = simulation.jobmanager.nprocs
-        commands = []
-        simulation.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-eq.mdp', T=self.T,
-                                                 nsteps=int(3E5), dt=0.001, nstxtcout=0)
-        cmd = simulation.gmx.grompp(mdp='grompp-eq.mdp', tpr_out='eq.tpr', get_cmd=True)
-        commands.append(cmd)
-        cmd = simulation.gmx.mdrun(name='eq', nprocs=nprocs, get_cmd=True)
-        commands.append(cmd)
-
-        simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-nvt.mdp', T=self.T,
-                                                 nsteps=int(2E5), dt=0.002, restart=True,
-                                                 nstxout=500, nstvout=500, nstxtcout=0)
-        cmd = simulation.gmx.grompp(mdp='grompp-nvt.mdp', gro='eq.gro', tpr_out='nvt.tpr', cpt='eq.cpt', get_cmd=True)
-        commands.append(cmd)
-        cmd = simulation.gmx.mdrun(name='nvt', nprocs=nprocs, get_cmd=True)
-        commands.append(cmd)
-
-        # Rerun enthalpy of vaporization
-        top_hvap = 'topol-hvap.top'
-        simulation.gmx.generate_top_for_hvap('topol.top', top_hvap)
-        cmd = simulation.gmx.grompp(mdp='grompp-nvt.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
-        commands.append(cmd)
-        cmd = simulation.gmx.mdrun(name='hvap', nprocs=nprocs, rerun='nvt.trr', get_cmd=True)
-        commands.append(cmd)
-
-        simulation.jobmanager.generate_sh(os.getcwd(), commands, name='%s-%i' % (self.name, self.T))
-        simulation.run()
-
-    def get_pres_hvap_from_paras(self, ppf_file=None, d: OrderedDict = None) -> (float, float):
-        paras = copy.copy(d)
-        os.chdir(self.dir_nvt)
-        if ppf_file is not None:
-            ppf = PPF(ppf_file)
-        else:
-            ppf = PPF('TEAM_LS.ppf')
-        if not ppf.set_lj_para(paras):
-            pres = simulation.gmx.get_property('nvt.edr', 'Pressure')
-            ei = simulation.gmx.get_property('hvap.edr', 'Potential')
-            hvap = 8.314 * self.T / 1000 - ei / self.n_mol
-            return pres, hvap
-
-        ppf.write('rerun.ppf')
-        top = 'diff.top'
-
-        shutil.copy('init.msd', 'diff.msd')
-        simulation.dff.set_charge(['diff.msd'], 'rerun.ppf')
-        simulation.dff.export_gmx('diff.msd', 'rerun.ppf', top_out=top)
-        nprocs = simulation.jobmanager.nprocs
-
-        # Press
-        simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(2E5), dt=0.002, nstxtcout=0)
-        simulation.gmx.grompp(top=top, tpr_out='diff.tpr', silent=True)
-        simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='nvt.trr', silent=True)
-
-        pres = simulation.gmx.get_property('diff.edr', 'Pressure')
-
-        # Hvap
-        top_hvap = 'diff-hvap.top'
-        simulation.gmx.generate_top_for_hvap(top, top_hvap)
-        nprocs = simulation.jobmanager.nprocs
-
-        simulation.gmx.grompp(top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
-        simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='nvt.trr', silent=True)
-
-        ei = simulation.gmx.get_property('diff-hvap.edr', 'Potential')
-        hvap = 8.314 * self.T / 1000 - ei / self.n_mol
-        return pres, hvap
-
-    def get_dPres_dHvap_from_paras(self, ppf_file, d: OrderedDict) -> ([float], [float]):
-        paras = copy.copy(d)
-        dPres = []
-        dHvap = []
-        for k, v in paras.items():
-            dP, dH = self.get_dPres_dHvap_for_para(ppf_file, paras, k)
-            dPres.append(dP)
-            dHvap.append(dH)
-        return dPres, dHvap
-
-    def get_dPres_dHvap_for_para(self, ppf_file, d: OrderedDict, k) -> (float, float):
-        paras = copy.copy(d)
-        os.chdir(self.dir_nvt)
-        v = paras[k]
-        pres_list = []
-        hvap_list = []
-
-        if k.endswith('r0'):
-            delta = 0.01
-        elif k.endswith('e0'):
-            delta = 0.001
-        elif k.endswith('bi'):
-            delta = 0.005
-        else:
-            raise Exception('Unknown parameter: ' + k)
-
-        for i in [-1, 1]:
-            new_v = v + i * delta
-            paras[k] = new_v
-            if ppf_file is not None:
-                ppf = PPF(ppf_file)
-            else:
-                ppf = PPF('TEAM_LS.ppf')
-            if not ppf.set_lj_para(paras):
-                return 0, 0
-            ppf.write('rerun.ppf')
-            # print('    %s %10.5f %10.5f' %(k, v, new_v))
-            top = 'diff%i.top' % i
-
-            shutil.copy('init.msd', 'diff.msd')
-            simulation.dff.set_charge(['diff.msd'], 'rerun.ppf')
-            simulation.dff.export_gmx('diff.msd', 'rerun.ppf', top_out=top)
-            nprocs = simulation.jobmanager.nprocs
-
-            # Pres
-            simulation.gmx.prepare_mdp_from_template('t_nvt.mdp', T=self.T, nsteps=int(2E5), dt=0.002, nstxtcout=0)
-            simulation.gmx.grompp(top=top, tpr_out='diff%i.tpr' % i, silent=True)
-            simulation.gmx.mdrun(name='diff%i' % i, nprocs=nprocs, rerun='nvt.trr', silent=True)
-
-            pres = simulation.gmx.get_property('diff%i.edr' % i, 'Pressure')
-            pres_list.append(pres)
-
-            # HVap
-            top_hvap = 'diff%i-hvap.top' % i
-            simulation.gmx.generate_top_for_hvap(top, top_hvap)
-
-            simulation.gmx.grompp(top=top_hvap, tpr_out='diff%i-hvap.tpr' % i, silent=True)
-            simulation.gmx.mdrun(name='diff%i-hvap' % i, nprocs=nprocs, rerun='nvt.trr', silent=True)
-
-            ei = simulation.gmx.get_property('diff%i-hvap.edr' % i, 'Potential')
-            hvap = 8.314 * self.T / 1000 - ei / self.n_mol
-            hvap_list.append(hvap)
-
-        dPres = (pres_list[1] - pres_list[0]) / 2 / delta
-        dHvap = (hvap_list[1] - hvap_list[0]) / 2 / delta
-        return dPres, dHvap
-
     @property
     def dir_base_npt(self):
         return os.path.join(Config.WORK_DIR, 'NPT-%s' % (self.name))
 
-    def run_npt(self, ppf=None):
+    @property
+    def dir_child(self):
+        return '%i-%i-%i' % (self.T, self.P, self.iteration)
+
+    def run_npt(self, ppf_file=None, diff: OrderedDict = None):
         cd_or_create_and_cd(self.dir_base_npt)
 
         if not os.path.exists('init.msd'):
@@ -241,22 +76,67 @@ class Target(Base):
             print('Create box using DFF ...')
             simulation.dff.build_box_after_packmol([mol2], [self.n_mol], 'init.msd', mol_corr='init.pdb', length=length)
 
-        cd_or_create_and_cd(os.path.basename('%s' % ppf)[:-4])
+        cd_or_create_and_cd(os.path.basename('%s' % ppf_file)[:-4])
 
         simulation.msd = '../init.msd'
-        simulation.export(ppf=ppf, minimize=True)
+        simulation.export(ppf=ppf_file, minimize=True)
 
-        cd_or_create_and_cd('%i-%i' % (self.T, self.P))
+        cd_or_create_and_cd(self.dir_child)
 
         npt = Npt(**kwargs)
-        npt.prepare(model_dir='..', T=self.T, P=self.P, jobname='NPT-%s-%i' % (self.name, self.T),
-                    dt=0.002, nst_eq=int(2E5), nst_run=int(2E5), nst_trr=500, nst_xtc=500)
+        commands = npt.prepare(model_dir='..', T=self.T, P=self.P, jobname='NPT-%s-%i' % (self.name, self.T),
+                               dt=0.002, nst_eq=int(2E5), nst_run=int(2E5), nst_trr=250, nst_xtc=250)
+
+        if diff is not None:
+            commands.append('export GMX_MAXCONSTRWARN=-1')
+            for k in diff.keys():
+                paras = copy.copy(diff)
+                if k.endswith('r0'):
+                    delta = 0.01
+                elif k.endswith('e0'):
+                    delta = 0.001
+                elif k.endswith('bi'):
+                    delta = 0.005
+                else:
+                    raise Exception('Unknown parameter: ' + k)
+
+                msd_out = 'diff-%s.msd' % k
+                ppf_out = 'diff-%s.ppf' % k
+                top_out = 'diff-%s.top' % k
+                top_out_hvap = 'diff-%s-hvap.top' % k
+
+                paras[k] += delta
+                ppf = PPF(ppf_file)
+                ppf.set_lj_para(paras)
+                ppf.write(ppf_out)
+
+                shutil.copy('../../init.msd', msd_out)
+                simulation.dff.set_charge([msd_out], ppf_out)
+                simulation.dff.export_gmx(msd_out, ppf_out, gro_out='diff.gro', top_out=top_out)
+
+                nprocs = simulation.jobmanager.nprocs
+
+                cmd = simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_out, tpr_out='diff-%s.tpr' % k, get_cmd=True)
+                commands.append(cmd)
+                cmd = simulation.gmx.mdrun(name='diff-%s' % k, nprocs=nprocs, rerun='npt.trr', get_cmd=True)
+                commands.append(cmd)
+
+                simulation.gmx.generate_top_for_hvap(top_out, top_out_hvap)
+
+                cmd = simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_out_hvap, tpr_out='diff-%s-hvap.tpr' % k,
+                                            get_cmd=True)
+                commands.append(cmd)
+                cmd = simulation.gmx.mdrun(name='diff-%s-hvap' % k, nprocs=nprocs, rerun='npt.trr', get_cmd=True)
+                commands.append(cmd)
+
+        commands.append('touch _finished_')
+        npt.jobmanager.generate_sh(os.getcwd(), commands, name='NPT-%s-%i' % (self.name, self.T))
         npt.run()
 
     def get_npt_result(self, subdir) -> (float, float):
         os.chdir(self.dir_base_npt)
         os.chdir(subdir)
-        os.chdir('%i-%i' % (self.T, self.P))
+        os.chdir(self.dir_child)
         print(os.getcwd())
         density = simulation.gmx.get_property('npt.edr', 'Density')
         density /= 1000
@@ -275,14 +155,10 @@ class Target(Base):
         return dDens, dHvap
 
     def get_dDens_dHvap_from_para(self, ppf_file, d: OrderedDict, k) -> (float, float):
-        paras = copy.copy(d)
-
         os.chdir(self.dir_base_npt)
         subdir = os.path.basename(ppf_file)[:-4]
         os.chdir(subdir)
-        os.chdir('%i-%i' % (self.T, self.P))
-
-        v = paras[k]
+        os.chdir(self.dir_child)
 
         if k.endswith('r0'):
             delta = 0.01
@@ -293,94 +169,15 @@ class Target(Base):
         else:
             raise Exception('Unknown parameter: ' + k)
 
-        #pene_series_list = []
-        #hvap_series_list = []
-        #for i in [-1, 1]:
-            #new_v = v + i * delta
-            #paras[k] = new_v
-            #ppf = PPF(ppf_file)
-            #if not ppf.set_lj_para(paras):
-                #return 0, 0
-            #ppf.write('diff.ppf')
-            #top = 'diff.top'
-
-            #shutil.copy('../../init.msd', 'diff.msd')
-            #simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
-            #simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
-            #nprocs = simulation.jobmanager.nprocs
-
-            #### return 0, 0 if nothing changed
-            #if n_diff_lines('diff.top', 'topol.top') <= 1 and n_diff_lines('diff.itp', 'topol.itp') == 0:
-                #return 0, 0
-            ####
-
-            ## Pres
-            #simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top, tpr_out='diff.tpr', silent=True)
-            #simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
-
-            #df = panedr.edr_to_df('diff.edr')
-            #pene_series_list.append(df.Potential)
-
-            ## HVap
-            #top_hvap = 'diff-hvap.top'
-            #simulation.gmx.generate_top_for_hvap(top, top_hvap)
-
-            #simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
-            #simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
-
-            #df = panedr.edr_to_df('diff-hvap.edr')
-            #eint_series = df.Potential
-            #hvap_series = 8.314 * self.T / 1000 - eint_series / self.n_mol
-            #hvap_series_list.append(hvap_series)
-
-        #print(self, k)
-
-        #dPene_series = (pene_series_list[1] - pene_series_list[0]) / 2 / delta
-        #dHvap_series = (hvap_series_list[1] - hvap_series_list[0]) / 2 / delta
-
-        #df = panedr.edr_to_df('npt.edr')
-        #dens_series = df.Density.loc[dPene_series.index]
-
-        #df = panedr.edr_to_df('hvap.edr')
-        #hvap_series = df.Potential.loc[dPene_series.index]
-
-        paras[k] = v + delta
-        ppf = PPF(ppf_file)
-        if not ppf.set_lj_para(paras):
-            return 0, 0
-        ppf.write('diff.ppf')
-        top = 'diff.top'
-
-        shutil.copy('../../init.msd', 'diff.msd')
-        simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
-        simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
-        nprocs = simulation.jobmanager.nprocs
-
-        ### return 0, 0 if nothing changed
-        if n_diff_lines('diff.top', 'topol.top') <= 1 and n_diff_lines('diff.itp', 'topol.itp') == 0:
-            return 0, 0
-        ###
-
-        # Pres
-        simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top, tpr_out='diff.tpr', silent=True)
-        simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
-
-        df = panedr.edr_to_df('diff.edr')
+        # energy and Hvap after diff
+        df = panedr.edr_to_df('diff-%s.edr' % k)
         pene_series_diff = df.Potential
 
-        # HVap
-        top_hvap = 'diff-hvap.top'
-        simulation.gmx.generate_top_for_hvap(top, top_hvap)
-
-        simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
-        simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
-
-        df = panedr.edr_to_df('diff-hvap.edr')
+        df = panedr.edr_to_df('diff-%s-hvap.edr' % k)
         eint_series_diff = df.Potential
         hvap_series_diff = 8.314 * self.T / 1000 - eint_series_diff / self.n_mol
 
-        print(self, k)
-
+        # density, energy and Hvap
         df = panedr.edr_to_df('npt.edr')
         dens_series = df.Density.loc[pene_series_diff.index]
         pene_series = df.Potential.loc[pene_series_diff.index]
@@ -388,11 +185,10 @@ class Target(Base):
         df = panedr.edr_to_df('hvap.edr')
         hvap_series = df.Potential.loc[pene_series_diff.index]
 
+        # calculate the derivative
         dPene_series = (pene_series_diff - pene_series) / delta
         dHvap_series = (hvap_series_diff - hvap_series) / delta
-        ###
 
-        ### calculate the derivative
         dens_dPene = dens_series * dPene_series
         hvap_dPene = hvap_series * dPene_series
 
@@ -402,24 +198,15 @@ class Target(Base):
 
     def npt_finished(self, ppf_file) -> bool:
         subdir = os.path.basename(ppf_file)[:-4]
-        log_hvap = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), 'hvap.log')
-        if not os.path.exists(log_hvap):
-            return False
+        log_finished = os.path.join(self.dir_base_npt, subdir, self.dir_child, '_finished_')
+        if os.path.exists(log_finished):
+            return True
 
-        with open(log_hvap) as f:
-            lines = f.readlines()
-        try:
-            last_line = lines[-1]
-        except:
-            return False
-        if not last_line.startswith('Finished mdrun'):
-            return False
-
-        return True
+        return False
 
     def npt_started(self, ppf_file) -> bool:
         subdir = os.path.basename(ppf_file)[:-4]
-        sh_job = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), jobmanager.sh)
+        sh_job = os.path.join(self.dir_base_npt, subdir, self.dir_child, jobmanager.sh)
         if os.path.exists(sh_job):
             return True
 
@@ -427,10 +214,11 @@ class Target(Base):
 
     def clear_npt_result(self, ppf_file):
         subdir = os.path.basename(ppf_file)[:-4]
-        log_hvap = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), 'hvap.log')
-        sh_job = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), jobmanager.sh)
+        dir = os.path.join(self.dir_base_npt, subdir, self.dir_child)
+        log_finished = os.path.join(dir, '_finished_')
+        sh_job = os.path.join(dir, jobmanager.sh)
         try:
-            shutil.move(log_hvap, log_hvap + '.bak')
+            os.remove(log_finished)
             shutil.move(sh_job, sh_job + '.bak')
         except:
             pass

@@ -61,6 +61,8 @@ class Npt(GmxSimulation):
         commands.append(cmd)
 
         # Rerun enthalpy of vaporization
+        commands.append('export GMX_MAXCONSTRWARN=-1')
+
         top_hvap = 'topol-hvap.top'
         self.gmx.generate_top_for_hvap(top, top_hvap)
         cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
@@ -69,6 +71,7 @@ class Npt(GmxSimulation):
         commands.append(cmd)
 
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
+        return commands
 
     def extend(self, extend=500, jobname=None):
         '''

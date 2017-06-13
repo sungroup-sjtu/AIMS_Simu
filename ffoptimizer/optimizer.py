@@ -26,79 +26,13 @@ class Optimizer():
         self.db = DB(db_file)
         self.db.conn()
 
-    def build_nvt(self, ppf_file):
-        for target in self.db.session.query(Target).all():
-            print(target.dir_nvt)
-            target.build_nvt(ppf=ppf_file)
-
-    def optimize_nvt(self, ppf_file):
-        def residual(params: Parameters):
-            paras = OrderedDict()
-            for k, v in params.items():
-                paras[k] = v.value
-
-            f = []
-            for target in self.db.session.query(Target).all():
-                pres, hvap = target.get_pres_hvap_from_paras(ppf_file, paras)
-                f.append((pres - target.P) * target.wDensity)
-                f.append((hvap - target.hvap) * target.wHvap)
-
-            return f
-
-        def dfunc(params: Parameters):
-            paras = OrderedDict()
-            for k, v in params.items():
-                paras[k] = v.value
-
-            df = []
-            for target in self.db.session.query(Target).all():
-                dPres, dHvap = target.get_dPres_dHvap_from_paras(ppf_file, paras)
-                df.append([i * target.wDensity for i in dPres])
-                df.append([i * target.wHvap for i in dHvap])
-
-            txt = '\nDERIVATIVE:\n'
-            for l in df:
-                txt += '%s\n' % list(map(lambda x: round(x, 1), l))
-
-            print(txt)
-            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-                log.write(txt)
-
-            return df
-
-        def print_result(params: Parameters, iter: int, res: [float]):
-            txt = '\nITERATION:%i\n' % iter
-            txt += 'PARAMETERS:\n'
-            for k, v in params.items():
-                txt += '\t%s %10.5f\n' % (k, v.value)
-            txt += 'RESIDUE:\n'
-            for r in res:
-                txt += '%10.2f\n' % r
-            txt += 'RSQ: %f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
-
-            print(txt)
-            with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-                log.write(txt)
-
-        ppf = PPF(ppf_file)
-        params = Parameters()
-        for k, v in ppf.adj_lj_paras.items():
-            if k.endswith('r0'):
-                params.add(k, value=v, min=2, max=5)
-            elif k.endswith('e0'):
-                params.add(k, value=v, min=0.01, max=2)
-            elif k.endswith('bi'):
-                params.add(k, value=v, min=-1, max=1)
-
-        minimize = Minimizer(residual, params, iter_cb=print_result)
-        result = minimize.leastsq(Dfun=dfunc, ftol=0.1)
-        print(result.lmdif_message, '\n')
-
-        return result.params
+    @property
+    def iteration(self):
+        target = self.db.session.query(Target).first()
+        return target.iteration
 
     def optimize_npt(self, ppf_file):
         LOG = os.path.join(CWD, 'Opt-%s.log' % os.path.basename(ppf_file)[:-4])
-        ITERATION = 0
 
         def residual(params: Parameters):
             ### if result exist in database, ignore calculation
@@ -123,7 +57,7 @@ class Optimizer():
 
             for target in self.db.session.query(Target).all():
                 if not target.npt_started(ppf_file):
-                    target.run_npt(ppf_file)
+                    target.run_npt(ppf_file, paras)
             ###
 
             while True:
@@ -140,10 +74,6 @@ class Optimizer():
                     time.sleep(60)
 
             R = []
-            paras = OrderedDict()
-            for k, v in params.items():
-                paras[k] = v.value
-
             for target in self.db.session.query(Target).all():
                 dens, hvap = target.get_npt_result(os.path.basename(ppf_file)[:-4])
                 R.append((dens - target.density) / target.density * 100 * target.wDensity)  # deviation  percent
@@ -158,16 +88,15 @@ class Optimizer():
             self.db.session.commit()
             ###
 
-            ### write current parameteres and residual to log
-            ITERATION += 1
-            txt = '\nITERATION: %i\n' % ITERATION
+            ### write current parameters and residual to log
+            txt = '\nITERATION: %i\n' % self.iteration
             txt += 'PARAMETERS:\n'
             for k, v in params.items():
                 txt += '\t%s %10.5f\n' % (k, v.value)
             txt += 'RESIDUE:\n'
-            for r in res:
+            for r in R:
                 txt += '%8.2f\n' % r
-            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
+            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, R)))
 
             print(txt)
             with open(LOG, 'a') as log:
@@ -222,10 +151,11 @@ class Optimizer():
             return J
 
         def callback(params: Parameters, iter: int, res: [float]):
-            ### rename hvap.log and job.sh for next iteration
+            ### clear _finished_ and job.sh for next iteration
             for target in self.db.session.query(Target).all():
                 target.clear_npt_result(ppf_file)
-
+                target.iteration += 1
+            self.db.session.commit()
 
         ppf = PPF(ppf_file)
         params = Parameters()
@@ -242,44 +172,6 @@ class Optimizer():
         print(result.lmdif_message, '\n')
 
         return result.params
-
-        # import numpy as np
-        #
-        # res = residual(params)
-        # R = np.array([[i] for i in res])  # y * 1; convert list to column vector
-        #
-        # txt = '\nRESIDUAL:\n'
-        # for r in R:
-        #     txt += '%8.1f\n' % r
-        # print(txt)
-        # with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-        #     log.write(txt)
-        #
-        # J = np.array(jacobian(params))  # y * x
-        #
-        # txt = '\nJACOBIAN MATRIX:\n'
-        # for l in J:
-        #     for i in l:
-        #         txt += '%8.1f' % i
-        #     txt += '\n'
-        # print(txt)
-        # with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-        #     log.write(txt)
-        #
-        # Jtrans = np.transpose(J)  # x * y
-        # JtransJ = Jtrans.dot(J)  # x * x
-        # JtransR = Jtrans.dot(R)  # x * 1
-        # dPara = np.linalg.inv(JtransJ).dot(JtransR)  # x * 1
-        # print(JtransJ)
-        # print(JtransR)
-        # print(dPara)
-        #
-        # paras = OrderedDict()
-        # for i, k in enumerate(params.keys()):
-        #     paras[k] = params[k].value + dPara[i][0]
-        # print(paras)
-        # with open(os.path.join(CWD, 'Opt.log'), 'a') as log:
-        #     log.write('\n%s\n' % paras)
 
     def npt(self, ppf_file):
         for target in self.db.session.query(Target).all():
@@ -373,38 +265,17 @@ if __name__ == '__main__':
     if cmd == 'init':
         optimizer.init_db(sys.argv[2])
 
-    if cmd == 'build-nvt':
-        ppf_file = None
-        if len(sys.argv) == 3:
-            ppf_file = os.path.abspath(sys.argv[2])
-        optimizer.build_nvt(ppf_file)
-
-    if cmd == 'optimize-nvt':
-        ppf_file = os.path.abspath(sys.argv[2])
-        params_out = optimizer.optimize_nvt(ppf_file)
-
-        cycle = optimizer.db.session.query(Target).first().cycle + 1
-        optimizer.db.session.query(Target).update({'cycle': cycle})
-        optimizer.db.session.commit()
-
-        paras = OrderedDict()
-        for k, v in params_out.items():
-            paras[k] = v.value
-
-        ppf = PPF(ppf_file)
-        ppf.set_lj_para(paras)
-        ppf_out = os.path.join(CWD, 'TEAM-opt-%i.ppf' % cycle)
-        ppf.write(ppf_out)
-        optimizer.build_nvt(os.path.abspath(ppf_out))
-
-    if cmd == 'optimize-npt':
+    elif cmd == 'optimize':
         ppf_file = os.path.abspath(sys.argv[2])
         params_out = optimizer.optimize_npt(ppf_file)
 
-    if cmd == 'npt':
+    elif cmd == 'npt':
         ppf_file = os.path.abspath(sys.argv[2])
         optimizer.npt(ppf_file)
 
-    if cmd == 'plot':
+    elif cmd == 'plot':
         ppfs = sys.argv[2:]
         optimizer.plot(ppfs)
+
+    else:
+        print('Unknown command')
