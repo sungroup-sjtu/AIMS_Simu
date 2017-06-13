@@ -58,17 +58,30 @@ class PPF():
                 r0 = words[0]
                 e0 = words[1]
 
+                if r0.endswith('*'):
+                    r0 = r0[:-1]
+                if e0.endswith('*'):
+                    e0 = e0[:-1]
+                r0 = float(r0)
+                e0 = float(e0)
+
                 r0_key = '%s_r0' % a_type
                 if r0_key in new_paras.keys():
-                    r0 = new_paras[r0_key]
-                    replaced = True
+                    new_r0 = new_paras[r0_key]
+                    if r0 != new_r0:
+                        r0 = new_r0
+                        replaced = True
+
                 e0_key = '%s_e0' % a_type
                 if e0_key in new_paras.keys():
-                    e0 = new_paras[e0_key]
-                    replaced = True
+                    new_e0 = new_paras[e0_key]
+                    if e0 != new_e0:
+                        e0 = new_e0
+                        replaced = True
 
                 new_term = 'N12_6: %s: %s, %s:' % (a_type, str(r0), str(e0))
                 terms[i] = new_term
+
             elif term.startswith('BINC'):
                 words = term.split(':')
                 words = [w.strip() for w in words]
@@ -80,10 +93,16 @@ class PPF():
                 a1_type = words[0]
                 a2_type = words[1]
 
+                if bi.endswith('*'):
+                    bi = bi[:-1]
+                bi = float(bi)
+
                 bi_key = '%s_%s_bi' % (a1_type, a2_type)
                 if bi_key in new_paras.keys():
-                    bi = new_paras[bi_key]
-                    replaced = True
+                    new_bi = new_paras[bi_key]
+                    if bi != new_bi:
+                        bi = new_bi
+                        replaced = True
 
                 new_term = 'BINC: %s, %s: %s:' % (a1_type, a2_type, str(bi))
                 terms[i] = new_term

@@ -11,7 +11,7 @@ from sqlalchemy import Column, Integer, Text, Float, String
 
 NotNullColumn = partial(Column, nullable=False)
 
-from mstools.utils import create_mol_from_smiles, cd_or_create_and_cd
+from mstools.utils import create_mol_from_smiles, cd_or_create_and_cd, n_diff_lines
 from mstools.simulation.gmx import GmxSimulation, Npt
 from config import Config
 from app import jobmanager
@@ -283,8 +283,6 @@ class Target(Base):
         os.chdir('%i-%i' % (self.T, self.P))
 
         v = paras[k]
-        pene_series_list = []
-        hvap_series_list = []
 
         if k.endswith('r0'):
             delta = 0.01
@@ -295,50 +293,106 @@ class Target(Base):
         else:
             raise Exception('Unknown parameter: ' + k)
 
-        for i in [-1, 1]:
-            new_v = v + i * delta
-            paras[k] = new_v
-            # TODO return 0, 0 if nothing changed
-            ppf = PPF(ppf_file)
-            if not ppf.set_lj_para(paras):
-                return 0, 0
-            ppf.write('diff.ppf')
-            # print('    %s %10.5f %10.5f' %(k, v, new_v))
-            top = 'diff.top'
+        #pene_series_list = []
+        #hvap_series_list = []
+        #for i in [-1, 1]:
+            #new_v = v + i * delta
+            #paras[k] = new_v
+            #ppf = PPF(ppf_file)
+            #if not ppf.set_lj_para(paras):
+                #return 0, 0
+            #ppf.write('diff.ppf')
+            #top = 'diff.top'
 
-            shutil.copy('../../init.msd', 'diff.msd')
-            simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
-            simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
-            nprocs = simulation.jobmanager.nprocs
+            #shutil.copy('../../init.msd', 'diff.msd')
+            #simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
+            #simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
+            #nprocs = simulation.jobmanager.nprocs
 
-            # Pres
-            simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top, tpr_out='diff.tpr', silent=True)
-            simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
+            #### return 0, 0 if nothing changed
+            #if n_diff_lines('diff.top', 'topol.top') <= 1 and n_diff_lines('diff.itp', 'topol.itp') == 0:
+                #return 0, 0
+            ####
 
-            df = panedr.edr_to_df('diff.edr')
-            pene_series_list.append(df.Potential)
+            ## Pres
+            #simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top, tpr_out='diff.tpr', silent=True)
+            #simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
 
-            # HVap
-            top_hvap = 'diff-hvap.top'
-            simulation.gmx.generate_top_for_hvap(top, top_hvap)
+            #df = panedr.edr_to_df('diff.edr')
+            #pene_series_list.append(df.Potential)
 
-            simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
-            simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
+            ## HVap
+            #top_hvap = 'diff-hvap.top'
+            #simulation.gmx.generate_top_for_hvap(top, top_hvap)
 
-            df = panedr.edr_to_df('diff-hvap.edr')
-            eint_series = df.Potential
-            hvap_series = 8.314 * self.T / 1000 - eint_series / self.n_mol
-            hvap_series_list.append(hvap_series)
+            #simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
+            #simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
 
-        dPene_series = (pene_series_list[1] - pene_series_list[0]) / 2 / delta
-        dHvap_series = (hvap_series_list[1] - hvap_series_list[0]) / 2 / delta
+            #df = panedr.edr_to_df('diff-hvap.edr')
+            #eint_series = df.Potential
+            #hvap_series = 8.314 * self.T / 1000 - eint_series / self.n_mol
+            #hvap_series_list.append(hvap_series)
+
+        #print(self, k)
+
+        #dPene_series = (pene_series_list[1] - pene_series_list[0]) / 2 / delta
+        #dHvap_series = (hvap_series_list[1] - hvap_series_list[0]) / 2 / delta
+
+        #df = panedr.edr_to_df('npt.edr')
+        #dens_series = df.Density.loc[dPene_series.index]
+
+        #df = panedr.edr_to_df('hvap.edr')
+        #hvap_series = df.Potential.loc[dPene_series.index]
+
+        paras[k] = v + delta
+        ppf = PPF(ppf_file)
+        if not ppf.set_lj_para(paras):
+            return 0, 0
+        ppf.write('diff.ppf')
+        top = 'diff.top'
+
+        shutil.copy('../../init.msd', 'diff.msd')
+        simulation.dff.set_charge(['diff.msd'], 'diff.ppf')
+        simulation.dff.export_gmx('diff.msd', 'diff.ppf', top_out=top)
+        nprocs = simulation.jobmanager.nprocs
+
+        ### return 0, 0 if nothing changed
+        if n_diff_lines('diff.top', 'topol.top') <= 1 and n_diff_lines('diff.itp', 'topol.itp') == 0:
+            return 0, 0
+        ###
+
+        # Pres
+        simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top, tpr_out='diff.tpr', silent=True)
+        simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', silent=True)
+
+        df = panedr.edr_to_df('diff.edr')
+        pene_series_diff = df.Potential
+
+        # HVap
+        top_hvap = 'diff-hvap.top'
+        simulation.gmx.generate_top_for_hvap(top, top_hvap)
+
+        simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_hvap, tpr_out='diff-hvap.tpr', silent=True)
+        simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', silent=True)
+
+        df = panedr.edr_to_df('diff-hvap.edr')
+        eint_series_diff = df.Potential
+        hvap_series_diff = 8.314 * self.T / 1000 - eint_series_diff / self.n_mol
+
+        print(self, k)
 
         df = panedr.edr_to_df('npt.edr')
-        dens_series = df.Density.loc[dPene_series.index]
+        dens_series = df.Density.loc[pene_series_diff.index]
+        pene_series = df.Potential.loc[pene_series_diff.index]
 
         df = panedr.edr_to_df('hvap.edr')
-        hvap_series = df.Potential.loc[dPene_series.index]
+        hvap_series = df.Potential.loc[pene_series_diff.index]
 
+        dPene_series = (pene_series_diff - pene_series) / delta
+        dHvap_series = (hvap_series_diff - hvap_series) / delta
+        ###
+
+        ### calculate the derivative
         dens_dPene = dens_series * dPene_series
         hvap_dPene = hvap_series * dPene_series
 
@@ -375,8 +429,11 @@ class Target(Base):
         subdir = os.path.basename(ppf_file)[:-4]
         log_hvap = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), 'hvap.log')
         sh_job = os.path.join(self.dir_base_npt, subdir, '%i-%i' % (self.T, self.P), jobmanager.sh)
-        shutil.move(log_hvap, log_hvap + '.bak')
-        shutil.move(sh_job, sh_job + '.bak')
+        try:
+            shutil.move(log_hvap, log_hvap + '.bak')
+            shutil.move(sh_job, sh_job + '.bak')
+        except:
+            pass
 
 
 class Result(Base):

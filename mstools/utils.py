@@ -92,3 +92,20 @@ def estimate_density_from_formula(f) -> float:
     from .formula import Formula
     # unit: g/mL
     return Formula.read(f).estimate_density()
+
+def n_diff_lines(f1: str, f2: str):
+    with open(f1) as f:
+        l1 = f.readlines()
+    with open(f2) as f:
+        l2 = f.readlines()
+
+    n1 = len(l1)
+    n2 = len(l2)
+
+    n_diff = 0
+    for i in range(min(n1, n2)):
+        if l1[i].strip() != l2[i].strip():
+            n_diff += 1
+    n_diff += abs(n1-n2)
+    return n_diff
+

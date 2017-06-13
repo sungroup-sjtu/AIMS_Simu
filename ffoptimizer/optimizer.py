@@ -97,7 +97,8 @@ class Optimizer():
         return result.params
 
     def optimize_npt(self, ppf_file):
-        log_file = os.path.join(CWD, 'Opt-%s.log' % os.path.basename(ppf_file)[:-4])
+        LOG = os.path.join(CWD, 'Opt-%s.log' % os.path.basename(ppf_file)[:-4])
+        ITERATION = 0
 
         def residual(params: Parameters):
             ### if result exist in database, ignore calculation
@@ -110,6 +111,7 @@ class Optimizer():
                 R = result.residual
                 if R is not None:
                     return json.loads(R)
+            ###
 
             ### save ppf file and run NPT
             ppf = PPF(ppf_file)
@@ -156,6 +158,22 @@ class Optimizer():
             self.db.session.commit()
             ###
 
+            ### write current parameteres and residual to log
+            ITERATION += 1
+            txt = '\nITERATION: %i\n' % ITERATION
+            txt += 'PARAMETERS:\n'
+            for k, v in params.items():
+                txt += '\t%s %10.5f\n' % (k, v.value)
+            txt += 'RESIDUE:\n'
+            for r in res:
+                txt += '%8.2f\n' % r
+            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
+
+            print(txt)
+            with open(LOG, 'a') as log:
+                log.write(txt)
+            ###
+
             return R
 
         def jacobian(params: Parameters):
@@ -197,30 +215,17 @@ class Optimizer():
                     txt += '%8.2f' % item
                 txt += '\n'
             print(txt)
-            with open(log_file, 'a') as log:
+            with open(LOG, 'a') as log:
                 log.write(txt)
             ###
 
             return J
 
         def callback(params: Parameters, iter: int, res: [float]):
-            txt = '\nITERATION: %i\n' % iter
-            txt += 'PARAMETERS:\n'
-            for k, v in params.items():
-                txt += '\t%s %10.5f\n' % (k, v.value)
-            txt += 'RESIDUE:\n'
-            for r in res:
-                txt += '%8.2f\n' % r
-            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, res)))
-
-            print(txt)
-            with open(log_file, 'a') as log:
-                log.write(txt)
-
             ### rename hvap.log and job.sh for next iteration
             for target in self.db.session.query(Target).all():
                 target.clear_npt_result(ppf_file)
-                ###
+
 
         ppf = PPF(ppf_file)
         params = Parameters()
