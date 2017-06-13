@@ -116,14 +116,15 @@ class Target(Base):
 
                 nprocs = simulation.jobmanager.nprocs
 
-                cmd = simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_out, tpr_out='diff-%s.tpr' % k, get_cmd=True)
+                simulation.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='diff.mdp', nstxtcout=0)
+                cmd = simulation.gmx.grompp(mdp='diff.mdp', top=top_out, tpr_out='diff-%s.tpr' % k, get_cmd=True)
                 commands.append(cmd)
                 cmd = simulation.gmx.mdrun(name='diff-%s' % k, nprocs=nprocs, rerun='npt.trr', get_cmd=True)
                 commands.append(cmd)
 
                 simulation.gmx.generate_top_for_hvap(top_out, top_out_hvap)
 
-                cmd = simulation.gmx.grompp(mdp='grompp-npt.mdp', top=top_out_hvap, tpr_out='diff-%s-hvap.tpr' % k,
+                cmd = simulation.gmx.grompp(mdp='diff.mdp', top=top_out_hvap, tpr_out='diff-%s-hvap.tpr' % k,
                                             get_cmd=True)
                 commands.append(cmd)
                 cmd = simulation.gmx.mdrun(name='diff-%s-hvap' % k, nprocs=nprocs, rerun='npt.trr', get_cmd=True)
