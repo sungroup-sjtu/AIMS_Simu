@@ -100,8 +100,8 @@ class Target(Base):
                 else:
                     raise Exception('Unknown parameter: ' + k)
 
-                msd_out = 'diff-%s.msd' % k
-                ppf_out = 'diff-%s.ppf' % k
+                msd_out = '_tmp.msd'
+                ppf_out = '_tmp.ppf'
                 top_out = 'diff-%s.top' % k
                 top_out_hvap = 'diff-%s-hvap.top' % k
 
@@ -112,7 +112,7 @@ class Target(Base):
 
                 shutil.copy('../../init.msd', msd_out)
                 simulation.dff.set_charge([msd_out], ppf_out)
-                simulation.dff.export_gmx(msd_out, ppf_out, gro_out='diff.gro', top_out=top_out)
+                simulation.dff.export_gmx(msd_out, ppf_out, gro_out='_tmp.gro', top_out=top_out)
 
                 nprocs = simulation.jobmanager.nprocs
 
@@ -129,6 +129,15 @@ class Target(Base):
                 commands.append(cmd)
                 cmd = simulation.gmx.mdrun(name='diff-%s-hvap' % k, nprocs=nprocs, rerun='npt.trr', get_cmd=True)
                 commands.append(cmd)
+
+            cmd = simulation.gmx.grompp(mdp='diff.mdp', top='topol.top', tpr_out='diff.tpr', get_cmd=True)
+            commands.append(cmd)
+            cmd = simulation.gmx.mdrun(name='diff', nprocs=nprocs, rerun='npt.trr', get_cmd=True)
+            commands.append(cmd)
+            cmd = simulation.gmx.grompp(mdp='diff.mdp', top='topol-hvap.top', tpr_out='diff-hvap.tpr', get_cmd=True)
+            commands.append(cmd)
+            cmd = simulation.gmx.mdrun(name='diff-hvap', nprocs=nprocs, rerun='npt.trr', get_cmd=True)
+            commands.append(cmd)
 
         commands.append('touch _finished_')
         npt.jobmanager.generate_sh(os.getcwd(), commands, name='NPT-%s-%i' % (self.name, self.T))
@@ -179,12 +188,13 @@ class Target(Base):
         hvap_series_diff = 8.314 * self.T / 1000 - eint_series_diff / self.n_mol
 
         # density, energy and Hvap
-        df = panedr.edr_to_df('npt.edr')
+        df = panedr.edr_to_df('diff.edr')
         dens_series = df.Density.loc[pene_series_diff.index]
         pene_series = df.Potential.loc[pene_series_diff.index]
 
-        df = panedr.edr_to_df('hvap.edr')
-        hvap_series = df.Potential.loc[pene_series_diff.index]
+        df = panedr.edr_to_df('diff-hvap.edr')
+        eint_series = df.Potential.loc[pene_series_diff.index]
+        hvap_series = 8.314 * self.T / 1000 - eint_series / self.n_mol
 
         # calculate the derivative
         dPene_series = (pene_series_diff - pene_series) / delta

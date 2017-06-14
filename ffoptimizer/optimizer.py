@@ -57,7 +57,10 @@ class Optimizer():
 
             for target in self.db.session.query(Target).all():
                 if not target.npt_started(ppf_file):
+                    ### next iteration
+                    target.iteration += 1
                     target.run_npt(ppf_file, paras)
+            self.db.session.commit()
             ###
 
             while True:
@@ -65,6 +68,7 @@ class Optimizer():
                 for target in self.db.session.query(Target).all():
                     if not target.npt_finished(ppf_file):
                         FINISHED = False
+                        break
 
                 if FINISHED:
                     break
@@ -74,7 +78,8 @@ class Optimizer():
                     time.sleep(60)
 
             R = []
-            for target in self.db.session.query(Target).all():
+            targets = self.db.session.query(Target).all()
+            for target in targets:
                 dens, hvap = target.get_npt_result(os.path.basename(ppf_file)[:-4])
                 R.append((dens - target.density) / target.density * 100 * target.wDensity)  # deviation  percent
                 R.append((hvap - target.hvap) / target.hvap * 100 * target.wHvap)  # deviation percent
@@ -90,13 +95,15 @@ class Optimizer():
 
             ### write current parameters and residual to log
             txt = '\nITERATION: %i\n' % self.iteration
-            txt += 'PARAMETERS:\n'
+            txt += '\nPARAMETERS:\n'
             for k, v in params.items():
-                txt += '\t%s %10.5f\n' % (k, v.value)
-            txt += 'RESIDUE:\n'
-            for r in R:
-                txt += '%8.2f\n' % r
-            txt += 'RSQ: %.2f\n\n' % np.sum(list(map(lambda x: x ** 2, R)))
+                txt += '%10.5f %s\n' % (v.value, k)
+            txt += '\nRESIDUE:\n'
+            for i, r in enumerate(R):
+                name_prop = targets[i//2].name
+                name_prop += ' density' if i % 2 == 0 else ' hvap'
+                txt += '%8.2f %s\n' % (r, name_prop)
+            txt += '\nRSQ: %.2f\n' % np.sum(list(map(lambda x: x ** 2, R)))
 
             print(txt)
             with open(LOG, 'a') as log:
@@ -123,7 +130,8 @@ class Optimizer():
                 paras[k] = v.value
 
             J = []
-            for target in self.db.session.query(Target).all():
+            targets = self.db.session.query(Target).all()
+            for target in targets:
                 dDens, dHvap = target.get_dDens_dHvap_from_paras(ppf_file, paras)
                 J.append([i / target.density * 100 * target.wDensity for i in dDens])  # deviation  percent
                 J.append([i / target.hvap * 100 * target.wHvap for i in dHvap])  # deviation  percent
@@ -139,10 +147,16 @@ class Optimizer():
 
             ### write Jacobian to log
             txt = '\nJACOBIAN MATRIX:\n'
-            for row in J:
+            for k in params.keys():
+                txt += '%9s' % k
+            txt += '\n'
+            for i, row in enumerate(J):
+                name_prop = targets[i//2].name
+                name_prop += ' density' if i % 2 == 0 else ' hvap'
                 for item in row:
-                    txt += '%8.2f' % item
-                txt += '\n'
+                    txt += '%9.2f' % item
+                txt += ' %s\n' % name_prop
+
             print(txt)
             with open(LOG, 'a') as log:
                 log.write(txt)
@@ -154,8 +168,6 @@ class Optimizer():
             ### clear _finished_ and job.sh for next iteration
             for target in self.db.session.query(Target).all():
                 target.clear_npt_result(ppf_file)
-                target.iteration += 1
-            self.db.session.commit()
 
         ppf = PPF(ppf_file)
         params = Parameters()
@@ -163,9 +175,9 @@ class Optimizer():
             if k.endswith('r0'):
                 params.add(k, value=v, min=2, max=5)
             elif k.endswith('e0'):
-                params.add(k, value=v, min=0.01, max=2)
+                params.add(k, value=v, min=0.005, max=0.2)
             elif k.endswith('bi'):
-                params.add(k, value=v, min=-1, max=1)
+                params.add(k, value=v, min=-0.3, max=0)
 
         minimize = Minimizer(residual, params, iter_cb=callback)
         result = minimize.leastsq(Dfun=jacobian, ftol=0.0001)
