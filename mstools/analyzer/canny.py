@@ -4,8 +4,6 @@
 
 import math
 import numpy as np
-import matplotlib.pyplot as plt
-
 def canny1d(interval, y, nms_width, peak_threshold=0.1, gauss_sigma=1, gauss_width=5, grad_width=3, debug=False):
     """ 1-dimension canny algorithm. 
      Arguments:
@@ -21,6 +19,13 @@ def canny1d(interval, y, nms_width, peak_threshold=0.1, gauss_sigma=1, gauss_wid
     Returns:
         A list of tuple (t, value) for peaks;
     """
+    if debug:
+        try:
+            import matplotlib.pyplot as plt
+        except:
+            print('matplotlib not found, cannot debug')
+            debug = False
+
     y_oper = np.concatenate((y, y)) # stack twice for boundary results
     t = np.linspace(0,interval*len(y),len(y))
     t_oper = np.concatenate((t, t+len(y)*interval))

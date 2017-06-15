@@ -3,8 +3,7 @@ integrator      = steep
 emtol           = 200
 nsteps          = -1
 
-rlist           = 1.2
-coulombtype     = PME
-rcoulomb        = 1.2
-rvdw            = 1.2
-DispCorr        = EnerPres
+rlist           = 0.8
+coulombtype     = cut-off
+rcoulomb        = 0.8
+rvdw            = 0.8
