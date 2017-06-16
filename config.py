@@ -22,7 +22,7 @@ class ClusterConfig(BaseConfig):
     DFF_ROOT = '/share/apps/dff/msdserver'
     PACKMOL_BIN = '/share/apps/tools/packmol'
     LMP_BIN = '/share/apps/lammps/lmp-stable'
-    GMX_BIN = '/share/apps/gromacs/msdserver/bin/gmx'
+    GMX_BIN = '/share/apps/gromacs/msdserver-static-compatible/bin/gmx'
 
     JOB_MANAGER = 'torque'
     JOB_QUEUE = 'cpu'
@@ -34,7 +34,7 @@ class MacConfig(BaseConfig):
     DFF_ROOT = '/Users/zheng/Projects/DFF/Developing'
     PACKMOL_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Packmol/packmol.exe'
     LMP_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Lammps/lammps'
-    GMX_BIN = '/usr/local/bin/gmx'
+    GMX_BIN = '/opt/gromacs/2016.3/gmx'
 
 
 class XPSConfig(BaseConfig):

@@ -13,30 +13,32 @@ class Slurm(JobManager):
 
     def generate_sh(self, workdir, commands, name):
         with open(self.sh, 'w') as f:
-            f.write('#!/bin/bash\n'
-                    '#SBATCH --job-name=%(name)s\n'
-                    '#SBATCH --partition=%(queue)s\n'
-                    '#SBATCH --output=%(out)s\n'
-                    '#SBATCH --error=%(err)s\n'
-                    '#SBATCH -n %(nprocs)s\n'
-                    '#SBATCH --tasks-per-node=%(tasks)s\n\n'
-                    'source /usr/share/Modules/init/bash\n'
-                    'unset MODULEPATH\n'
-                    'module use /lustre/usr/modulefiles/pi\n'
-                    'module purge\n'
-                    'module load icc/16.0 impi/5.1 mkl/11.3\n'
-                    'export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so\n'
-                    'export I_MPI_FABRICS=shm:dapl\n\n'
-                    'source $HOME/software/gromacs/5.1.4-msdserver/bin/GMXRC.bash\n\n'
-                    'cd %(workdir)s\n\n'
-                    % ({'name': name,
-                        'out': self.out,
-                        'err': self.err,
-                        'queue': self.queue,
-                        'nprocs': self.nprocs,
-                        'tasks': min(self.nprocs, 16),
-                        'workdir': workdir
-                        })
+            f.write('''#!/bin/bash
+#SBATCH --job-name=%(name)s
+#SBATCH --partition=%(queue)s
+#SBATCH --output=%(out)s
+#SBATCH --error=%(err)s
+#SBATCH -n %(nprocs)s
+#SBATCH --tasks-per-node=%(tasks)s
+
+source /usr/share/Modules/init/bash
+unset MODULEPATH
+module use /lustre/usr/modulefiles/pi
+module purge
+module load icc/16.0 impi/5.1 mkl/11.3
+
+export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
+export I_MPI_FABRICS=shm:dapl
+
+cd %(workdir)s
+''' % ({'name': name,
+        'out': self.out,
+        'err': self.err,
+        'queue': self.queue,
+        'nprocs': self.nprocs,
+        'tasks': min(self.nprocs, 16),
+        'workdir': workdir
+        })
                     )
             for cmd in commands:
                 f.write(cmd + '\n')
