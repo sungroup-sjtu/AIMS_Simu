@@ -8,13 +8,13 @@ from .node import Node
 
 class Torque(JobManager):
     def __init__(self, queue_dict: OrderedDict):
-        super().__init__()
+        super().__init__(queue_dict.keys()[0], queue_dict.values()[0])
         self.queue_dict = queue_dict
         self.sh = '_job_torque.sh'
         self.out = '_job_torque.out'
         self.err = '_job_torque.err'
 
-    def get_preferred_queue_nprocs(self):
+    def refresh_preferred_queue(self) -> bool:
         if len(self.queue_dict) > 1:
             try:
                 available_queues = self.get_available_queues()
@@ -23,12 +23,15 @@ class Torque(JobManager):
             else:
                 for queue in self.queue_dict.keys():
                     if available_queues[queue] > 0:
-                        return queue, available_queues[queue]
+                        self.queue = queue
+                        self.nprocs = available_queues[queue]
+                        return True
 
-        return self.queue_dict.keys()[0], self.queue_dict.values()[0]
+        self.queue = self.queue_dict.keys()[0]
+        self.nprocs = self.queue_dict.values()[0]
+        return False
 
     def generate_sh(self, workdir, commands, name):
-        queue, nprocs = self.get_preferred_queue_nprocs()
         with open(self.sh, 'w') as f:
             f.write('#!/bin/sh\n'
                     '#PBS -N %(name)s\n'
@@ -40,8 +43,8 @@ class Torque(JobManager):
                     % ({'name': name,
                         'out': self.out,
                         'err': self.err,
-                        'queue': queue,
-                        'nprocs': nprocs,
+                        'queue': self.queue,
+                        'nprocs': self.nprocs,
                         'workdir': workdir
                         })
                     )

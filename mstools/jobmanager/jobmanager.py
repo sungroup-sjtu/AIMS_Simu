@@ -3,6 +3,9 @@ class JobManager:
         self.queue = queue
         self.nprocs = nprocs
 
+    def refresh_preferred_queue(self) -> bool:
+        return True
+
     def generate_sh(self, workdir, commands: [str], name):
         pass
 

@@ -3,12 +3,11 @@ import shutil
 
 from ..simulation import Simulation
 from ...errors import GmxError
-from ...jobmanager import Local
 from ...wrapper import GMX
 
 
 class GmxSimulation(Simulation):
-    def __init__(self, packmol_bin=None, dff_root=None, gmx_bin=None, jobmanager=Local()):
+    def __init__(self, packmol_bin=None, dff_root=None, gmx_bin=None, jobmanager=None):
         super().__init__(packmol_bin=packmol_bin, dff_root=dff_root, jobmanager=jobmanager)
         self.gmx = GMX(gmx_bin=gmx_bin)
         self.logs = []  # used for checking whether the job is successfully finished
