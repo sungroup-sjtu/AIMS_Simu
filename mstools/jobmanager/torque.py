@@ -8,7 +8,7 @@ from .node import Node
 
 class Torque(JobManager):
     def __init__(self, queue_dict: OrderedDict):
-        super().__init__(queue_dict.keys()[0], queue_dict.values()[0])
+        super().__init__(list(queue_dict.keys())[0], list(queue_dict.values())[0])
         self.queue_dict = queue_dict
         self.sh = '_job_torque.sh'
         self.out = '_job_torque.out'
@@ -24,11 +24,11 @@ class Torque(JobManager):
                 for queue in self.queue_dict.keys():
                     if available_queues[queue] > 0:
                         self.queue = queue
-                        self.nprocs = available_queues[queue]
+                        self.nprocs = self.queue_dict[queue]
                         return True
 
-        self.queue = self.queue_dict.keys()[0]
-        self.nprocs = self.queue_dict.values()[0]
+        self.queue = list(self.queue_dict.keys())[0]
+        self.nprocs = list(self.queue_dict.values())[0]
         return False
 
     def generate_sh(self, workdir, commands, name):
@@ -141,7 +141,8 @@ class Torque(JobManager):
         for node in self.get_nodes():
             if node.queue not in queues.keys():
                 queues[node.queue] = 0
-            if node.state == 'free':
+            if node.state == 'free' and node.n_free_cores >= self.queue_dict[node.queue]:
                 queues[node.queue] += 1
 
         return queues
+
