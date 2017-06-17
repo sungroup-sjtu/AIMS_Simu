@@ -8,7 +8,7 @@ from .jobmanager import JobManager
 class Slurm(JobManager):
     def __init__(self, queue_dict: OrderedDict):
         # Current only support one queue
-        super().__init__(queue=queue_dict.keys()[0], nprocs=queue_dict.values()[0])
+        super().__init__(queue=list(queue_dict.keys())[0], nprocs=list(queue_dict.values())[0])
         self.sh = '_job_slurm.sh'
         self.out = '_job_slurm.out'
         self.err = '_job_slurm.err'
