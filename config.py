@@ -1,5 +1,6 @@
 import os
 import socket
+from collections import OrderedDict
 
 
 class BaseConfig:
@@ -22,11 +23,10 @@ class ClusterConfig(BaseConfig):
     DFF_ROOT = '/share/apps/dff/msdserver'
     PACKMOL_BIN = '/share/apps/tools/packmol'
     LMP_BIN = '/share/apps/lammps/lmp-stable'
-    GMX_BIN = '/share/apps/gromacs/msdserver-static-compatible/bin/gmx'
+    GMX_BIN = '/share/apps/gromacs/2016.3-static-compatible/bin/gmx'
 
     JOB_MANAGER = 'torque'
-    JOB_QUEUE = 'cpu'
-    NPROC_PER_JOB = 8
+    QUEUE_DICT = OrderedDict([('cpu, 8')])
 
 
 class MacConfig(BaseConfig):

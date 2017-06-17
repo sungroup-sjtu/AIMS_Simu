@@ -2,8 +2,8 @@ from .jobmanager import JobManager
 
 
 class Local(JobManager):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, nprocs):
+        super().__init__(nprocs=nprocs)
         self.sh = '_job_local.sh'
 
     def generate_sh(self, workdir, commands, name=None):

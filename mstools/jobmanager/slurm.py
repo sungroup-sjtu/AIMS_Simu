@@ -1,12 +1,14 @@
 import subprocess
 from subprocess import Popen
+from collections import OrderedDict
 
 from .jobmanager import JobManager
 
 
 class Slurm(JobManager):
-    def __init__(self, queue, nprocs):
-        super().__init__(queue=queue, nprocs=nprocs)
+    def __init__(self, queue_dict: OrderedDict):
+        # Current only support one queue
+        super().__init__(queue=queue_dict.keys()[0], nprocs=queue_dict.values()[0])
         self.sh = '_job_slurm.sh'
         self.out = '_job_slurm.out'
         self.err = '_job_slurm.err'
@@ -47,29 +49,29 @@ cd %(workdir)s
         Popen(['sbatch', self.sh]).communicate()
 
     def get_info_from_id(self, id) -> bool:
-        #try:
-            #output = subprocess.check_output(['qstat', '-f', str(id)])
-        #except:
-            #return False
+        # try:
+        # output = subprocess.check_output(['qstat', '-f', str(id)])
+        # except:
+        # return False
 
-        #for line in output.decode().splitlines():
-            #if line.strip().startswith('job_state'):
-                #state = line.split()[-1]
-                #if state in ['R', 'Q']:
-                    #return True
-                #else:
-                    #return False
+        # for line in output.decode().splitlines():
+        # if line.strip().startswith('job_state'):
+        # state = line.split()[-1]
+        # if state in ['R', 'Q']:
+        # return True
+        # else:
+        # return False
         return False
 
     def get_id_from_name(self, name: str) -> int:
-        #try:
-            #output = subprocess.check_output(['qstat'])
-        #except:
-            #raise
+        # try:
+        # output = subprocess.check_output(['qstat'])
+        # except:
+        # raise
 
-        #for line in output.decode().splitlines():
-            #if line.find(name) != -1:
-                #return int(line.strip().split()[0])
+        # for line in output.decode().splitlines():
+        # if line.find(name) != -1:
+        # return int(line.strip().split()[0])
 
         return None
 
@@ -80,12 +82,12 @@ cd %(workdir)s
         return self.get_info_from_id(id)
 
     def kill_job(self, name) -> bool:
-        #id = self.get_id_from_name(name)
-        #if id == None:
-            #return False
-        #try:
-            #subprocess.check_call(['qdel', str(id)])
-        #except:
-            #raise Exception('Cannot kill job: %s' % name)
+        # id = self.get_id_from_name(name)
+        # if id == None:
+        # return False
+        # try:
+        # subprocess.check_call(['qdel', str(id)])
+        # except:
+        # raise Exception('Cannot kill job: %s' % name)
 
         return True
