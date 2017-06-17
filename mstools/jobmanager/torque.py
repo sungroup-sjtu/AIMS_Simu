@@ -16,16 +16,12 @@ class Torque(JobManager):
 
     def refresh_preferred_queue(self) -> bool:
         if len(self.queue_dict) > 1:
-            try:
-                available_queues = self.get_available_queues()
-            except Exception as e:
-                print(str(e))
-            else:
-                for queue in self.queue_dict.keys():
-                    if available_queues[queue] > 0:
-                        self.queue = queue
-                        self.nprocs = self.queue_dict[queue]
-                        return True
+            available_queues = self.get_available_queues()
+            for queue in self.queue_dict.keys():
+                if queue in available_queues.keys() and available_queues[queue] > 0:
+                    self.queue = queue
+                    self.nprocs = self.queue_dict[queue]
+                    return True
 
         self.queue = list(self.queue_dict.keys())[0]
         self.nprocs = list(self.queue_dict.values())[0]
@@ -138,11 +134,16 @@ class Torque(JobManager):
 
     def get_available_queues(self):
         queues = {}
-        for node in self.get_nodes():
-            if node.queue not in queues.keys():
-                queues[node.queue] = 0
-            if node.state == 'free' and node.n_free_cores >= self.queue_dict[node.queue]:
-                queues[node.queue] += 1
+        try:
+            nodes = self.get_nodes()
+        except Exception as e:
+            print(str(e))
+        else:
+            for node in self.get_nodes():
+                if node.queue not in queues.keys():
+                    queues[node.queue] = 0
+                if node.state == 'free' and node.queue in self.queue_dict.keys() and node.n_free_cores >= self.queue_dict[node.queue]:
+                    queues[node.queue] += 1
 
         return queues
 
