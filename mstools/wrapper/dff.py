@@ -26,6 +26,7 @@ class DFF:
 
         self.DFFJOB_BIN = os.path.join(self.DFF_BIN_DIR, 'dffjob.exe')
         self.DFFEXP_BIN = os.path.join(self.DFF_BIN_DIR, 'dffexp.exe')
+        self.DFFFIT_BIN = os.path.join(self.DFF_BIN_DIR, 'dfffit.exe')
 
     def convert_model_to_msd(self, model, msd_out):
         pass
@@ -153,6 +154,20 @@ class DFF:
         out, err = sp.communicate()
         if err.decode() != '':
             raise DffError('Build failed: %s' % err.decode())
+
+    def fit_torsion(self, qmd, msd, ppf_in, ppf_out, torsion):
+        'TORS C1 C2 C3 C4 1000.0 180.0 15.0 12'
+        fftype = self.get_ff_type_from_ppf(ppf_in)
+        dfi = open(os.path.join(DFF.TEMPLATE_DIR, 't_fit_torsion.dfi')).read()
+        dfi = dfi.replace('%ROOT%', self.DFF_ROOT).replace('%QMD%', qmd).replace('%MSD%', msd) \
+            .replace('%FFTYPE%', fftype).replace('%PPF_IN%', ppf_in).replace('%PPF_OUT%', ppf_out) \
+            .replace('%TORSION%', torsion)
+        with open('fit_torsion.dfi', 'w') as f:
+            f.write(dfi)
+        sp = Popen([self.DFFFIT_BIN, 'fit_torsion'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        out, err = sp.communicate()
+        if err.decode() != '':
+            raise DffError('Fit torsion failed: %s' % err.decode())
 
     @staticmethod
     def get_ff_type_from_ppf(ppf):

@@ -139,11 +139,11 @@ class Torque(JobManager):
         except Exception as e:
             print(str(e))
         else:
-            for node in self.get_nodes():
+            for node in nodes:
                 if node.queue not in queues.keys():
                     queues[node.queue] = 0
-                if node.state == 'free' and node.queue in self.queue_dict.keys() and node.n_free_cores >= self.queue_dict[node.queue]:
+                if node.state == 'free' and node.queue in self.queue_dict.keys() \
+                        and node.n_free_cores >= self.queue_dict[node.queue]:
                     queues[node.queue] += 1
 
         return queues
-
