@@ -339,9 +339,9 @@ class GMX:
         raise Exception('Cannot open trajectory')
 
     @staticmethod
-    def generate_gmx_multidir_cmds(dirs:[str], cmds:[str], n_parallel=8) -> [[str]]:
+    def generate_gpu_multidir_cmds(dirs: [str], cmds: [str], n_parallel=8, n_gpu=2) -> [[str]]:
         import math, re
-        def replace_multidir_cmd(dirs:[str], cmd: str) -> [str]:
+        def replace_gpu_multidir_cmd(dirs: [str], cmd: str) -> [str]:
             cmd_multidir = []
             if cmd.startswith('export'):
                 cmd_multidir.append(cmd)  # do nothing for export environment
@@ -350,6 +350,8 @@ class GMX:
                 cmd = re.sub('-ntomp\s+[0-9]+', '', cmd)  # remove -ntomp xx
                 cmd = 'mpirun -np %i %s' % (len(dirs), cmd)  # add mpirun -np xx
                 cmd += ' -multidir ' + ' '.join(dirs)  # add -multidir xx xx xx
+                cmd += ' -gpu_id ' + ''.join(map(str, range(n_gpu))) * (len(dirs) // n_gpu) \
+                       + ''.join(map(str, range(len(dirs) % n_gpu))) # add -gpu_id 01230123012
                 cmd_multidir.append(cmd)
                 return cmd_multidir
             else:
@@ -358,11 +360,11 @@ class GMX:
                     cmd_multidir.append(cmd)
                 return cmd_multidir
 
-        commands_list:[[str]] = []
-        n_group: int = math.ceil(dirs / n_parallel)
+        commands_list: [[str]] = []
+        n_group: int = math.ceil(len(dirs) / n_parallel)
         for i in range(n_group):
             cmds_multidir: [[str]] = []
             for cmd in cmds:
-                cmds_multidir += replace_multidir_cmd(dirs[i * n_parallel:(i + 1) * n_parallel], cmd)
+                cmds_multidir += replace_gpu_multidir_cmd(dirs[i * n_parallel:(i + 1) * n_parallel], cmd)
             commands_list.append(cmds_multidir)
         return commands_list
