@@ -33,10 +33,17 @@ class Npt(GmxSimulation):
 
         nprocs = self.jobmanager.nprocs
         commands = []
+        # energy minimization
+        self.gmx.prepare_mdp_from_template('t_em.mdp', mdp_out='grompp-em.mdp')
+        cmd = self.gmx.grompp(mdp='grompp-em.mdp', gro=gro, top=top, tpr_out='em.tpr', get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name='em', nprocs=nprocs, get_cmd=True)
+        commands.append(cmd)
+
         # NVT annealing from 0 to 2000 K to target T with Langevin thermostat
         self.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-anneal.mdp', T=T,
                                            nsteps=int(1E5), nstxtcout=0)
-        cmd = self.gmx.grompp(mdp='grompp-anneal.mdp', gro=gro, top=top, tpr_out='anneal.tpr', get_cmd=True)
+        cmd = self.gmx.grompp(mdp='grompp-anneal.mdp', gro='em.gro', top=top, tpr_out='anneal.tpr', get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.mdrun(name='anneal', nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
