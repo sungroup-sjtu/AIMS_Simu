@@ -3,6 +3,8 @@ integrator      = steep
 emtol           = 200
 nsteps          = -1
 
+cutoff-scheme   = verlet
+
 rlist           = 0.8
 coulombtype     = cut-off
 rcoulomb        = 0.8
