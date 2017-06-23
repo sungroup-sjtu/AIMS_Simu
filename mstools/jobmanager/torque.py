@@ -52,7 +52,7 @@ class Torque(JobManager):
     def submit(self, sh=None):
         if sh is None:
             sh = self.sh
-        Popen(['qsub', self.sh]).communicate()
+        Popen(['qsub', sh]).communicate()
 
     def get_info_from_id(self, id) -> bool:
         try:
