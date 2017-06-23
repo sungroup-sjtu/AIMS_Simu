@@ -72,7 +72,8 @@ class Npt(GmxSimulation):
 
         top_hvap = 'topol-hvap.top'
         self.gmx.generate_top_for_hvap(top, top_hvap)
-        cmd = self.gmx.grompp(mdp='grompp-npt.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
+        self.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-hvap.mdp', nstxtcout=0, restart=True)
+        cmd = self.gmx.grompp(mdp='grompp-hvap.mdp', gro='eq.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.mdrun(name='hvap', nprocs=nprocs, rerun='npt.xtc', get_cmd=True)
         commands.append(cmd)
