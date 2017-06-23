@@ -337,3 +337,32 @@ class GMX:
                 return length
 
         raise Exception('Cannot open trajectory')
+
+    @staticmethod
+    def generate_gmx_multidir_cmds(dirs:[str], cmds:[str], n_parallel=8) -> [[str]]:
+        import math, re
+        def replace_multidir_cmd(dirs:[str], cmd: str) -> [str]:
+            cmd_multidir = []
+            if cmd.startswith('export'):
+                cmd_multidir.append(cmd)  # do nothing for export environment
+                return cmd_multidir
+            elif cmd.find('mdrun') != -1:
+                cmd = re.sub('-ntomp\s+[0-9]+', '', cmd)  # remove -ntomp xx
+                cmd = 'mpirun -np %i %s' % (len(dirs), cmd)  # add mpirun -np xx
+                cmd += ' -multidir ' + ' '.join(dirs)  # add -multidir xx xx xx
+                cmd_multidir.append(cmd)
+                return cmd_multidir
+            else:
+                for dir in dirs:
+                    cmd_multidir.append('cd %s' % dir)  # do it in every directory
+                    cmd_multidir.append(cmd)
+                return cmd_multidir
+
+        commands_list:[[str]] = []
+        n_group: int = math.ceil(dirs / n_parallel)
+        for i in range(n_group):
+            cmds_multidir: [[str]] = []
+            for cmd in cmds:
+                cmds_multidir += replace_multidir_cmd(dirs[i * n_parallel:(i + 1) * n_parallel], cmd)
+            commands_list.append(cmds_multidir)
+        return commands_list

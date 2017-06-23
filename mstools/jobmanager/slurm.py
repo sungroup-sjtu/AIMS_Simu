@@ -10,11 +10,13 @@ class Slurm(JobManager):
         # Current only support one queue
         super().__init__(queue=list(queue_dict.keys())[0], nprocs=list(queue_dict.values())[0])
         self.sh = '_job_slurm.sh'
-        self.out = '_job_slurm.out'
-        self.err = '_job_slurm.err'
 
-    def generate_sh(self, workdir, commands, name):
-        with open(self.sh, 'w') as f:
+    def generate_sh(self, workdir, commands, name, sh=None):
+        if sh is None:
+            sh = self.sh
+        out = sh[:-2] + 'out'
+        err = sh[:-2] + 'err'
+        with open(sh, 'w') as f:
             f.write('''#!/bin/bash
 #SBATCH --job-name=%(name)s
 #SBATCH --partition=%(queue)s
@@ -34,8 +36,8 @@ export I_MPI_FABRICS=shm:dapl
 
 cd %(workdir)s
 ''' % ({'name': name,
-        'out': self.out,
-        'err': self.err,
+        'out': out,
+        'err': err,
         'queue': self.queue,
         'nprocs': self.nprocs,
         'tasks': min(self.nprocs, 16),
@@ -45,8 +47,10 @@ cd %(workdir)s
             for cmd in commands:
                 f.write(cmd + '\n')
 
-    def submit(self):
-        Popen(['sbatch', self.sh]).communicate()
+    def submit(self, sh=None):
+        if sh is None:
+            sh = self.sh
+        Popen(['sbatch', sh]).communicate()
 
     def get_info_from_id(self, id) -> bool:
         # try:

@@ -11,8 +11,6 @@ class Torque(JobManager):
         super().__init__(list(queue_dict.keys())[0], list(queue_dict.values())[0])
         self.queue_dict = queue_dict
         self.sh = '_job_torque.sh'
-        self.out = '_job_torque.out'
-        self.err = '_job_torque.err'
 
     def refresh_preferred_queue(self) -> bool:
         if len(self.queue_dict) > 1:
@@ -27,8 +25,12 @@ class Torque(JobManager):
         self.nprocs = list(self.queue_dict.values())[0]
         return False
 
-    def generate_sh(self, workdir, commands, name):
-        with open(self.sh, 'w') as f:
+    def generate_sh(self, workdir, commands, name, sh=None):
+        if sh is None:
+            sh = self.sh
+        out = sh[:-2] + 'out'
+        err = sh[:-2] + 'err'
+        with open(sh, 'w') as f:
             f.write('#!/bin/sh\n'
                     '#PBS -N %(name)s\n'
                     '#PBS -o %(out)s\n'
@@ -37,8 +39,8 @@ class Torque(JobManager):
                     '#PBS -l nodes=1:ppn=%(nprocs)s\n\n'
                     'cd %(workdir)s\n'
                     % ({'name': name,
-                        'out': self.out,
-                        'err': self.err,
+                        'out': out,
+                        'err': err,
                         'queue': self.queue,
                         'nprocs': self.nprocs,
                         'workdir': workdir
@@ -47,7 +49,9 @@ class Torque(JobManager):
             for cmd in commands:
                 f.write(cmd + '\n')
 
-    def submit(self):
+    def submit(self, sh=None):
+        if sh is None:
+            sh = self.sh
         Popen(['qsub', self.sh]).communicate()
 
     def get_info_from_id(self, id) -> bool:

@@ -6,8 +6,10 @@ class Local(JobManager):
         super().__init__(nprocs=nprocs)
         self.sh = '_job_local.sh'
 
-    def generate_sh(self, workdir, commands, name=None):
-        with open(self.sh, 'w') as f:
+    def generate_sh(self, workdir, commands, name=None, sh=None):
+        if sh is None:
+            sh = self.sh
+        with open(sh, 'w') as f:
             f.write('#!/bin/sh\n\n'
                     'cd %(workdir)s\n'
                     % ({'workdir': workdir})
@@ -15,7 +17,7 @@ class Local(JobManager):
             for cmd in commands:
                 f.write(cmd + '\n')
 
-    def submit(self):
+    def submit(self, sh=None):
         print('Localhost is only for test')
 
     def get_info(self, name):
