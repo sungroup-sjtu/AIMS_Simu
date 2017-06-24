@@ -339,7 +339,7 @@ class GMX:
         raise Exception('Cannot open trajectory')
 
     @staticmethod
-    def generate_gpu_multidir_cmds(dirs: [str], cmds: [str], n_parallel=8, n_gpu=2) -> [[str]]:
+    def generate_gpu_multidir_cmds(dirs: [str], commands: [str], n_parallel=8, n_gpu=2) -> [[str]]:
         import math, re
         def replace_gpu_multidir_cmd(dirs: [str], cmd: str) -> str:
             if cmd.startswith('export'):
@@ -357,8 +357,11 @@ class GMX:
         commands_list: [[str]] = []
         n_group: int = math.ceil(len(dirs) / n_parallel)
         for i in range(n_group):
-            cmds_multidir: [str] = []
-            for cmd in cmds:
-                cmds_multidir.append(replace_gpu_multidir_cmd(dirs[i * n_parallel:(i + 1) * n_parallel], cmd))
-            commands_list.append(cmds_multidir)
+            commands_multidir: [str] = []
+            for cmd in commands:
+                multidir = dirs[i * n_parallel:(i + 1) * n_parallel]
+                for i, dir in enumerate(multidir):
+                    commands_multidir.append('dir%i=%s' % (i, dir))  # replace full dir path with $dir1, $dir2 ...
+                commands_multidir.append(replace_gpu_multidir_cmd(['dir%i' % i for i in range(len(multidir))], cmd))
+            commands_list.append(commands_multidir)
         return commands_list
