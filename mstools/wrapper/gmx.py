@@ -356,12 +356,13 @@ class GMX:
 
         commands_list: [[str]] = []
         n_group: int = math.ceil(len(dirs) / n_parallel)
-        for i in range(n_group):
+        for n in range(n_group):
+            multidir = dirs[n * n_parallel:(n + 1) * n_parallel]
             commands_multidir: [str] = []
+            for j, dirname in enumerate(multidir):
+                commands_multidir.append('dir%i=%s' % (j, dirname))  # replace full dir path with $dir1, $dir2 ...
             for cmd in commands:
-                multidir = dirs[i * n_parallel:(i + 1) * n_parallel]
-                for i, dir in enumerate(multidir):
-                    commands_multidir.append('dir%i=%s' % (i, dir))  # replace full dir path with $dir1, $dir2 ...
-                commands_multidir.append(replace_gpu_multidir_cmd(['dir%i' % i for i in range(len(multidir))], cmd))
+                commands_multidir.append(replace_gpu_multidir_cmd(['$dir%i' % j for j in range(len(multidir))], cmd))
             commands_list.append(commands_multidir)
         return commands_list
+
