@@ -83,16 +83,16 @@ class GMX:
         elif tcoupl.lower() == 'v-rescale':
             integrator = 'md'
             tcoupl = 'v-rescale'
-            tau_t = '0.5'
+            tau_t = '0.1'
         else:
             raise Exception('tcoupl not good, should be one of langvein, nose-hoover, v-rescale')
 
         if pcoupl.lower() == 'berendsen':
-            tau_p = '0.5'
+            tau_p = '1'
         elif pcoupl.lower() == 'parrinello-rahman':
-            tau_p = '2'
+            tau_p = '5'
         elif pcoupl.lower() == 'mttk':
-            tau_p = '2'
+            tau_p = '5'
             constraints = 'none'
         else:
             raise Exception('pcoupl not good, should be one of berendsen, parrinello-rahman, mttk')
