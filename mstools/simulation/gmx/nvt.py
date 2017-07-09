@@ -19,7 +19,7 @@ class Nvt(GmxSimulation):
         pass
 
     def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None,
-                prior_job_dir=None, prior_job_result: Dict = None):
+                prior_job_dir=None, prior_job_result: Dict = None, nst_eq=int(1E5), nst_run=int(5E4)):
         # Copy topology files from prior NPT simulation
         shutil.copy(os.path.join(prior_job_dir, top), '.')
         for f in os.listdir(model_dir):
@@ -51,18 +51,31 @@ class Nvt(GmxSimulation):
 
         nprocs = self.jobmanager.nprocs
         commands = []
+
         # Heat capacity using 2-Phase Thermodynamics
+        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-eq.mdp', T=T,
+                                           nsteps=nst_eq, tcoupl='nose-hoover', restart=True)
         self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-nvt.mdp', T=T,
-                                           nsteps=int(4E4), nstvout=4, nstenergy=1, tcoupl='nose-hoover', restart=True)
+                                           nsteps=nst_run, nstvout=4, nstenergy=1, tcoupl='nose-hoover', restart=True)
         for i in range(5):
-            gro_nvt = 'conf%i.gro' % i
-            name = 'nvt%i' % i
-            tpr = name + '.tpr'
-            cmd = self.gmx.grompp(mdp='grompp-nvt.mdp', gro=gro_nvt, top=top, tpr_out=tpr, get_cmd=True)
+            gro_conf = 'conf%i.gro' % i
+            gro_eq = 'eq%i.gro' % i
+            name_eq = 'eq%i' % i
+            name_nvt = 'nvt%i' % i
+            tpr_eq = name_eq + '.tpr'
+            tpr_nvt = name_nvt + '.tpr'
+            cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro=gro_conf, top=top, tpr_out=tpr_eq, get_cmd=True)
             commands.append(cmd)
-            cmd = self.gmx.mdrun(name=name, nprocs=nprocs, get_cmd=True)
+            cmd = self.gmx.mdrun(name=name_eq, nprocs=nprocs, get_cmd=True)
             commands.append(cmd)
-            cmd = self.gmx.dos(trr=name + '.trr', tpr=tpr, T=T, log_out='dos%i.log' % i, get_cmd=True)
+
+            cmd = self.gmx.grompp(mdp='grompp-nvt.mdp', gro=gro_eq, top=top, tpr_out=tpr_nvt,
+                                  cpt=name_eq + '.cpt', get_cmd=True)
+            commands.append(cmd)
+            cmd = self.gmx.mdrun(name=name_nvt, nprocs=nprocs, get_cmd=True)
+            commands.append(cmd)
+
+            cmd = self.gmx.dos(trr=name_nvt + '.trr', tpr=tpr, T=T, log_out='dos%i.log' % i, get_cmd=True)
             commands.append(cmd)
 
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
