@@ -62,7 +62,7 @@ class GMX:
         else:
             (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
             sp = Popen(cmd.split(), stdin=PIPE, stdout=stdout, stderr=stderr)
-            sp.communicate(input=group)
+            sp.communicate(input=group.encode())
 
     @staticmethod
     def prepare_mdp_from_template(template: str, mdp_out='grompp.mdp', T=298, P=1, nsteps=10000, dt=0.001,
@@ -317,7 +317,7 @@ class GMX:
             self.GMX_BIN, trr, tpr, gro_out, str(begin), str(end), str(dt))
         (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
         sp = Popen(cmd.split(), stdin=PIPE, stdout=stdout, stderr=stderr)
-        sp.communicate(input='System')
+        sp.communicate(input='System'.encode())
 
     def extend_tpr(self, tpr, extend, silent=True):
         cmd = '%s -quiet convert-tpr -s %s -o %s -extend %s' % (self.GMX_BIN, tpr, tpr, str(extend))
