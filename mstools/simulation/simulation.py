@@ -32,7 +32,7 @@ class Simulation():
     def analyze(self) -> {str: float}:
         pass
 
-    def set_system(self, smiles_list: [str], n_atoms: int):
+    def set_system(self, smiles_list: [str], n_atoms: int, density: float = None):
         self.pdb_list = []
         self.mol2_list = []
         n_components = len(smiles_list)
@@ -51,5 +51,6 @@ class Simulation():
 
         self.n_mol_list = [math.ceil(n_atoms / n_components / n_atom) for n_atom in n_atom_list]
         mass = sum([molwt_list[i] * self.n_mol_list[i] for i in range(n_components)])
-        density = sum([density_list[i] * self.n_mol_list[i] for i in range(n_components)]) / sum(self.n_mol_list)
+        if density is None:
+            density = sum([density_list[i] * self.n_mol_list[i] for i in range(n_components)]) / sum(self.n_mol_list)
         self.length = (10 / 6.022 * mass / density) ** (1 / 3)  # assume cubic box

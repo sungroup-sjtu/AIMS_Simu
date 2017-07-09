@@ -20,7 +20,7 @@ class Packmol:
 
     def build_box(self, files: [str], numbers: [int], output: str,
                   size: [float] = None, length: float = None, slab=False,
-                  tolerance: float = None, seed: int = None,
+                  tolerance: float = 1.8, seed: int = None,
                   silent=False) -> [int]:
         '''
         Build box directly from files
@@ -46,8 +46,6 @@ class Packmol:
             self.size = [length, length, length]
         else:
             raise PackmolError('Box size needed')
-
-        tolerance = tolerance or 2.0
 
         seed = seed or random.randint(1e7, 1e8)
 
