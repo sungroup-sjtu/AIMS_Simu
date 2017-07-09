@@ -174,7 +174,7 @@ class GMX:
         for i, line in enumerate(lines):
             n = i + 1
             if n == 1:
-                continue
+                title = line
             if n == 2:
                 NAtoms = int(line.strip())
                 continue
@@ -199,7 +199,7 @@ class GMX:
         xyz = [[i[0] * scale[0], i[1] * scale[1], i[2] * scale[2]] for i in xyz]
 
         with open(gro_out, 'w') as f_out:
-            f_out.write('Scaled box\n%i\n' % NAtoms)
+            f_out.write('Scaled : %s\n%i\n' % (title, NAtoms))
             for i in range(NAtoms):
                 f_out.write('%5i%5s%5s%5i%8.3f%8.3f%8.3f%8.4f%8.4f%8.4f\n'
                             % (nresidue[i], residue[i], element[i], natom[i],
