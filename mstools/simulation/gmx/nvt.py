@@ -29,14 +29,22 @@ class Nvt(GmxSimulation):
         # Slice structures from prior NPT trajectory, named conf0.gro, conf1.gro ...
         trr = os.path.join(prior_job_dir, 'npt.trr')
         tpr = os.path.join(prior_job_dir, 'npt.tpr')
-        simulation_length = prior_job_result['simulation_length']
-        converged_from = prior_job_result['converged_from']
-        dt = math.floor((simulation_length - converged_from) / 400) * 100  # the dt should be 100 ps at least
+
+        if prior_job_result is not None:
+            simulation_length = prior_job_result['simulation_length']
+            converged_from = prior_job_result['converged_from']
+        else:
+            simulation_length = self.gmx.get_length_of_traj(trr)
+            converged_from = 0
+        dt = math.floor((simulation_length - converged_from) / 40) * 10  # the dt should be 10 ps at least
         begin = simulation_length - 4 * dt
         self.gmx.slice_gro_from_traj(trr, tpr, 'conf.gro', begin, simulation_length, dt)
 
         # Scale gro box for NVT simulation
-        box = prior_job_result['box']
+        if prior_job_result is not None:
+            box = prior_job_result['box']
+        else:
+            box = self.gmx.get_box(os.path.join(prior_job_dir, 'npt.edr'), converged_from)
         for i in range(5):
             gro_nvt = 'conf%i.gro' % i
             self.gmx.scale_box(gro_nvt, gro_nvt, box)
@@ -44,13 +52,13 @@ class Nvt(GmxSimulation):
         nprocs = self.jobmanager.nprocs
         commands = []
         # Heat capacity using 2-Phase Thermodynamics
-        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-cv.mdp', T=T,
-                                           nsteps=int(4E4), nstvout=4, restart=True)
+        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-nvt.mdp', T=T,
+                                           nsteps=int(4E4), nstvout=4, nstenergy=1, tcoupl='nose-hoover', restart=True)
         for i in range(5):
             gro_nvt = 'conf%i.gro' % i
-            name = 'cv%i' % i
+            name = 'nvt%i' % i
             tpr = name + '.tpr'
-            cmd = self.gmx.grompp(mdp='grompp-cv.mdp', gro=gro_nvt, top=top, tpr_out=tpr, get_cmd=True)
+            cmd = self.gmx.grompp(mdp='grompp-nvt.mdp', gro=gro_nvt, top=top, tpr_out=tpr, get_cmd=True)
             commands.append(cmd)
             cmd = self.gmx.mdrun(name=name, nprocs=nprocs, get_cmd=True)
             commands.append(cmd)
@@ -58,6 +66,7 @@ class Nvt(GmxSimulation):
             commands.append(cmd)
 
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
+        return commands
 
     def analyze(self, dirs=None):
         cv_list = []

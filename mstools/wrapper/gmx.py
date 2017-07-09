@@ -313,8 +313,8 @@ class GMX:
             f_out.write(lines[n] + '\n')
 
     def slice_gro_from_traj(self, trr, tpr, gro_out, begin, end, dt, silent=True):
-        cmd = '%s -quiet -nobackup -f %s -s %s -o %s -b %s -e %s -dt %s' % (self.GMX_BIN, trr, tpr, gro_out,
-                                                                            str(begin), str(end), str(dt))
+        cmd = '%s -quiet -nobackup trjconv -f %s -s %s -o %s -b %s -e %s -dt %s -sep -pbc whole' % (
+            self.GMX_BIN, trr, tpr, gro_out, str(begin), str(end), str(dt))
         (stdout, stderr) = (PIPE, PIPE) if silent else (None, None)
         sp = Popen(cmd.split(), stdin=PIPE, stdout=stdout, stderr=stderr)
         sp.communicate(input='System')
@@ -365,4 +365,3 @@ class GMX:
                 commands_multidir.append(replace_gpu_multidir_cmd(['$dir%i' % j for j in range(len(multidir))], cmd))
             commands_list.append(commands_multidir)
         return commands_list
-
