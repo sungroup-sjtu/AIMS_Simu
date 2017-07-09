@@ -20,7 +20,7 @@ class Simulation():
     def build(self):
         pass
 
-    def prepare(self, model_dir):
+    def prepare(self):
         pass
 
     def run(self):

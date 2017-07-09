@@ -18,13 +18,13 @@ class Nvt(GmxSimulation):
     def build(self, ppf=None, minimize=False):
         pass
 
-    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None,
-                prior_job_dir=None, prior_job_result: Dict = None, nst_eq=int(1E5), nst_run=int(5E4)):
+    def prepare(self, gro='conf.gro', top='topol.top', T=None, P=None, jobname=None,
+                prior_job_dir=None, prior_job_result: Dict = None, nst_eq=int(1E5), nst_run=int(5E4), **kwargs):
         # Copy topology files from prior NPT simulation
         shutil.copy(os.path.join(prior_job_dir, top), '.')
-        for f in os.listdir(model_dir):
+        for f in os.listdir(prior_job_dir):
             if f.endswith('.itp'):
-                shutil.copy(os.path.join(model_dir, f), '.')
+                shutil.copy(os.path.join(prior_job_dir, f), '.')
 
         # Slice structures from prior NPT trajectory, named conf0.gro, conf1.gro ...
         trr = os.path.join(prior_job_dir, 'npt.trr')
