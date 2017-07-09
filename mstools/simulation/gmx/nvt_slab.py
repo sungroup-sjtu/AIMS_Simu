@@ -16,7 +16,8 @@ class NvtSlab(GmxSimulation):
                                          size=[self.length, self.length, self.length * 5])
         self.export(ppf=ppf, minimize=minimize)
 
-    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None, **kwargs):
+    def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, jobname=None,
+                dt=0.001, nst_eq=int(4E5), nst_run=int(1E6), nst_edr=100, nst_trr=int(1E4), nst_xtc=int(1E3), **kwargs):
         if os.path.abspath(model_dir) != os.getcwd():
             shutil.copy(os.path.join(model_dir, gro), gro)
             shutil.copy(os.path.join(model_dir, top), top)
@@ -26,12 +27,25 @@ class NvtSlab(GmxSimulation):
 
         nprocs = self.jobmanager.nprocs
         commands = []
-        self.gmx.prepare_mdp_from_template('t_nvt.mdp', T=T, nsteps=int(1E6))
-        cmd = self.gmx.grompp(gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
+
+        # NVT equilibrium
+        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-eq.mdp', T=T,
+                                           dt=0.001, nsteps=nst_eq, nstxtcout=0)
+        cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nprocs, get_cmd=True)
+        commands.append(cmd)
+
+        # NVT production
+        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-nvt.mdp', T=T,
+                                           dt=dt, nsteps=nst_run, nstenergy=nst_edr, nstxout=nst_trr, nstvout=nst_trr,
+                                           nstxtcout=nst_xtc, restart=True)
+        cmd = self.gmx.grompp(mdp='grompp-nvt.mdp', gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
         commands.append(cmd)
         cmd = self.gmx.mdrun(name=self.procedure, nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
+        return commands
 
     def analyze(self):
         import panedr
