@@ -15,7 +15,7 @@ class Nvt(GmxSimulation):
             self.logs.append('cv%i.log' % i)
             self.logs.append('dos%i.log' % i)
 
-    def build(self, minimize=False):
+    def build(self, ppf=None, minimize=False):
         pass
 
     def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None,

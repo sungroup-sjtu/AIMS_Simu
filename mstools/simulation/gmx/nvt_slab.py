@@ -7,14 +7,14 @@ from .gmx import GmxSimulation
 class NvtSlab(GmxSimulation):
     requirement = []
 
-    def build(self, minimize=False):
+    def build(self, ppf=None, minimize=False):
         print('Build coordinates using Packmol: %s molecules ...' % self.n_mol_list)
         self.packmol.build_box(self.pdb_list, self.n_mol_list, 'init.pdb', length=self.length - 2, silent=True)
 
         print('Create box using DFF ...')
         self.dff.build_box_after_packmol(self.mol2_list, self.n_mol_list, self.msd, mol_corr='init.pdb',
-                                         size=[self.length, self.length, self.length * 4])
-        self.export(minimize=minimize)
+                                         size=[self.length, self.length, self.length * 5])
+        self.export(ppf=ppf, minimize=minimize)
 
     def prepare(self, model_dir='.', gro='conf.gro', top='topol.top', T=None, P=None, jobname=None, **kwargs):
         if os.path.abspath(model_dir) != os.getcwd():
