@@ -28,21 +28,29 @@ class NvtSlab(GmxSimulation):
         nprocs = self.jobmanager.nprocs
         commands = []
 
-        # NVT equilibrium
-        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-eq.mdp', T=T,
-                                           dt=0.001, nsteps=nst_eq, nstxtcout=0)
-        cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
+        # energy minimization
+        self.gmx.prepare_mdp_from_template('t_em.mdp', mdp_out='grompp-em.mdp')
+        cmd = self.gmx.grompp(mdp='grompp-em.mdp', gro=gro, top=top, tpr_out='em.tpr', get_cmd=True)
         commands.append(cmd)
-        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nprocs, get_cmd=True)
+        cmd = self.gmx.mdrun(name='em', nprocs=nprocs, get_cmd=True)
+        commands.append(cmd)
+
+        # NVT equilibrium
+        self.gmx.prepare_mdp_from_template('t_nvt_slab.mdp', mdp_out='grompp-eq.mdp', T=T,
+                                           dt=0.001, nsteps=nst_eq, nstxtcout=0)
+        cmd = self.gmx.grompp(mdp='grompp-eq.mdp', gro='em.gro', top=top, tpr_out='eq.tpr', get_cmd=True)
+        commands.append(cmd)
+        cmd = self.gmx.mdrun(name='eq', nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
 
         # NVT production
-        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-nvt.mdp', T=T,
+        self.gmx.prepare_mdp_from_template('t_nvt_slab.mdp', mdp_out='grompp-nvt.mdp', T=T,
                                            dt=dt, nsteps=nst_run, nstenergy=nst_edr, nstxout=nst_trr, nstvout=nst_trr,
                                            nstxtcout=nst_xtc, restart=True)
-        cmd = self.gmx.grompp(mdp='grompp-nvt.mdp', gro=gro, top=top, tpr_out=self.procedure, get_cmd=True)
+        cmd = self.gmx.grompp(mdp='grompp-nvt.mdp', gro='eq.gro', top=top, tpr_out='nvt.tpr',
+                              cpt='eq.cpt', get_cmd=True)
         commands.append(cmd)
-        cmd = self.gmx.mdrun(name=self.procedure, nprocs=nprocs, get_cmd=True)
+        cmd = self.gmx.mdrun(name='nvt', nprocs=nprocs, get_cmd=True)
         commands.append(cmd)
         self.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
         return commands
