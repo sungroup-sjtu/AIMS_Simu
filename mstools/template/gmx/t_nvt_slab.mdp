@@ -16,7 +16,7 @@ coulombtype     = PME
 rcoulomb        = 1.2
 
 vdwtype         = PME
-;rvdw            = 1.2
+rvdw            = 1.2
 ;DispCorr        = EnerPres
 
 Tcoupl          = %tcoupl%; no; V-rescale
@@ -24,11 +24,7 @@ tc-grps         = System
 tau-t           = %tau-t%; 2; 0.1
 ref-t           = %T%
 
-Pcoupl          = %pcoupl%; parrinello-rahman; berendsen
-pcoupltype      = isotropic
-tau-p           = %tau-p%; 2; 0.5
-compressibility = 4.5e-5
-ref-p           = %P%
+Pcoupl          = no
 
 gen-vel         = %genvel%
 gen-temp        = %T%
