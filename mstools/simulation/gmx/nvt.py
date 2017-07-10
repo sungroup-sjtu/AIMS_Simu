@@ -20,7 +20,7 @@ class Nvt(GmxSimulation):
 
     def prepare(self, gro='conf.gro', top='topol.top', T=None, P=None, jobname=None,
                 prior_job_dir=None, prior_job_result: Dict = None,
-                nst_eq=int(5E4), nst_cv=int(4E4), nst_vis=int(4E5), **kwargs):
+                nst_eq=int(5E4), nst_cv=int(4E4), nst_vis=int(4E5), n_cv=5, n_vis=20, **kwargs):
         # Copy topology files from prior NPT simulation
         shutil.copy(os.path.join(prior_job_dir, top), '.')
         for f in os.listdir(prior_job_dir):
@@ -60,7 +60,7 @@ class Nvt(GmxSimulation):
                                            nsteps=nst_cv, nstvout=4, tcoupl='nose-hoover', restart=True)
         self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-vis.mdp', T=T,
                                            nsteps=nst_vis, nstenergy=1, tcoupl='nose-hoover', restart=True)
-        for i in range(5):
+        for i in range(n_vis):
             gro_conf = 'conf%i.gro' % i
             gro_eq = 'eq%i.gro' % i
             name_eq = 'eq%i' % i
@@ -77,14 +77,15 @@ class Nvt(GmxSimulation):
             commands.append(cmd)
 
             # Cv from Density of States
-            cmd = self.gmx.grompp(mdp='grompp-cv.mdp', gro=gro_eq, top=top, tpr_out=tpr_cv,
-                                  cpt=name_eq + '.cpt', get_cmd=True)
-            commands.append(cmd)
-            cmd = self.gmx.mdrun(name=name_cv, nprocs=nprocs, get_cmd=True)
-            commands.append(cmd)
+            if i < n_cv:
+                cmd = self.gmx.grompp(mdp='grompp-cv.mdp', gro=gro_eq, top=top, tpr_out=tpr_cv,
+                                      cpt=name_eq + '.cpt', get_cmd=True)
+                commands.append(cmd)
+                cmd = self.gmx.mdrun(name=name_cv, nprocs=nprocs, get_cmd=True)
+                commands.append(cmd)
 
-            cmd = self.gmx.dos(trr=name_cv + '.trr', tpr=tpr_cv, T=T, log_out='dos%i.log' % i, get_cmd=True)
-            commands.append(cmd)
+                cmd = self.gmx.dos(trr=name_cv + '.trr', tpr=tpr_cv, T=T, log_out='dos%i.log' % i, get_cmd=True)
+                commands.append(cmd)
 
             # viscosity from Green-Kubo
             cmd = self.gmx.grompp(mdp='grompp-vis.mdp', gro=gro_eq, top=top, tpr_out=tpr_vis,
