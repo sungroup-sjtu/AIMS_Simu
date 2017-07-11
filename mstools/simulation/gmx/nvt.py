@@ -29,21 +29,21 @@ class Nvt(GmxSimulation):
         # Scale gro box for NVT simulation
         box = self.gmx.get_box(os.path.join(prior_job_dir, 'npt.edr'))
         shutil.copy(os.path.join(prior_job_dir, 'npt.gro'), gro)
-        self.gmx.scale_box(gro, box)
+        self.gmx.scale_box(gro, gro, box)
 
         nprocs = self.jobmanager.nprocs
         commands = []
 
         # Heat capacity using 2-Phase Thermodynamics
-        self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-anneal.mdp', T=T,
+        self.gmx.prepare_mdp_from_template('t_nvt_anneal.mdp', mdp_out='grompp-anneal.mdp', T=T,
                                            nsteps=nst_anneal, tcoupl='nose-hoover')
         self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-cv.mdp', T=T,
                                            nsteps=nst_cv, nstvout=4, tcoupl='nose-hoover', restart=True)
         self.gmx.prepare_mdp_from_template('t_nvt.mdp', mdp_out='grompp-vis.mdp', T=T,
                                            nsteps=nst_vis, nstenergy=1, tcoupl='nose-hoover', restart=True)
         for i in range(max(n_cv, n_vis)):
-            gro_anneal = 'eq%i.gro' % i
-            name_anneal = 'eq%i' % i
+            gro_anneal = 'anneal%i.gro' % i
+            name_anneal = 'anneal%i' % i
             name_cv = 'cv%i' % i
             name_vis = 'vis%i' % i
             tpr_anneal = name_anneal + '.tpr'
