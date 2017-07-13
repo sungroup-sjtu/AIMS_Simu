@@ -74,7 +74,7 @@ def gauss(mu, sigma, x):
     return h * np.exp(exponent)
 
 
-def block_average(series, n_block=None) -> [float, float]:
+def block_average(series, n_block=5) -> [float, float]:
     '''
     Get block average and standard error
     '''
@@ -86,7 +86,7 @@ def block_average(series, n_block=None) -> [float, float]:
     blocks = []
     for n in range(n_block - 1):
         blocks.append(series.iloc[block_size * n:block_size * (n + 1)])
-    blocks.append(series[block_size * n_block:])
+    blocks.append(series.iloc[block_size * (n_block - 1):])
 
     block_aves = [np.mean(b) for b in blocks]
     return [np.mean(series), np.std(block_aves, ddof=1) / math.sqrt(n_block)]

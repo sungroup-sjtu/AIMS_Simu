@@ -135,6 +135,15 @@ class GMX:
                 return float(line.split()[1])
         raise GmxError('Invalid property')
 
+    def get_property_and_stderr(self, edr, property: str, begin=0) -> [float, float]:
+        sp_out = self.energy(edr, properties=[property], begin=begin)
+
+        for line in sp_out.decode().splitlines():
+            if line.lower().startswith(property.lower()):
+                return (float(line.split()[1]), float(line.split()[2]))
+        raise GmxError('Invalid property')
+
+
     def get_box(self, edr, begin=0) -> [float]:
         sp = subprocess.Popen([self.GMX_BIN, 'energy', '-f', edr, '-b', str(begin)], stdout=PIPE, stdin=PIPE,
                               stderr=PIPE)
