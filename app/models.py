@@ -254,7 +254,7 @@ class Task(db.Model):
             self.status = Compute.Status.STARTED
             db.session.commit()
 
-            if Config.GMX_MULTIDIR_NPROCS == 0:
+            if not Config.GMX_MULTIDIR:
                 for job in self.jobs:
                     job.run()
                     time.sleep(sleep)
@@ -265,11 +265,14 @@ class Task(db.Model):
                     multi_dirs.append(job.dir)
                     multi_cmds = json.loads(job.commands)
                 gmx = GMX(gmx_bin=Config.GMX_BIN)
-                commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds, n_gpu=0)
-                jobmanager.nprocs = Config.GMX_MULTIDIR_NPROCS
+                commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                               n_parallel=Config.GMX_MULTIDIR_NJOB,
+                                                               n_gpu=0,
+                                                               n_thread=Config.GMX_MULTIDIR_NTHREAD)
                 for i, commands in enumerate(commands_list):
                     sh = os.path.join(self.dir, '_job.multi-%i.sh' %i)
-                    jobmanager.generate_sh(self.dir, commands, name='%s-%i' %(self.name, i), sh=sh)
+                    jobmanager.generate_sh(self.dir, commands, name='%s-%i' %(self.name, i),
+                                           sh=sh, n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
                     jobmanager.submit(sh)
                     time.sleep(sleep)
 

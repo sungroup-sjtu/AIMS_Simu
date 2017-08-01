@@ -18,7 +18,7 @@ class BaseConfig:
     NPROC_PER_JOB = 1
     ENV_CMD = ''
 
-    GMX_MULTIDIR_NPROCS = 0  # do not perform gmx multidir simulation
+    GMX_MULTIDIR = False  # do not perform gmx multidir simulation
 
 
 class ClusterConfig(BaseConfig):
@@ -53,7 +53,9 @@ class TH2Config(BaseConfig):
     JOB_MANAGER = 'slurm'
     QUEUE_DICT = OrderedDict([('free', 24)])
 
-    GMX_MULTIDIR_NPROCS = 48
+    GMX_MULTIDIR = True
+    GMX_MULTIDIR_NJOB = 8
+    GMX_MULTIDIR_NTHREAD = 6
 
 
 class MacConfig(BaseConfig):
