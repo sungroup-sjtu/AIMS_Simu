@@ -18,7 +18,7 @@ class BaseConfig:
     NPROC_PER_JOB = 1
     ENV_CMD = ''
 
-    GMX_MULTIDIR_NPROC = 0  # do not perform gmx multidir simulation
+    GMX_MULTIDIR_NPROCS = 0  # do not perform gmx multidir simulation
 
 
 class ClusterConfig(BaseConfig):

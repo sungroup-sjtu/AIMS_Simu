@@ -10,7 +10,8 @@ json_dict = {
     'detail': {
         'procedures': ['npt'],
         'smiles_list': [[]],
-        'states': []
+        'mol_names': [],
+        'states': [],
     }
 }
 
@@ -22,6 +23,7 @@ for line in lines:
     if line == '' or line.startswith('#'):
         continue
     words = line.split()
+    name = words[0]
     smiles = words[1]
     t_min = int(float(words[2]))
     t_max = int(float(words[3]))
@@ -29,6 +31,7 @@ for line in lines:
     p_max = int(float(words[5]))
 
     json_dict['detail']['smiles_list'][0].append(smiles)
+    json_dict['detail']['mol_names'].append(name)
     json_dict['detail']['states'].append({'t_min': t_min, 't_max': t_max, 'p_min': p_min, 'p_max': p_max})
 
 print(json_dict)

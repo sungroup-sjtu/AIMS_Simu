@@ -12,6 +12,7 @@ from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateT
 from . import db
 
 from config import Config
+
 sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.simulation.procedure import Procedure
 from mstools.utils import *
@@ -19,6 +20,7 @@ from mstools.utils import *
 NotNullColumn = partial(Column, nullable=False)
 
 from mstools.jobmanager import *
+from mstools.wrapper import GMX
 
 if Config.JOB_MANAGER == 'local':
     jobmanager = Local(nprocs=Config.NPROC_PER_JOB, env_cmd=Config.ENV_CMD)
@@ -61,6 +63,7 @@ class Compute(db.Model):
         procedures = detail['procedures']
         smiles_list_components: [[str]] = detail['smiles_list']
         states = detail.get('states')
+        mol_names = detail.get('mol_names')
 
         # check for prior
         for p in detail['procedures']:
@@ -69,7 +72,7 @@ class Compute(db.Model):
                 procedures = [prior] + procedures  # Put prerequisite at first
 
         for n, smiles_list in enumerate(itertools.product(*smiles_list_components)):
-            if states == None:
+            if states is None:
                 state = detail.get('state')
             else:
                 state = states[n]
@@ -103,6 +106,8 @@ class Compute(db.Model):
                 else:
                     task.p_min = None
                     task.p_max = None
+                if mol_names is not None:
+                    task.name = mol_names[n] + random_string(4)
                 db.session.add(task)
 
     class Stage:
@@ -231,6 +236,7 @@ class Task(db.Model):
                 job.task_id = self.id
                 job.t = t
                 job.p = p
+                job.name = '%s-%i-%i' %(self.name, t or 0, p or 0)
                 db.session.add(job)
 
         try:
@@ -247,9 +253,26 @@ class Task(db.Model):
             self.stage = Compute.Stage.RUNNING
             self.status = Compute.Status.STARTED
             db.session.commit()
-            for job in self.jobs:
-                job.run()
-                time.sleep(sleep)
+
+            if Config.GMX_MULTIDIR_NPROCS == 0:
+                for job in self.jobs:
+                    job.run()
+                    time.sleep(sleep)
+            else:
+                multi_dirs = []
+                multi_cmds = []
+                for job in self.jobs:
+                    multi_dirs.append(job.dir)
+                    multi_cmds = json.loads(job.commands)
+                gmx = GMX(gmx_bin=Config.GMX_BIN)
+                commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds, n_gpu=0)
+                jobmanager.nprocs = Config.GMX_MULTIDIR_NPROCS
+                for i, commands in enumerate(commands_list):
+                    sh = os.path.join(self.dir, '_job.multi-%i.sh' %i)
+                    jobmanager.generate_sh(self.dir, commands, name='%s-%i' %(self.name, i), sh=sh)
+                    jobmanager.submit(sh)
+                    time.sleep(sleep)
+
         else:
             raise Exception('Should build first')
 
@@ -295,6 +318,7 @@ class Job(db.Model):
     status = NotNullColumn(Integer, default=Compute.Status.STARTED)
     converged = NotNullColumn(Boolean, default=False)
     result = Column(Text, nullable=True)
+    commands = Column(Text, nullable=True)
 
     task = db.relationship(Task)
 
@@ -338,8 +362,10 @@ class Job(db.Model):
 
         cd_or_create_and_cd(self.dir)
         simulation = init_simulation(self.task.procedure)
-        simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name, prior_job_dir=prior_job_dir,
-                           drde=True) # Temperature dependent parameters
+        commands = simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name,
+                                      prior_job_dir=prior_job_dir, drde=True)  # Temperature dependent parameters
+        self.commands = json.dumps(commands)
+        db.session.commit()
 
     def run(self):
         try:
