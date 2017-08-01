@@ -17,16 +17,9 @@ NotNullColumn = partial(Column, nullable=False)
 
 
 def init_simulation(procedure):
-    if Config.SIMULATION_ENGINE == 'gmx':
-        from mstools.simulation import gmx as simulationEngine
-        kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
-                  'gmx_bin': Config.GMX_BIN, 'jobmanager': jobmanager}
-    elif Config.SIMULATION_ENGINE == 'lammps':
-        from mstools.simulation import lammps as simulationEngine
-        kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
-                  'lmp_bin': Config.LMP_BIN, 'jobmanager': jobmanager}
-    else:
-        raise Exception('Simulation engine not supported')
+    from mstools.simulation import gmx as simulationEngine
+    kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
+              'gmx_bin': Config.GMX_BIN, 'jobmanager': jobmanager}
 
     if procedure == 'npt':
         return simulationEngine.Npt(**kwargs)
@@ -34,8 +27,6 @@ def init_simulation(procedure):
         return simulationEngine.Nvt(**kwargs)
     elif procedure == 'nvt-slab':
         return simulationEngine.NvtSlab(**kwargs)
-    elif procedure == 'nvt-vacuum':
-        return simulationEngine.NvtVacuum(**kwargs)
     else:
         raise Exception('Unknown simulation procedure')
 
@@ -82,19 +73,19 @@ class Compute(db.Model):
                 task.smiles_list = json.dumps(smiles_list)
                 task.procedure = procedure
                 if procedure in Procedure.T_RELEVANT:
+                    if t_min == None or t_max == None:
+                        raise Exception('Invalid temperature')
                     task.t_min = t_min
                     task.t_max = t_max
                     task.t_interval = t_interval
-                    if t_min == None or t_max == None:
-                        raise Exception('Invalid temperature')
                 else:
                     task.t_min = None
                     task.t_max = None
                 if procedure in Procedure.P_RELEVANT:
-                    task.p_min = p_min
-                    task.p_max = p_max
                     if p_min == None or p_max == None:
                         raise Exception('Invalid pressure')
+                    task.p_min = p_min
+                    task.p_max = p_max
                 else:
                     task.p_min = None
                     task.p_max = None
@@ -182,7 +173,7 @@ class Task(db.Model):
         simulation = init_simulation(self.procedure)
         try:
             simulation.set_system(json.loads(self.smiles_list), n_atoms=3000)
-            simulation.build_nvt(minimize=True)
+            simulation.build()
             self.n_mol_list = json.dumps(simulation.n_mol_list)
         except:
             self.status = Compute.Status.FAILED
@@ -210,7 +201,8 @@ class Task(db.Model):
         if self.p_min is None or self.p_max is None:
             P_list = [None]
         else:
-            P_list = get_P_list_from_range(self.p_min, self.p_max)
+            P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2,5))
+            P_list = list(filter(lambda x: x == int(1E5) or x > int(1E6), P_list)) # remove P in the range of (1,10] bar
 
         for t in T_list:
             for p in P_list:
@@ -297,7 +289,7 @@ class Job(db.Model):
     @property
     def dir(self) -> str:
         dir_name = '%i-%i' % (self.t or 0, self.p or 0)
-        return os.path.join(self.task.dir_nvt, dir_name)
+        return os.path.join(self.task.dir, dir_name)
 
     @property
     def prior_job(self):
@@ -311,30 +303,27 @@ class Job(db.Model):
 
     @property
     def is_running(self) -> bool:
-        return jobmanager.get_info(self.name)
+        return jobmanager.is_running(self.name)
 
     def prepare(self):
         prior_job = self.prior_job
-        if prior_job != None:
+        if prior_job is not None:
             if not prior_job.converged:
                 print('Prior job has not finished, this job will not be prepared now')
                 return
             else:
                 prior_job_dir = prior_job.dir
-                prior_job_result = prior_job.result
         else:
             prior_job_dir = None
-            prior_job_result = None
 
         try:
-            os.chdir(self.task.dir_nvt)
+            os.chdir(self.task.dir)
         except:
             raise Exception('Should build simulation box first')
 
         cd_or_create_and_cd(self.dir)
         simulation = init_simulation(self.task.procedure)
-        simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name,
-                           prior_job_dir=prior_job_dir, prior_job_result=prior_job_result)
+        simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name, prior_job_dir=prior_job_dir)
 
     def run(self):
         try:
@@ -446,5 +435,5 @@ class TaskThread(Thread):
     def run(self):
         with self.app.app_context():
             for task in Task.query.filter(Task.compute_id == self.compute_id):
-                task.build_nvt()
+                task.build()
                 task.run()

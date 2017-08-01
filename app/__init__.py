@@ -11,9 +11,11 @@ app.jinja_env.auto_reload = True
 db = SQLAlchemy(app)
 
 if Config.JOB_MANAGER == 'local':
-    jobmanager = Local(nprocs=Config.NPROC_PER_JOB)
+    jobmanager = Local(nprocs=Config.NPROC_PER_JOB, env_cmd=Config.ENV_CMD)
 elif Config.JOB_MANAGER == 'torque':
-    jobmanager = Torque(queue_dict=Config.QUEUE_DICT)
+    jobmanager = Torque(queue_dict=Config.QUEUE_DICT, env_cmd=Config.ENV_CMD)
+elif Config.JOB_MANAGER == 'slurm':
+    jobmanager = Slurm(queue_dict=Config.QUEUE_DICT, env_cmd=Config.ENV_CMD)
 else:
     raise Exception('Job manager not supported')
 

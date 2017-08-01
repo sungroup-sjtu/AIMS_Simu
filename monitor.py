@@ -9,7 +9,7 @@ def monitor_tasks():
     for task in tasks:
         if task.stage == Compute.Stage.SUBMITTED and task.status == Compute.Status.DONE:
             try:
-                task.build_nvt()
+                task.build()
             except Exception as e:
                 print('Error when build task %s: %s' % (repr(task), str(e)))
             try:
