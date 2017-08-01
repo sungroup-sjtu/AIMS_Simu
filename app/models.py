@@ -1,3 +1,4 @@
+import sys
 import itertools
 import json
 import shutil
@@ -8,12 +9,25 @@ from threading import Thread
 
 from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateTime, and_
 
+from . import db
+
 from config import Config
+sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.simulation.procedure import Procedure
 from mstools.utils import *
-from . import db, jobmanager
 
 NotNullColumn = partial(Column, nullable=False)
+
+from mstools.jobmanager import *
+
+if Config.JOB_MANAGER == 'local':
+    jobmanager = Local(nprocs=Config.NPROC_PER_JOB, env_cmd=Config.ENV_CMD)
+elif Config.JOB_MANAGER == 'torque':
+    jobmanager = Torque(queue_dict=Config.QUEUE_DICT, env_cmd=Config.ENV_CMD)
+elif Config.JOB_MANAGER == 'slurm':
+    jobmanager = Slurm(queue_dict=Config.QUEUE_DICT, env_cmd=Config.ENV_CMD)
+else:
+    raise Exception('Job manager not supported')
 
 
 def init_simulation(procedure):
@@ -197,12 +211,13 @@ class Task(db.Model):
         if self.t_min is None or self.t_max is None:
             T_list = [None]
         else:
-            T_list = get_T_list_from_range(self.t_min, self.t_max, self.t_interval)
+            T_list = get_T_list_from_range(self.t_min, self.t_max, interval=self.t_interval)
         if self.p_min is None or self.p_max is None:
             P_list = [None]
         else:
-            P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2,5))
-            P_list = list(filter(lambda x: x == int(1E5) or x > int(1E6), P_list)) # remove P in the range of (1,10] bar
+            P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2, 5))
+            P_list = list(
+                filter(lambda x: x == int(1E5) or x > int(1E6), P_list))  # remove P in the range of (1,10] bar
 
         for t in T_list:
             for p in P_list:
@@ -323,7 +338,8 @@ class Job(db.Model):
 
         cd_or_create_and_cd(self.dir)
         simulation = init_simulation(self.task.procedure)
-        simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name, prior_job_dir=prior_job_dir)
+        simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name, prior_job_dir=prior_job_dir,
+                           drde=True) # Temperature dependent parameters
 
     def run(self):
         try:

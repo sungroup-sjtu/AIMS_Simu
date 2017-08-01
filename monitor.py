@@ -11,16 +11,19 @@ def monitor_tasks():
             try:
                 task.build()
             except Exception as e:
+                raise
                 print('Error when build task %s: %s' % (repr(task), str(e)))
             try:
                 task.run()
             except Exception as e:
+                raise
                 print('Error when run task %s: %s' % (repr(task), str(e)))
 
         elif task.stage == Compute.Stage.BUILDING and task.status == Compute.Status.DONE:
             try:
                 task.run()
             except Exception as e:
+                raise
                 print('Error when run task %s: %s' % (repr(task), str(e)))
 
         elif task.stage == Compute.Stage.RUNNING and task.status == Compute.Status.STARTED:

@@ -4,12 +4,15 @@ from collections import OrderedDict
 
 
 class BaseConfig:
+    PATH_BASE = os.path.dirname(os.path.abspath(__file__))
     DB_NAME = 'msdserver.sqlite'
-    DB_PATH = os.path.dirname(os.path.abspath(__file__)) + os.sep + DB_NAME
+    DB_PATH = os.path.join(PATH_BASE, DB_NAME)
 
     SQLALCHEMY_DATABASE_URI = 'sqlite:///%s' % DB_PATH
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     SQLALCHEMY_TRACK_MODIFICATIONS = True
+
+    MS_TOOLS_DIR = os.path.join(PATH_BASE, '../ms-tools')
 
     JOB_MANAGER = 'local'
     NPROC_PER_JOB = 1
@@ -45,7 +48,7 @@ class TH2Config(BaseConfig):
     WORK_DIR = '/HOME/sjtu_hsun_1/BIGDATA/MSDServer'
     DFF_ROOT = '/HOME/sjtu_hsun_1/apps/dff/7.3'
     PACKMOL_BIN = '/WORK/app/packmol/bin/packmol'
-    GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/gmx_mpi'
+    GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'
 
     JOB_MANAGER = 'slurm'
     QUEUE_DICT = OrderedDict([('free', 24)])
@@ -58,7 +61,7 @@ class MacConfig(BaseConfig):
     DFF_ROOT = '/Users/zheng/Projects/DFF/Developing'
     PACKMOL_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Packmol/packmol.exe'
     LMP_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Lammps/lammps'
-    GMX_BIN = '/opt/gromacs/2016.3/gmx'
+    GMX_BIN = '/opt/gromacs/2016.3/bin/gmx'
 
 
 Config = ClusterConfig
