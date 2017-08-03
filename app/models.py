@@ -313,6 +313,8 @@ class Task(db.Model):
         if not ignore_pbs_limit and jobmanager.n_running_jobs + self.n_pbs_jobs >= Config.PBS_NJOB_LIMIT:
             raise Exception('PBS_NJOB_LIMIT reached, will not run job now')
 
+        os.chdir(self.dir)
+
         self.stage = Compute.Stage.RUNNING
         self.status = Compute.Status.STARTED
         db.session.commit()
