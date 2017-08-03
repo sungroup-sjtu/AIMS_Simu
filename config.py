@@ -4,19 +4,20 @@ from collections import OrderedDict
 
 
 class BaseConfig:
-    PATH_BASE = os.path.dirname(os.path.abspath(__file__))
+    CWD = os.path.dirname(os.path.abspath(__file__))
     DB_NAME = 'msdserver.sqlite'
-    DB_PATH = os.path.join(PATH_BASE, DB_NAME)
+    DB_PATH = os.path.join(CWD, DB_NAME)
 
     SQLALCHEMY_DATABASE_URI = 'sqlite:///%s' % DB_PATH
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     SQLALCHEMY_TRACK_MODIFICATIONS = True
 
-    MS_TOOLS_DIR = os.path.join(PATH_BASE, '../ms-tools')
+    MS_TOOLS_DIR = os.path.join(CWD, '../ms-tools')
 
-    JOB_MANAGER = 'local'
-    NPROC_PER_JOB = 1
-    ENV_CMD = ''
+    PBS_MANAGER = 'local'
+    PBS_QUEUE_DICT = OrderedDict([(None, 2)])
+    PBS_NJOB_LIMIT = 10
+    PBS_ENV_CMD = ''
 
     GMX_MULTIDIR = False  # do not perform gmx multidir simulation
 
@@ -28,20 +29,9 @@ class ClusterConfig(BaseConfig):
     LMP_BIN = '/share/apps/lammps/lmp-stable'
     GMX_BIN = '/share/apps/gromacs/2016.3-msdserver/bin/gmx_gpu'
 
-    JOB_MANAGER = 'torque'
-    QUEUE_DICT = OrderedDict([('cpu', 8)])
-
-
-class PIConfig(BaseConfig):
-    ENV_CMD = '''
-source /usr/share/Modules/init/bash
-unset MODULEPATH
-module use /lustre/usr/modulefiles/pi
-module purge
-module load icc/16.0 impi/5.1 mkl/11.3
-export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
-export I_MPI_FABRICS=shm:dapl
-'''
+    PBS_MANAGER = 'torque'
+    PBS_QUEUE_DICT = OrderedDict([('cpu', 8)])
+    PBS_NJOB_LIMIT = 20
 
 
 class TH2Config(BaseConfig):
@@ -50,12 +40,25 @@ class TH2Config(BaseConfig):
     PACKMOL_BIN = '/WORK/app/packmol/bin/packmol'
     GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'
 
-    JOB_MANAGER = 'slurm'
-    QUEUE_DICT = OrderedDict([('free', 24)])
+    PBS_MANAGER = 'slurm'
+    PBS_QUEUE_DICT = OrderedDict([('free', 24)])
+    PBS_NJOB_LIMIT = 16
 
     GMX_MULTIDIR = True
     GMX_MULTIDIR_NJOB = 8
     GMX_MULTIDIR_NTHREAD = 6
+
+
+class PIConfig(BaseConfig):
+    PBS_ENV_CMD = '''
+source /usr/share/Modules/init/bash
+unset MODULEPATH
+module use /lustre/usr/modulefiles/pi
+module purge
+module load icc/16.0 impi/5.1 mkl/11.3
+export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
+export I_MPI_FABRICS=shm:dapl
+'''
 
 
 class MacConfig(BaseConfig):

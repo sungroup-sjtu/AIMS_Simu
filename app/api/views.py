@@ -35,11 +35,11 @@ def check():
 
 @api.route('/submit', methods=['POST'])
 def submit():
-    compute_json = request.json
+    json_dict = request.json
 
     computeAction = ComputeAction()
     try:
-        compute_id = computeAction.init_from_json(compute_json)
+        compute_id = computeAction.init_from_json_dict(json_dict)
     except Exception as e:
         return json.dumps({'success': False,
                            'ip': request.remote_addr,
