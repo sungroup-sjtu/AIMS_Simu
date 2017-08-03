@@ -305,8 +305,10 @@ class Task(db.Model):
             raise
 
     def run(self, ignore_pbs_limit=False, sleep=0.2):
-        if not (self.stage == Compute.Stage.BUILDING and self.status == Compute.Status.DONE):
-            raise Exception('Should build first')
+        if self.stage != Compute.Stage.BUILDING:
+            raise Exception('Incorrect stage: %s' % Compute.Stage.text[self.stage])
+        elif self.status != Compute.Status.DONE:
+            raise Exception('Incorrect status: %s' % Compute.Status.text[self.status])
 
         if not ignore_pbs_limit and jobmanager.n_running_jobs + self.n_pbs_jobs >= Config.PBS_NJOB_LIMIT:
             raise Exception('PBS_NJOB_LIMIT reached, will not run job now')
