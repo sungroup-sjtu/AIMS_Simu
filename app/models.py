@@ -362,6 +362,7 @@ class Task(db.Model):
             if job.status == Compute.Status.FAILED:
                 self.status = Compute.Status.FAILED
                 db.session.commit()
+                warnings.warn('Task %s has failed job %s' % (self, job))
                 return
 
         for job in self.jobs:
