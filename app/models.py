@@ -490,6 +490,11 @@ class Job(db.Model):
         if self.is_running:
             return False
 
+        try:
+            os.chdir(self.dir)
+        except:
+            raise
+
         simulation = init_simulation(self.task.procedure)
         if simulation.check_finished():
             self.status = Compute.Status.DONE
