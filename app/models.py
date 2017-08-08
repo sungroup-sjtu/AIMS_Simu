@@ -385,6 +385,58 @@ class Task(db.Model):
         db.session.delete(self)
         db.session.commit()
 
+    def get_isothermal_result(self, T=298) -> ([int], [float], [float]):
+        P_list = []
+        result_list = {}
+        stderr_list = {}
+        jobs = self.jobs.filter(Job.t == T)
+        for job in jobs:
+            if job.converged:
+                P_list.append(job.p)
+                results = json.loads(job.result)
+                for k, v in results.items():
+                    if not k in result_list:
+                        result_list[k] = []
+                        stderr_list[k] = []
+                    result_list[k].append(v[0])
+                    stderr_list[k].append(v[1])
+
+                    if k == 'e_inter':
+                        if not 'hvap' in result_list:
+                            result_list['hvap'] = []
+                            stderr_list['hvap'] = []
+                        n_mol = json.loads(self.n_mol_list)[0]
+                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / n_mol)
+                        stderr_list['hvap'].append(v[1] / n_mol)
+
+        return P_list, result_list, stderr_list
+
+    def get_isobaric_result(self, P=int(1E5)) -> ([int], [float], [float]):
+        T_list = []
+        result_list = {}
+        stderr_list = {}
+        jobs = self.jobs.filter(Job.p == P)
+        for job in jobs:
+            if job.converged:
+                T_list.append(job.t)
+                results = json.loads(job.result)
+                for k, v in results.items():
+                    if not k in result_list:
+                        result_list[k] = []
+                        stderr_list[k] = []
+                    result_list[k].append(v[0])
+                    stderr_list[k].append(v[1])
+
+                    if k == 'e_inter':
+                        if not 'hvap' in result_list:
+                            result_list['hvap'] = []
+                            stderr_list['hvap'] = []
+                        n_mol = json.loads(self.n_mol_list)[0]
+                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / n_mol)
+                        stderr_list['hvap'].append(v[1] / n_mol)
+
+        return T_list, result_list, stderr_list
+
 
 class Job(db.Model):
     __tablename__ = 'job'
@@ -469,20 +521,16 @@ class Job(db.Model):
         if not ignore_pbs_limit and jobmanager.n_running_jobs + 1 >= Config.PBS_NJOB_LIMIT:
             raise Exception('PBS_NJOB_LIMIT reached, will not extend job now')
 
-        try:
-            os.chdir(self.dir)
-        except:
-            raise
-
-        pbs_name = '%s-%i' % (self.name, self.cycle)
-        simulation = init_simulation(self.task.procedure)
-        simulation.extend(jobname=pbs_name)
-        simulation.run()
+        os.chdir(self.dir)
 
         self.cycle += 1
+        self.pbs_name = '%s-%i' % (self.name, self.cycle)
         self.status = Compute.Status.STARTED
-        self.pbs_name = pbs_name
         db.session.commit()
+
+        simulation = init_simulation(self.task.procedure)
+        simulation.extend(jobname=self.pbs_name)
+        simulation.run()
 
     def check_finished(self) -> bool:
         if self.status in (Compute.Status.DONE, Compute.Status.FAILED, Compute.Status.ANALYZED):
@@ -514,10 +562,7 @@ class Job(db.Model):
             warnings.warn('Will not analyze %s Job failed' % self)
             return
 
-        try:
-            os.chdir(self.dir)
-        except:
-            raise
+        os.chdir(self.dir)
 
         simulation = init_simulation(self.task.procedure)
         dirs = [self.dir]
