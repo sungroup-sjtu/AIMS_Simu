@@ -64,8 +64,8 @@ export I_MPI_FABRICS=shm:dapl
 class MacConfig(BaseConfig):
     WORK_DIR = '/tmp/MSDServer/'
     DFF_ROOT = '/Users/zheng/Projects/DFF/Developing'
-    PACKMOL_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Packmol/packmol.exe'
-    LMP_BIN = '/Users/zheng/Projects/DFF/Developing/bin32m/Lammps/lammps'
+    PACKMOL_BIN = '/Users/zheng/Projects/DFF/Developing/bin64m/Packmol/packmol.exe'
+    LMP_BIN = '/Users/zheng/Projects/DFF/Developing/bin64m/Lammps/lammps'
     GMX_BIN = '/opt/gromacs/2016.3/bin/gmx'
 
 

@@ -279,7 +279,7 @@ class Task(db.Model):
         else:
             P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2, 5))
             # remove P in the range of (1,10] bar
-            P_list = list(filter(lambda x: x == int(1E5) or x > int(1E6), P_list))
+            P_list = list(filter(lambda x: x == 1 or x > 10, P_list))
 
         for p in P_list:
             for t in T_list:
@@ -420,7 +420,7 @@ class Task(db.Model):
 
         return P_list, result_list, stderr_list
 
-    def get_isobaric_result(self, P=int(1E5)) -> ([int], [float], [float]):
+    def get_isobaric_result(self, P=1) -> ([int], [float], [float]):
         T_list = []
         result_list = {}
         stderr_list = {}
@@ -549,10 +549,7 @@ class Job(db.Model):
         if self.is_running:
             return False
 
-        try:
-            os.chdir(self.dir)
-        except:
-            raise
+        os.chdir(self.dir)
 
         simulation = init_simulation(self.task.procedure)
         if simulation.check_finished():

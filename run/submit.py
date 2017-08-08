@@ -14,7 +14,7 @@ json_dict = {
     'detail': {
         'procedures': ['npt'],
         'combinations': [],
-        'p': [int(1E5), int(1E5)]
+        'p': [1, 1] # bar
     }
 }
 
