@@ -5,4 +5,3 @@ openbabel
 numpy
 pandas
 scipy
-panedr

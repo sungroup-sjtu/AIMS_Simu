@@ -228,6 +228,13 @@ class Task(db.Model):
             n = math.ceil(n / Config.GMX_MULTIDIR_NJOB)
         return n
 
+    @property
+    def n_mol_total(self) -> int:
+        n_mol = 0
+        for i in json.loads(self.n_mol_list):
+            n_mol += i
+        return n_mol
+
     def build(self):
         # TODO optimize logic
         cd_or_create_and_cd(self.dir)
@@ -408,9 +415,8 @@ class Task(db.Model):
                         if not 'hvap' in result_list:
                             result_list['hvap'] = []
                             stderr_list['hvap'] = []
-                        n_mol = json.loads(self.n_mol_list)[0]
-                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / n_mol)
-                        stderr_list['hvap'].append(v[1] / n_mol)
+                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / self.n_mol_total)
+                        stderr_list['hvap'].append(v[1] / self.n_mol_total)
 
         return P_list, result_list, stderr_list
 
@@ -437,9 +443,8 @@ class Task(db.Model):
                         if not 'hvap' in result_list:
                             result_list['hvap'] = []
                             stderr_list['hvap'] = []
-                        n_mol = json.loads(self.n_mol_list)[0]
-                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / n_mol)
-                        stderr_list['hvap'].append(v[1] / n_mol)
+                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / self.n_mol_total)
+                        stderr_list['hvap'].append(v[1] / self.n_mol_total)
 
         return T_list, result_list, stderr_list
 
