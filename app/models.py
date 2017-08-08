@@ -398,8 +398,11 @@ class Task(db.Model):
                     if not k in result_list:
                         result_list[k] = []
                         stderr_list[k] = []
-                    result_list[k].append(v[0])
-                    stderr_list[k].append(v[1])
+                    if type(v) == list:
+                        result_list[k].append(v[0])
+                        stderr_list[k].append(v[1])
+                    else:
+                        result_list[k].append(v)
 
                     if k == 'e_inter':
                         if not 'hvap' in result_list:
@@ -424,8 +427,11 @@ class Task(db.Model):
                     if not k in result_list:
                         result_list[k] = []
                         stderr_list[k] = []
-                    result_list[k].append(v[0])
-                    stderr_list[k].append(v[1])
+                    if type(v) == list:
+                        result_list[k].append(v[0])
+                        stderr_list[k].append(v[1])
+                    else:
+                        result_list[k].append(v)
 
                     if k == 'e_inter':
                         if not 'hvap' in result_list:
