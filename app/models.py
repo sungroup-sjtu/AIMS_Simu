@@ -318,7 +318,7 @@ class Task(db.Model):
             raise Exception('Incorrect status: %s' % Compute.Status.text[self.status])
 
         if not ignore_pbs_limit and jobmanager.n_running_jobs + self.n_pbs_jobs >= Config.PBS_NJOB_LIMIT:
-            raise Exception('PBS_NJOB_LIMIT reached, will not run job now')
+            raise Exception('PBS_NJOB_LIMIT reached, will not run task now')
 
         os.chdir(self.dir)
 
@@ -342,8 +342,8 @@ class Task(db.Model):
                                                            n_gpu=0,
                                                            n_thread=Config.GMX_MULTIDIR_NTHREAD)
             for i, commands in enumerate(commands_list):
-                sh = os.path.join(self.dir, '_job.multi-%i.sh' % i)
-                pbs_name = '%s-%i' % (self.name, i)
+                sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
+                pbs_name = '%s-run-%i' % (self.name, i)
                 jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
                                        n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
                 jobmanager.submit(sh)
@@ -351,6 +351,67 @@ class Task(db.Model):
                 # save pbs_name for jobs
                 for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
                     job.pbs_name = pbs_name
+                db.session.commit()
+                time.sleep(sleep)
+
+    @property
+    def ready_to_extend(self) -> bool:
+        if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.STARTED):
+            return False
+
+        for job in self.jobs:
+            if job.status == Compute.Status.STARTED:
+                return False
+
+        return True
+
+    def extend(self, ignore_pbs_limit=False, sleep=0.2):
+        if not self.ready_to_extend:
+            warnings.warn('Not ready to extend %s' % self)
+            return
+
+        extend_jobs = []
+        for job in self.jobs:
+            if job.need_extend:
+                extend_jobs.append(job)
+        if len(extend_jobs) == 0:
+            warnings.warn('No job need to extend %s' % self)
+            return
+
+        if not ignore_pbs_limit and jobmanager.n_running_jobs + len(extend_jobs) >= Config.PBS_NJOB_LIMIT:
+            raise Exception('PBS_NJOB_LIMIT reached, will not extend task now')
+
+        if not Config.GMX_MULTIDIR:
+            for job in extend_jobs:
+                job.extend()
+                time.sleep(sleep)
+        else:
+            multi_dirs = []
+            multi_cmds = []
+            simulation = init_simulation(self.procedure)
+            for job in extend_jobs:
+                os.chdir(job.dir)
+                multi_dirs.append(job.dir)
+                multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1))
+
+            commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                      n_parallel=Config.GMX_MULTIDIR_NJOB,
+                                                                      n_gpu=0,
+                                                                      n_thread=Config.GMX_MULTIDIR_NTHREAD)
+
+            os.chdir(self.dir)
+            for i, commands in enumerate(commands_list):
+                sh = os.path.join(self.dir, '_job.extend-%i.sh' % i)
+                pbs_name = '%s-extend-%i' % (self.name, i)
+                jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
+                                       n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
+                jobmanager.submit(sh)
+
+                # save pbs_name for jobs
+                for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
+                    job.pbs_name = pbs_name
+                    job.cycle += 1
+                    job.status = Compute.Status.STARTED
                 db.session.commit()
                 time.sleep(sleep)
 
@@ -486,6 +547,10 @@ class Job(db.Model):
     def is_running(self) -> bool:
         return jobmanager.is_running(self.pbs_name)
 
+    @property
+    def need_extend(self) -> bool:
+        return self.status == Compute.Status.ANALYZED and not self.converged
+
     def prepare(self):
         prior_job = self.prior_job
         if prior_job is not None:
@@ -517,18 +582,9 @@ class Job(db.Model):
         db.session.commit()
 
     def extend(self, ignore_pbs_limit=False):
-        if self.status == Compute.Status.STARTED:
-            warnings.warn('Will not extend %s Job still running' % self)
+        if not self.need_extend:
+            warnings.warn('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
             return
-        if self.status == Compute.Status.FAILED:
-            warnings.warn('Will not extend %s Job failed' % self)
-            return
-        if self.converged:
-            warnings.warn('Will not extend %s Job converged' % self)
-            return
-
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + 1 >= Config.PBS_NJOB_LIMIT:
-            raise Exception('PBS_NJOB_LIMIT reached, will not extend job now')
 
         os.chdir(self.dir)
 
@@ -538,7 +594,7 @@ class Job(db.Model):
         db.session.commit()
 
         simulation = init_simulation(self.task.procedure)
-        simulation.extend(jobname=self.pbs_name)
+        commands = simulation.extend(jobname=self.pbs_name)
         simulation.run()
 
     def check_finished(self) -> bool:

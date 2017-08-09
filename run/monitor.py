@@ -42,22 +42,18 @@ def process_tasks():
             except Exception as e:
                 log.error('Check task status failed %s: %s' % (task, repr(e)))
 
-
-def process_jobs():
-    for job in Job.query.all():
-        if job.status == Compute.Status.ANALYZED and job.converged == False:
-            log.info('Extend job %s' % job)
+        if task.ready_to_extend:
+            log.info('Extend task %s' % task)
             try:
-                job.extend()
+                task.extend()
             except Exception as e:
-                log.error('Extend job failed %s: %s' % (job, repr(e)))
+                log.error('Extend task failed %s: %s' % (task, repr(e)))
 
 
 if __name__ == '__main__':
     while True:
         with warnings.catch_warnings(record=True) as ws:
             process_tasks()
-            process_jobs()
             for w in ws:
                 log.warning(w.message)
         print('Sleep 300 seconds ...')

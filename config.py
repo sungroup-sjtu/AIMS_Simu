@@ -35,7 +35,7 @@ class ClusterConfig(BaseConfig):
 
 
 class TH2Config(BaseConfig):
-    WORK_DIR = '/HOME/sjtu_hsun_1/BIGDATA/MSDServer'
+    WORK_DIR = '/BIGDATA/sjtu_hsun_1/MSDServer'
     DFF_ROOT = '/HOME/sjtu_hsun_1/apps/dff/7.3'
     PACKMOL_BIN = '/WORK/app/packmol/bin/packmol'
     GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'
