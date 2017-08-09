@@ -408,7 +408,7 @@ class Task(db.Model):
                 jobmanager.submit(sh)
 
                 # save pbs_name for jobs
-                for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
+                for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
                     job.pbs_name = pbs_name
                     job.cycle += 1
                     job.status = Compute.Status.STARTED
