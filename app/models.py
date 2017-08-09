@@ -356,8 +356,8 @@ class Task(db.Model):
 
     def check_finished(self):
         '''
-        set status as FAILED if one job failed
-        set status as DONE only if all jobs are converged
+        check if all jobs in this tasks are finished
+        if finished, analyze the job
         '''
         for job in self.jobs:
             try:
@@ -365,21 +365,19 @@ class Task(db.Model):
             except Exception as e:
                 warnings.warn('Check job status failed %s %s' % (job, repr(e)))
 
-        for job in self.jobs:
-            if job.status == Compute.Status.FAILED:
-                self.status = Compute.Status.FAILED
-                db.session.commit()
-                warnings.warn('Task %s has failed job %s' % (self, job))
-                return
+            if job.status == Compute.Status.DONE:
+                try:
+                    job.analyze()
+                except Exception as e:
+                    raise Exception('Analyze job failed %s %s' % (job, repr(e)))
 
+        # Set status as DONE only if all jobs are converged
         for job in self.jobs:
             if not job.converged:
-                self.status = Compute.Status.STARTED
-                db.session.commit()
-                return
-
-        self.status = Compute.Status.DONE
-        db.session.commit()
+                break
+        else:
+            self.status = Compute.Status.DONE
+            db.session.commit()
 
     def remove(self):
         for job in self.jobs:

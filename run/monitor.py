@@ -45,13 +45,6 @@ def process_tasks():
 
 def process_jobs():
     for job in Job.query.all():
-        if job.status == Compute.Status.DONE and not job.converged:
-            log.info('Analyze job %s' % job)
-            try:
-                job.analyze()
-            except Exception as e:
-                log.error('Analyze job failed %s: %s' % (job, repr(e)))
-
         if job.status == Compute.Status.ANALYZED and job.converged == False:
             log.info('Extend job %s' % job)
             try:
