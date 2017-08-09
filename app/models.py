@@ -3,14 +3,12 @@ import re
 import json
 import shutil
 import time
-import warnings
 from datetime import datetime
 from functools import partial
-from threading import Thread
 
 from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateTime, and_
 
-from . import db
+from . import db, log
 
 from config import Config
 
@@ -60,7 +58,11 @@ class Compute(db.Model):
 
     tasks = db.relationship('Task', lazy='dynamic')
 
+    def __repr__(self):
+        return '<Compute: %s>' % self.remark
+
     def create_tasks(self):
+        log.info('Create tasks from %s' % self)
         try:
             detail = json.loads(self.json)
             procedures = detail['procedures']
@@ -149,7 +151,8 @@ class Compute(db.Model):
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            raise Exception('Cannot create tasks: ' + repr(e))
+            log.error('Create tasks failed %s %s' % (self, repr(e)))
+            raise Exception('Create tasks failed: ' + repr(e))
 
     class Stage:
         SUBMITTED = 0
@@ -236,35 +239,36 @@ class Task(db.Model):
         return n_mol
 
     def build(self):
-        # TODO optimize logic
-        cd_or_create_and_cd(self.dir)
-        cd_or_create_and_cd('build')
-
-        self.stage = Compute.Stage.BUILDING
-        self.status = Compute.Status.STARTED
-        db.session.commit()
-
-        simulation = init_simulation(self.procedure)
+        log.info('Build task %s' % self)
         try:
-            simulation.set_system(json.loads(self.smiles_list), n_atoms=3000)
-            simulation.build()
-            self.n_mol_list = json.dumps(simulation.n_mol_list)
-        except Exception as e:
-            self.status = Compute.Status.FAILED
-            self.remark = repr(e)
+            cd_or_create_and_cd(self.dir)
+            cd_or_create_and_cd('build')
+
+            self.stage = Compute.Stage.BUILDING
+            self.status = Compute.Status.STARTED
             db.session.commit()
-            raise
-        else:
+
+            simulation = init_simulation(self.procedure)
             try:
-                self.prepare_jobs()
-            except Exception as e:
+                simulation.set_system(json.loads(self.smiles_list), n_atoms=3000)
+                simulation.build()
+                self.n_mol_list = json.dumps(simulation.n_mol_list)
+            except:
                 self.status = Compute.Status.FAILED
-                self.remark = repr(e)
                 db.session.commit()
                 raise
             else:
-                self.status = Compute.Status.DONE
-                db.session.commit()
+                try:
+                    self.prepare_jobs()
+                except:
+                    self.status = Compute.Status.FAILED
+                    db.session.commit()
+                    raise
+                else:
+                    self.status = Compute.Status.DONE
+                    db.session.commit()
+        except Exception as e:
+            log.error('Build task failed %s: %s' % (self, repr(e)))
 
     def prepare_jobs(self):
         if not os.path.exists(os.path.join(self.dir, 'build')):
@@ -303,56 +307,55 @@ class Task(db.Model):
             db.session.rollback()
             raise
 
-        try:
-            for job in self.jobs:
-                job.prepare()
-        except:
-            with warnings.catch_warnings(record=True):  # do not show warnings
-                self.remove()
-            raise
+        for job in self.jobs:
+            job.prepare()
 
     def run(self, ignore_pbs_limit=False, sleep=0.2):
-        if self.stage != Compute.Stage.BUILDING:
-            raise Exception('Incorrect stage: %s' % Compute.Stage.text[self.stage])
-        elif self.status != Compute.Status.DONE:
-            raise Exception('Incorrect status: %s' % Compute.Status.text[self.status])
+        log.info('Run task %s' % self)
+        try:
+            if self.stage != Compute.Stage.BUILDING:
+                raise Exception('Incorrect stage: %s' % Compute.Stage.text[self.stage])
+            elif self.status != Compute.Status.DONE:
+                raise Exception('Incorrect status: %s' % Compute.Status.text[self.status])
 
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + self.n_pbs_jobs >= Config.PBS_NJOB_LIMIT:
-            raise Exception('PBS_NJOB_LIMIT reached, will not run task now')
+            if not ignore_pbs_limit and jobmanager.n_running_jobs + self.n_pbs_jobs >= Config.PBS_NJOB_LIMIT:
+                raise Exception('PBS_NJOB_LIMIT reached')
 
-        os.chdir(self.dir)
+            os.chdir(self.dir)
 
-        self.stage = Compute.Stage.RUNNING
-        self.status = Compute.Status.STARTED
-        db.session.commit()
+            self.stage = Compute.Stage.RUNNING
+            self.status = Compute.Status.STARTED
+            db.session.commit()
 
-        if not Config.GMX_MULTIDIR:
-            for job in self.jobs:
-                job.run()
-                time.sleep(sleep)
-        else:
-            multi_dirs = []
-            multi_cmds = []
-            for job in self.jobs:
-                multi_dirs.append(job.dir)
-                multi_cmds = json.loads(job.commands)
-            gmx = GMX(gmx_bin=Config.GMX_BIN)
-            commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                           n_parallel=Config.GMX_MULTIDIR_NJOB,
-                                                           n_gpu=0,
-                                                           n_thread=Config.GMX_MULTIDIR_NTHREAD)
-            for i, commands in enumerate(commands_list):
-                sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
-                pbs_name = '%s-run-%i' % (self.name, i)
-                jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                       n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
-                jobmanager.submit(sh)
+            if not Config.GMX_MULTIDIR:
+                for job in self.jobs:
+                    job.run()
+                    time.sleep(sleep)
+            else:
+                multi_dirs = []
+                multi_cmds = []
+                for job in self.jobs:
+                    multi_dirs.append(job.dir)
+                    multi_cmds = json.loads(job.commands)
+                gmx = GMX(gmx_bin=Config.GMX_BIN)
+                commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                               n_parallel=Config.GMX_MULTIDIR_NJOB,
+                                                               n_gpu=0,
+                                                               n_thread=Config.GMX_MULTIDIR_NTHREAD)
+                for i, commands in enumerate(commands_list):
+                    sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
+                    pbs_name = '%s-run-%i' % (self.name, i)
+                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
+                                           n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
+                    jobmanager.submit(sh)
 
-                # save pbs_name for jobs
-                for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
-                    job.pbs_name = pbs_name
-                db.session.commit()
-                time.sleep(sleep)
+                    # save pbs_name for jobs
+                    for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
+                        job.pbs_name = pbs_name
+                    db.session.commit()
+                    time.sleep(sleep)
+        except Exception as e:
+            log.error('Run task failed %s %s' % (self, repr(e)))
 
     @property
     def ready_to_extend(self) -> bool:
@@ -366,8 +369,10 @@ class Task(db.Model):
         return True
 
     def extend(self, ignore_pbs_limit=False, sleep=0.2):
+        log.info('Extend task %s' % self)
+
         if not self.ready_to_extend:
-            warnings.warn('Not ready to extend %s' % self)
+            log.warning('Not ready to extend %s' % self)
             return
 
         extend_jobs = []
@@ -375,70 +380,78 @@ class Task(db.Model):
             if job.need_extend:
                 extend_jobs.append(job)
         if len(extend_jobs) == 0:
-            warnings.warn('No job need to extend %s' % self)
+            log.warning('No job need to extend %s' % self)
             return
 
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + len(extend_jobs) >= Config.PBS_NJOB_LIMIT:
-            raise Exception('PBS_NJOB_LIMIT reached, will not extend task now')
+        try:
+            if not ignore_pbs_limit and jobmanager.n_running_jobs + len(extend_jobs) >= Config.PBS_NJOB_LIMIT:
+                raise Exception('PBS_NJOB_LIMIT reached')
 
-        if not Config.GMX_MULTIDIR:
-            for job in extend_jobs:
-                job.extend()
-                time.sleep(sleep)
-        else:
-            multi_dirs = []
-            multi_cmds = []
-            simulation = init_simulation(self.procedure)
-            for job in extend_jobs:
-                os.chdir(job.dir)
-                multi_dirs.append(job.dir)
-                multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1))
+            if not Config.GMX_MULTIDIR:
+                for job in extend_jobs:
+                    job.extend()
+                    time.sleep(sleep)
+            else:
+                multi_dirs = []
+                multi_cmds = []
+                simulation = init_simulation(self.procedure)
+                for job in extend_jobs:
+                    os.chdir(job.dir)
+                    multi_dirs.append(job.dir)
+                    multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1))
 
-            commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                                      n_parallel=Config.GMX_MULTIDIR_NJOB,
-                                                                      n_gpu=0,
-                                                                      n_thread=Config.GMX_MULTIDIR_NTHREAD)
+                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                          n_parallel=Config.GMX_MULTIDIR_NJOB,
+                                                                          n_gpu=0,
+                                                                          n_thread=Config.GMX_MULTIDIR_NTHREAD)
 
-            os.chdir(self.dir)
-            for i, commands in enumerate(commands_list):
-                sh = os.path.join(self.dir, '_job.extend-%i.sh' % i)
-                pbs_name = '%s-extend-%i' % (self.name, i)
-                jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                       n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
-                jobmanager.submit(sh)
+                os.chdir(self.dir)
+                for i, commands in enumerate(commands_list):
+                    sh = os.path.join(self.dir, '_job.extend-%i.sh' % i)
+                    pbs_name = '%s-extend-%i' % (self.name, i)
+                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
+                                           n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
+                    jobmanager.submit(sh)
 
-                # save pbs_name for jobs
-                for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
-                    job.pbs_name = pbs_name
-                    job.cycle += 1
-                    job.status = Compute.Status.STARTED
-                db.session.commit()
-                time.sleep(sleep)
+                    # save pbs_name for jobs
+                    for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
+                        job.pbs_name = pbs_name
+                        job.cycle += 1
+                        job.status = Compute.Status.STARTED
+                    db.session.commit()
+                    time.sleep(sleep)
+        except Exception as e:
+            log.error('Extend task failed %s %s' % (self, repr(e)))
 
     def check_finished(self):
         '''
         check if all jobs in this tasks are finished
         if finished, analyze the job
         '''
-        for job in self.jobs:
-            try:
-                job.check_finished()
-            except Exception as e:
-                warnings.warn('Check job status failed %s %s' % (job, repr(e)))
-
-            if job.status == Compute.Status.DONE:
+        log.info('Check task status %s' % self)
+        try:
+            for job in self.jobs:
                 try:
-                    job.analyze()
+                    job.check_finished()
                 except Exception as e:
-                    raise Exception('Analyze job failed %s %s' % (job, repr(e)))
+                    log.error('Check job status failed %s %s' % (job, repr(e)))
 
-        # Set status as DONE only if all jobs are converged
-        for job in self.jobs:
-            if not job.converged:
-                break
-        else:
-            self.status = Compute.Status.DONE
-            db.session.commit()
+                if job.status == Compute.Status.DONE:
+                    try:
+                        log.info('Analyze job %s' % job)
+                        job.analyze()
+                    except Exception as e:
+                        log.error('Analyze job failed %s %s' % (job, repr(e)))
+
+            # Set status as DONE only if all jobs are converged
+            for job in self.jobs:
+                if not job.converged:
+                    break
+            else:
+                self.status = Compute.Status.DONE
+                db.session.commit()
+        except Exception as e:
+            log.error('Check task status failed %s %s' % (self, repr(e)))
 
     def remove(self):
         for job in self.jobs:
@@ -446,7 +459,7 @@ class Task(db.Model):
         try:
             shutil.rmtree(self.dir)
         except:
-            warnings.warn('Remove task %s Cannot remove folder: %s' % (self, self.dir))
+            log.warning('Remove task %s Cannot remove folder: %s' % (self, self.dir))
 
         db.session.delete(self)
         db.session.commit()
@@ -555,7 +568,7 @@ class Job(db.Model):
         prior_job = self.prior_job
         if prior_job is not None:
             if not prior_job.converged:
-                warnings.warn('Prepare job %s Prior job not converged' % repr(self))
+                log.warning('Prepare job %s Prior job not converged' % repr(self))
                 return
             else:
                 prior_job_dir = prior_job.dir
@@ -583,7 +596,7 @@ class Job(db.Model):
 
     def extend(self, ignore_pbs_limit=False):
         if not self.need_extend:
-            warnings.warn('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
+            log.warning('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
             return
 
         os.chdir(self.dir)
@@ -615,13 +628,13 @@ class Job(db.Model):
 
     def analyze(self, rerun=False):
         if self.status == Compute.Status.ANALYZED and not rerun:
-            warnings.warn('Will not analyze %s Already analyzed' % self)
+            log.warning('Will not analyze %s Already analyzed' % self)
             return
         if self.status == Compute.Status.STARTED:
-            warnings.warn('Will not analyze %s Job is still running' % self)
+            log.warning('Will not analyze %s Job is still running' % self)
             return
         if self.status == Compute.Status.FAILED:
-            warnings.warn('Will not analyze %s Job failed' % self)
+            log.warning('Will not analyze %s Job failed' % self)
             return
 
         os.chdir(self.dir)
@@ -648,25 +661,12 @@ class Job(db.Model):
         try:
             jobmanager.kill_job(self.pbs_name)
         except Exception as e:
-            warnings.warn('Remove job %s Cannot kill PBS job: %s' % (self, repr(e)))
+            log.warning('Remove job %s Cannot kill PBS job: %s' % (self, repr(e)))
 
         try:
             shutil.rmtree(self.dir)
         except:
-            warnings.warn('Remove job %s Cannot remove folder: %s' % (self, self.dir))
+            log.warning('Remove job %s Cannot remove folder: %s' % (self, self.dir))
 
         db.session.delete(self)
         db.session.commit()
-
-
-class TaskThread(Thread):
-    def __init__(self, app, compute_id: int):
-        super().__init__()
-        self.app = app
-        self.compute_id = compute_id
-
-    def run(self):
-        with self.app.app_context():
-            for task in Task.query.filter(Task.compute_id == self.compute_id):
-                task.build()
-                task.run()
