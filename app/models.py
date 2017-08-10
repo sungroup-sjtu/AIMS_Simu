@@ -210,9 +210,10 @@ class Task(db.Model):
     @property
     def prior_task(self):
         prior_procedure = Procedure.prior.get(self.procedure)
-        if prior_procedure == None:
+        if prior_procedure is None:
             return None
 
+        # TODO Herein we suppose there is no duplicated task
         return Task.query.filter(
             and_(Task.smiles_list == self.smiles_list,
                  Task.procedure == prior_procedure,
@@ -549,7 +550,7 @@ class Job(db.Model):
     @property
     def prior_job(self):
         prior_task = self.task.prior_task
-        if prior_task == None:
+        if prior_task is None:
             return None
 
         for job in prior_task.jobs:
@@ -566,14 +567,14 @@ class Job(db.Model):
 
     def prepare(self):
         prior_job = self.prior_job
-        if prior_job is not None:
+        if prior_job is None:
+            prior_job_dir = None
+        else:
             if not prior_job.converged:
-                log.warning('Prepare job %s Prior job not converged' % repr(self))
+                log.warning('Prepare job failed %s Prior job not converged' % repr(self))
                 return
             else:
                 prior_job_dir = prior_job.dir
-        else:
-            prior_job_dir = None
 
         cd_or_create_and_cd(self.dir)
         simulation = init_simulation(self.task.procedure)
@@ -623,6 +624,7 @@ class Job(db.Model):
             self.status = Compute.Status.DONE
         else:
             self.status = Compute.Status.FAILED
+            log.error('Job failed %s' % self)
         db.session.commit()
         return True
 
