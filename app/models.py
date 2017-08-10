@@ -227,7 +227,7 @@ class Task(db.Model):
 
     @property
     def n_pbs_jobs(self) -> int:
-        n = len(self.jobs.all())
+        n = self.jobs.count()
         if Config.GMX_MULTIDIR:
             n = math.ceil(n / Config.GMX_MULTIDIR_NJOB)
         return n
