@@ -14,7 +14,7 @@ json_dict = {
     'detail': {
         'procedures': ['npt'],
         'combinations': [],
-        'p': [1, 1] # bar
+        'p': [1, 1000]  # bar
     }
 }
 
@@ -32,17 +32,14 @@ for line in lines:
     if line == '' or line.startswith('#'):
         continue
     words = line.split()
-    name = words[0]
-    smiles = words[1]
-    t_min = int(float(words[2]))
-    t_max = int(float(words[3]))
-    p_min = int(float(words[4]))
-    p_max = int(float(words[5]))
+    name = words[2]
+    smiles = words[3]
+    t_min = int(round(float(words[4])))
+    t_max = int(round(float(words[5])))
 
     json_dict['detail']['combinations'].append({'smiles': [smiles],
                                                 'names': [name],
                                                 't': [t_min, t_max],
-                                                'p': [p_min, p_max]
                                                 })
     json_dict['remark'] = remark
 
