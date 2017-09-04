@@ -55,7 +55,7 @@ class PbsJob(db.Model):
     submitted = NotNullColumn(Boolean, default=False)
 
     def __repr__(self):
-        return '<PbsJob: %s %s>' % (self.name, self.submitted)
+        return '<PbsJob: %i: %s %s>' % (self.id, self.name, self.submitted)
 
     def submit(self):
         if jobmanager.submit(self.sh_file):
@@ -79,7 +79,7 @@ class Compute(db.Model):
     tasks = db.relationship('Task', lazy='dynamic')
 
     def __repr__(self):
-        return '<Compute: %s>' % self.remark
+        return '<Compute: %i: %s>' % (self.id, self.remark)
 
     def create_tasks(self):
         log.info('Create tasks from %s' % self)
@@ -214,16 +214,17 @@ class Task(db.Model):
     p_min = Column(Integer, nullable=True)
     p_max = Column(Integer, nullable=True)
     name = NotNullColumn(String(200), default=random_string)
+    cycle = NotNullColumn(Integer, default=0)
     stage = NotNullColumn(Integer, default=Compute.Stage.SUBMITTED)
     status = NotNullColumn(Integer, default=Compute.Status.DONE)
+    commands = Column(Text, nullable=True)
     remark = Column(Text, nullable=True)
-    cycle = NotNullColumn(Integer, default=1)
 
     compute = db.relationship(Compute)
     jobs = db.relationship('Job', lazy='dynamic')
 
     def __repr__(self):
-        return '<Task: %s %s %s>' % (self.procedure, self.name, self.smiles_list)
+        return '<Task: %i: %s %s %s>' % (self.id, self.procedure, self.name, self.smiles_list)
 
     @property
     def dir(self) -> str:
@@ -355,11 +356,9 @@ class Task(db.Model):
                     job.run()
                     time.sleep(sleep)
             else:
-                multi_dirs = []
-                multi_cmds = []
-                for job in self.jobs:
-                    multi_dirs.append(job.dir)
-                    multi_cmds = json.loads(job.commands)
+                multi_dirs = [job.dir for job in self.jobs]
+                multi_cmds = json.loads(self.commands)
+
                 gmx = GMX(gmx_bin=Config.GMX_BIN)
                 commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
                                                                n_parallel=Config.GMX_MULTIDIR_NJOB,
@@ -579,18 +578,17 @@ class Job(db.Model):
     p = Column(Integer, nullable=True)
     time = NotNullColumn(DateTime, default=datetime.now)
     name = NotNullColumn(String(200), default=random_string)
-    cycle = NotNullColumn(Integer, default=1)
+    cycle = NotNullColumn(Integer, default=0)
     status = NotNullColumn(Integer, default=Compute.Status.STARTED)
     converged = NotNullColumn(Boolean, default=False)
     result = Column(Text, nullable=True)
-    commands = Column(Text, nullable=True)
     pbs_job_id = Column(Integer, ForeignKey(PbsJob.id), nullable=True)
 
     task = db.relationship(Task)
     pbs_job = db.relationship(PbsJob)
 
     def __repr__(self):
-        return '<Job: %s %i>' % (self.name, self.cycle)
+        return '<Job: %i: %s %i>' % (self.id, self.name, self.cycle)
 
     @property
     def dir(self) -> str:
@@ -635,8 +633,11 @@ class Job(db.Model):
         simulation = init_simulation(self.task.procedure)
         commands = simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name,
                                       prior_job_dir=prior_job_dir, drde=True)  # Temperature dependent parameters
-        self.commands = json.dumps(commands)
-        db.session.commit()
+
+        # all jobs under one task share same commands, save this for GMX -multidir simulation
+        if self.task.commands is None:
+            self.task.commands = json.dumps(commands)
+            db.session.commit()
 
     def run(self):
         try:
@@ -691,7 +692,6 @@ class Job(db.Model):
 
         # submit job, record if success or failed
         pbs_job.submit()
-
 
     def check_finished(self) -> bool:
         if self.status in (Compute.Status.DONE, Compute.Status.FAILED, Compute.Status.ANALYZED):
