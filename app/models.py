@@ -46,6 +46,26 @@ def init_simulation(procedure):
         raise Exception('Unknown simulation procedure')
 
 
+class PbsJob(db.Model):
+    __tablename__ = 'pbs_job'
+    id = NotNullColumn(Integer, primary_key=True)
+    name = NotNullColumn(String(200))
+    sh_file = NotNullColumn(Text)
+    sh_content = Column(Text, nullable=True)
+    submitted = NotNullColumn(Boolean, default=False)
+
+    def __repr__(self):
+        return '<PbsJob: %s %s>' % (self.name, self.submitted)
+
+    def submit(self):
+        if jobmanager.submit(self.sh_file):
+            self.submitted = True
+        else:
+            self.submitted = False
+            log.warning('Submit PBS job failed %s' % self.sh_file)
+        db.session.commit()
+
+
 class Compute(db.Model):
     __tablename__ = 'compute'
     id = NotNullColumn(Integer, primary_key=True)
@@ -79,15 +99,16 @@ class Compute(db.Model):
                 if prior is not None and prior not in procedures:
                     procedures = [prior] + procedures  # Put prerequisite at first
 
-            all_smiles_list = []
+            # TODO ignore duplicated smiles combinations
+            # all_smiles_list = []
             for combination in combinations:
                 # check for smiles and name
                 smiles_list = combination['smiles']
                 name_list = combination.get('names')
 
-                if smiles_list in all_smiles_list:
-                    raise Exception('Duplicated smiles combinations')
-                all_smiles_list.append(smiles_list)
+                # if smiles_list in all_smiles_list:
+                #     raise Exception('Duplicated smiles combinations')
+                # all_smiles_list.append(smiles_list)
 
                 if len(smiles_list) > len(set(smiles_list)):
                     raise Exception('Duplicated smiles %s' % smiles_list)
@@ -196,12 +217,13 @@ class Task(db.Model):
     stage = NotNullColumn(Integer, default=Compute.Stage.SUBMITTED)
     status = NotNullColumn(Integer, default=Compute.Status.DONE)
     remark = Column(Text, nullable=True)
+    cycle = NotNullColumn(Integer, default=1)
 
     compute = db.relationship(Compute)
     jobs = db.relationship('Job', lazy='dynamic')
 
     def __repr__(self):
-        return '<Task: %s %s %s>' % (self.smiles_list, self.procedure, self.name)
+        return '<Task: %s %s %s>' % (self.procedure, self.name, self.smiles_list)
 
     @property
     def dir(self) -> str:
@@ -344,17 +366,29 @@ class Task(db.Model):
                                                                n_gpu=0,
                                                                n_thread=Config.GMX_MULTIDIR_NTHREAD)
                 for i, commands in enumerate(commands_list):
+                    # instead of run directly, we add a record to pbs_job
                     sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
                     pbs_name = '%s-run-%i' % (self.name, i)
                     jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
                                            n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
-                    jobmanager.submit(sh)
+                    # jobmanager.submit(sh)
 
-                    # save pbs_name for jobs
+                    pbs_job = PbsJob()
+                    pbs_job.name = pbs_name
+                    pbs_job.sh_file = sh
+                    db.session.add(pbs_job)
+                    db.session.flush()
+
+                    # save pbs_job_id for jobs
                     for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
-                        job.pbs_name = pbs_name
+                        job.pbs_job_id = pbs_job.id
+                        job.status = Compute.Status.STARTED
                     db.session.commit()
+
+                    # submit job, record if success or failed
+                    pbs_job.submit()
                     time.sleep(sleep)
+
         except Exception as e:
             log.error('Run task failed %s %s' % (self, repr(e)))
 
@@ -363,6 +397,7 @@ class Task(db.Model):
         if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.STARTED):
             return False
 
+        # extend the task only if all the jobs are finished (done or failed)
         for job in self.jobs:
             if job.status == Compute.Status.STARTED:
                 return False
@@ -388,6 +423,8 @@ class Task(db.Model):
             if not ignore_pbs_limit and jobmanager.n_running_jobs + len(extend_jobs) >= Config.PBS_NJOB_LIMIT:
                 raise Exception('PBS_NJOB_LIMIT reached')
 
+            self.cycle += 1
+
             if not Config.GMX_MULTIDIR:
                 for job in extend_jobs:
                     job.extend()
@@ -399,7 +436,8 @@ class Task(db.Model):
                 for job in extend_jobs:
                     os.chdir(job.dir)
                     multi_dirs.append(job.dir)
-                    multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1))
+                    multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
+                                                   sh='_job.extend-%i.sh' % (job.cycle + 1))
 
                 commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
                                                                           n_parallel=Config.GMX_MULTIDIR_NJOB,
@@ -408,27 +446,38 @@ class Task(db.Model):
 
                 os.chdir(self.dir)
                 for i, commands in enumerate(commands_list):
-                    sh = os.path.join(self.dir, '_job.extend-%i.sh' % i)
-                    pbs_name = '%s-extend-%i' % (self.name, i)
+                    # instead of run directly, we add a record to pbs_job
+                    sh = os.path.join(self.dir, '_job.extend-%i-%i.sh' % (self.cycle, i))
+                    pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
                     jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
                                            n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
-                    jobmanager.submit(sh)
+                    # jobmanager.submit(sh)
 
-                    # save pbs_name for jobs
+                    pbs_job = PbsJob()
+                    pbs_job.name = pbs_name
+                    pbs_job.sh_file = sh
+                    db.session.add(pbs_job)
+                    db.session.flush()
+
+                    # save pbs_job_id for jobs
                     for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
-                        job.pbs_name = pbs_name
+                        job.pbs_job_id = pbs_job.id
                         job.cycle += 1
                         job.status = Compute.Status.STARTED
                     db.session.commit()
+
+                    # submit job, record if success or failed
+                    pbs_job.submit()
                     time.sleep(sleep)
+
         except Exception as e:
             log.error('Extend task failed %s %s' % (self, repr(e)))
 
     def check_finished(self):
-        '''
+        """
         check if all jobs in this tasks are finished
         if finished, analyze the job
-        '''
+        """
         log.info('Check task status %s' % self)
         try:
             for job in self.jobs:
@@ -535,9 +584,10 @@ class Job(db.Model):
     converged = NotNullColumn(Boolean, default=False)
     result = Column(Text, nullable=True)
     commands = Column(Text, nullable=True)
-    pbs_name = Column(String(200), nullable=True)
+    pbs_job_id = Column(Integer, ForeignKey(PbsJob.id), nullable=True)
 
     task = db.relationship(Task)
+    pbs_job = db.relationship(PbsJob)
 
     def __repr__(self):
         return '<Job: %s %i>' % (self.name, self.cycle)
@@ -558,8 +608,13 @@ class Job(db.Model):
                 return job
 
     @property
-    def is_running(self) -> bool:
-        return jobmanager.is_running(self.pbs_name)
+    def pbs_job_done(self) -> bool:
+        if self.pbs_job_id is None:
+            return False
+        elif not self.pbs_job.submitted:
+            return False
+        else:
+            return not jobmanager.is_running(self.pbs_job.name)
 
     @property
     def need_extend(self) -> bool:
@@ -589,32 +644,59 @@ class Job(db.Model):
         except:
             raise Exception('Should prepare job first')
 
-        simulation = init_simulation(self.task.procedure)
-        simulation.run()
+        # instead of run directly, we add a record to pbs_job
 
-        self.pbs_name = self.name
+        # simulation = init_simulation(self.task.procedure)
+        # simulation.run()
+
+        pbs_job = PbsJob()
+        pbs_job.name = self.name
+        pbs_job.sh_file = os.path.join(self.dir, jobmanager.sh)
+        db.session.add(pbs_job)
+        db.session.flush()
+
+        self.pbs_job_id = pbs_job.id
+        self.status = Compute.Status.STARTED
         db.session.commit()
 
-    def extend(self, ignore_pbs_limit=False):
+        # submit job, record if success or failed
+        pbs_job.submit()
+
+    def extend(self):
         if not self.need_extend:
             log.warning('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
             return
 
         os.chdir(self.dir)
 
+        pbs_name = '%s-%i' % (self.name, self.cycle + 1)
+        sh = os.path.join(self.dir, '_job.extend-%i.sh' % (self.cycle + 1))
+
+        # instead of run directly, we add a record to pbs_job
+
+        simulation = init_simulation(self.task.procedure)
+        simulation.extend(jobname=pbs_name, sh=sh)
+        # simulation.run()
+
+        pbs_job = PbsJob()
+        pbs_job.name = pbs_name
+        pbs_job.sh_file = sh
+        db.session.add(pbs_job)
+        db.session.flush()
+
+        self.pbs_job_id = pbs_job.id
         self.cycle += 1
-        self.pbs_name = '%s-%i' % (self.name, self.cycle)
         self.status = Compute.Status.STARTED
         db.session.commit()
 
-        simulation = init_simulation(self.task.procedure)
-        commands = simulation.extend(jobname=self.pbs_name)
-        simulation.run()
+        # submit job, record if success or failed
+        pbs_job.submit()
+
 
     def check_finished(self) -> bool:
         if self.status in (Compute.Status.DONE, Compute.Status.FAILED, Compute.Status.ANALYZED):
             return True
-        if self.is_running:
+        if not self.pbs_job_done:
             return False
 
         os.chdir(self.dir)

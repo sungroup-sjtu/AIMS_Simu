@@ -17,7 +17,7 @@ class BaseConfig:
 
     PBS_MANAGER = 'local'
     PBS_QUEUE_DICT = OrderedDict([(None, 2)])
-    PBS_NJOB_LIMIT = 10
+    PBS_NJOB_LIMIT = 100
     PBS_ENV_CMD = ''
 
     GMX_MULTIDIR = False  # do not perform gmx multidir simulation
@@ -42,8 +42,8 @@ class TH2Config(BaseConfig):
     GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'
 
     PBS_MANAGER = 'slurm'
-    PBS_QUEUE_DICT = OrderedDict([('free', 24)])
-    PBS_NJOB_LIMIT = 16
+    PBS_QUEUE_DICT = OrderedDict([('bigdata', 24)])
+    PBS_NJOB_LIMIT = 32
 
     GMX_MULTIDIR = True
     GMX_MULTIDIR_NJOB = 8

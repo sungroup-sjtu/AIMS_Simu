@@ -4,8 +4,13 @@
 import sys, time
 
 sys.path.append('..')
-from app.models import Task, Compute
+from app.models import Task, Compute, PbsJob
 from app import log
+
+
+def process_pbs_jobs():
+    for pbs_job in PbsJob.query.filter(PbsJob.submitted == False):
+        pbs_job.submit()
 
 
 def process_tasks():
@@ -25,6 +30,7 @@ def process_tasks():
 
 if __name__ == '__main__':
     while True:
+        process_pbs_jobs()
         process_tasks()
         log.info('Sleep 300 seconds ...')
         time.sleep(300)
