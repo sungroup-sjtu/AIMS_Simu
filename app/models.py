@@ -251,8 +251,8 @@ class Task(db.Model):
     @property
     def n_pbs_jobs(self) -> int:
         n = self.jobs.count()
-        if Config.GMX_MULTIDIR:
-            n = math.ceil(n / Config.GMX_MULTIDIR_NJOB)
+        if Config.GMX_MULTI:
+            n = math.ceil(n / Config.GMX_MULTI_NJOB)
         return n
 
     @property
@@ -351,7 +351,7 @@ class Task(db.Model):
             self.status = Compute.Status.STARTED
             db.session.commit()
 
-            if not Config.GMX_MULTIDIR:
+            if not Config.GMX_MULTI:
                 for job in self.jobs:
                     job.run()
                     time.sleep(sleep)
@@ -361,16 +361,15 @@ class Task(db.Model):
 
                 gmx = GMX(gmx_bin=Config.GMX_BIN)
                 commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                               n_parallel=Config.GMX_MULTIDIR_NJOB,
+                                                               n_parallel=Config.GMX_MULTI_NJOB,
                                                                n_gpu=0,
-                                                               n_thread=Config.GMX_MULTIDIR_NTHREAD)
+                                                               n_thread=Config.GMX_MULTI_NOMP)
                 for i, commands in enumerate(commands_list):
                     # instead of run directly, we add a record to pbs_job
                     sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
                     pbs_name = '%s-run-%i' % (self.name, i)
                     jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                           n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
-                    # jobmanager.submit(sh)
+                                           n_thread=Config.GMX_MULTI_NOMP, exclusive=True)
 
                     pbs_job = PbsJob()
                     pbs_job.name = pbs_name
@@ -379,7 +378,7 @@ class Task(db.Model):
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in self.jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
+                    for job in self.jobs[i * Config.GMX_MULTI_NJOB:(i + 1) * Config.GMX_MULTI_NJOB]:
                         job.pbs_job_id = pbs_job.id
                         job.status = Compute.Status.STARTED
                     db.session.commit()
@@ -396,12 +395,17 @@ class Task(db.Model):
         if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.STARTED):
             return False
 
-        # extend the task only if all the jobs are finished (done or failed)
+        # extend the task only if all jobs are finished (done or failed)
         for job in self.jobs:
             if job.status == Compute.Status.STARTED:
                 return False
 
-        return True
+        # do not extend the task if all jobs are failed
+        for job in self.jobs:
+            if job.status != Compute.Status.FAILED:
+                return True
+        else:
+            return False
 
     def extend(self, ignore_pbs_limit=False, sleep=0.2):
         log.info('Extend task %s' % self)
@@ -410,53 +414,61 @@ class Task(db.Model):
             log.warning('Not ready to extend %s' % self)
             return
 
-        extend_jobs = []
+        jobs_extend = []
         for job in self.jobs:
             if job.need_extend:
-                extend_jobs.append(job)
-        if len(extend_jobs) == 0:
+                jobs_extend.append(job)
+        if len(jobs_extend) == 0:
             log.warning('No job need to extend %s' % self)
             return
 
-        try:
-            if not Config.GMX_MULTIDIR:
-                n_extend_jobs = len(extend_jobs)
-            else:
-                n_extend_jobs = math.ceil(len(extend_jobs) / Config.GMX_MULTIDIR_NJOB_EXTEND)
+        n_jobs_extend = len(jobs_extend)
+        if Config.GMX_MULTI:
+            n_jobs_extend = math.ceil(n_jobs_extend / Config.GMX_MULTI_EXTEND_NJOB)
 
-            if not ignore_pbs_limit and jobmanager.n_running_jobs + n_extend_jobs >= Config.PBS_NJOB_LIMIT:
+        try:
+            if not ignore_pbs_limit and jobmanager.n_running_jobs + n_jobs_extend >= Config.PBS_NJOB_LIMIT:
                 raise Exception('PBS_NJOB_LIMIT reached')
 
             self.cycle += 1
 
-            if not Config.GMX_MULTIDIR:
-                for job in extend_jobs:
+            if not Config.GMX_MULTI:
+                for job in jobs_extend:
                     job.extend()
                     time.sleep(sleep)
             else:
                 multi_dirs = []
                 multi_cmds = []
                 simulation = init_simulation(self.procedure)
-                for job in extend_jobs:
+                for job in jobs_extend:
                     os.chdir(job.dir)
                     multi_dirs.append(job.dir)
                     multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
                                                    sh='_job.extend-%i.sh' % (job.cycle + 1))
 
-                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                                          n_parallel=Config.GMX_MULTIDIR_NJOB_EXTEND,
+                # use different -ntomp if only small number of jobs
+                n_jobs_reminder = n_jobs_extend % Config.GMX_MULTI_EXTEND_NJOB
+                n_omp_reminder = Config.GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP.get(n_jobs_reminder) or Config.GMX_MULTI_NOMP
+                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[:-n_jobs_reminder], multi_cmds,
+                                                                          n_parallel=Config.GMX_MULTI_EXTEND_NJOB,
                                                                           n_gpu=0,
-                                                                          n_thread=Config.GMX_MULTIDIR_NTHREAD)
+                                                                          n_thread=Config.GMX_MULTI_NOMP)
+                commands_list += simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[-n_jobs_reminder:], multi_cmds,
+                                                                           n_parallel=Config.GMX_MULTI_EXTEND_NJOB,
+                                                                           n_gpu=0,
+                                                                           n_thread=n_omp_reminder)
 
                 os.chdir(self.dir)
                 for i, commands in enumerate(commands_list):
-                    # instead of run directly, we add a record to pbs_job
                     sh = os.path.join(self.dir, '_job.extend-%i-%i.sh' % (self.cycle, i))
                     pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
-                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                           n_thread=Config.GMX_MULTIDIR_NTHREAD, exclusive=True)
-                    # jobmanager.submit(sh)
 
+                    # use different -ntomp if only small number of jobs
+                    n_thread = Config.GMX_MULTI_NOMP if i < n_jobs_extend - n_jobs_reminder else n_omp_reminder
+                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
+                                           n_thread=n_thread, exclusive=True)
+
+                    # instead of run directly, we add a record to pbs_job
                     pbs_job = PbsJob()
                     pbs_job.name = pbs_name
                     pbs_job.sh_file = sh
@@ -464,7 +476,7 @@ class Task(db.Model):
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB_EXTEND:(i + 1) * Config.GMX_MULTIDIR_NJOB_EXTEND]:
+                    for job in jobs_extend[i * Config.GMX_MULTI_EXTEND_NJOB:(i + 1) * Config.GMX_MULTI_EXTEND_NJOB]:
                         job.pbs_job_id = pbs_job.id
                         job.cycle += 1
                         job.status = Compute.Status.STARTED
@@ -651,10 +663,6 @@ class Job(db.Model):
             raise Exception('Should prepare job first')
 
         # instead of run directly, we add a record to pbs_job
-
-        # simulation = init_simulation(self.task.procedure)
-        # simulation.run()
-
         pbs_job = PbsJob()
         pbs_job.name = self.name
         pbs_job.sh_file = os.path.join(self.dir, jobmanager.sh)
@@ -682,7 +690,6 @@ class Job(db.Model):
 
         simulation = init_simulation(self.task.procedure)
         simulation.extend(jobname=pbs_name, sh=sh)
-        # simulation.run()
 
         pbs_job = PbsJob()
         pbs_job.name = pbs_name

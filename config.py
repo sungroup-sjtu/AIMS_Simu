@@ -20,7 +20,7 @@ class BaseConfig:
     PBS_NJOB_LIMIT = 100
     PBS_ENV_CMD = ''
 
-    GMX_MULTIDIR = False  # do not perform gmx multidir simulation
+    GMX_MULTI = False  # do not perform gmx multidir simulation
 
 
 class ClusterConfig(BaseConfig):
@@ -52,10 +52,12 @@ module load gcc/5.3.0
     PBS_QUEUE_DICT = OrderedDict([('bigdata', 24)])
     PBS_NJOB_LIMIT = 64
 
-    GMX_MULTIDIR = True
-    GMX_MULTIDIR_NJOB = 8
-    GMX_MULTIDIR_NTHREAD = 6
-    GMX_MULTIDIR_NJOB_EXTEND = 4
+    GMX_MULTI = True
+    GMX_MULTI_NJOB = 8
+    GMX_MULTI_NOMP = 6
+
+    GMX_MULTI_EXTEND_NJOB = 8
+    GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP = {1: 24, 2: 12, 3: 8, 5: 4, 6: 4}
 
 
 class PIConfig(BaseConfig):
