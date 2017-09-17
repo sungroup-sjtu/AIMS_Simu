@@ -419,7 +419,12 @@ class Task(db.Model):
             return
 
         try:
-            if not ignore_pbs_limit and jobmanager.n_running_jobs + len(extend_jobs) >= Config.PBS_NJOB_LIMIT:
+            if not Config.GMX_MULTIDIR:
+                n_extend_jobs = len(extend_jobs)
+            else:
+                n_extend_jobs = math.ceil(len(extend_jobs) / Config.GMX_MULTIDIR_NJOB_EXTEND)
+
+            if not ignore_pbs_limit and jobmanager.n_running_jobs + n_extend_jobs >= Config.PBS_NJOB_LIMIT:
                 raise Exception('PBS_NJOB_LIMIT reached')
 
             self.cycle += 1
@@ -439,7 +444,7 @@ class Task(db.Model):
                                                    sh='_job.extend-%i.sh' % (job.cycle + 1))
 
                 commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                                          n_parallel=Config.GMX_MULTIDIR_NJOB,
+                                                                          n_parallel=Config.GMX_MULTIDIR_NJOB_EXTEND,
                                                                           n_gpu=0,
                                                                           n_thread=Config.GMX_MULTIDIR_NTHREAD)
 
@@ -459,7 +464,7 @@ class Task(db.Model):
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB:(i + 1) * Config.GMX_MULTIDIR_NJOB]:
+                    for job in extend_jobs[i * Config.GMX_MULTIDIR_NJOB_EXTEND:(i + 1) * Config.GMX_MULTIDIR_NJOB_EXTEND]:
                         job.pbs_job_id = pbs_job.id
                         job.cycle += 1
                         job.status = Compute.Status.STARTED

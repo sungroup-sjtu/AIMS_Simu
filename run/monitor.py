@@ -14,12 +14,17 @@ def process_pbs_jobs():
 
 
 def process_tasks():
+    n_build_tasks = 0
     for task in Task.query.all():
         if task.stage == Compute.Stage.SUBMITTED and task.status == Compute.Status.DONE:
-            task.build()
+            # do not build too much tasks once
+            if n_build_tasks <= 25:
+                task.build()
+                n_build_tasks += 1
 
         if task.stage == Compute.Stage.BUILDING and task.status == Compute.Status.DONE:
             task.run()
+
 
         elif task.stage == Compute.Stage.RUNNING and task.status == Compute.Status.STARTED:
             task.check_finished()

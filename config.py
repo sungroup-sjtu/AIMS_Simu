@@ -36,6 +36,13 @@ class ClusterConfig(BaseConfig):
 
 
 class TH2Config(BaseConfig):
+    PBS_ENV_CMD = '''
+source /BIGDATA/app/toolshs/cnmodule.sh
+module purge
+module load intel-compilers/mkl-15
+module load gcc/5.3.0
+'''
+
     WORK_DIR = '/BIGDATA/sjtu_hsun_1/MSDServer'
     DFF_ROOT = '/HOME/sjtu_hsun_1/apps/dff/7.3'
     PACKMOL_BIN = '/WORK/app/packmol/bin/packmol'
@@ -43,11 +50,12 @@ class TH2Config(BaseConfig):
 
     PBS_MANAGER = 'slurm'
     PBS_QUEUE_DICT = OrderedDict([('bigdata', 24)])
-    PBS_NJOB_LIMIT = 32
+    PBS_NJOB_LIMIT = 64
 
     GMX_MULTIDIR = True
     GMX_MULTIDIR_NJOB = 8
     GMX_MULTIDIR_NTHREAD = 6
+    GMX_MULTIDIR_NJOB_EXTEND = 4
 
 
 class PIConfig(BaseConfig):

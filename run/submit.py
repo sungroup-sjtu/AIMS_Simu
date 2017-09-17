@@ -25,7 +25,7 @@ if len(sys.argv) != 3:
 with open(sys.argv[1]) as f:
     lines = f.read().splitlines()
 
-remark = sys.argv[2]
+json_dict['remark'] = sys.argv[2]
 
 for line in lines:
     line.strip()
@@ -37,11 +37,14 @@ for line in lines:
     t_min = int(round(float(words[4])))
     t_max = int(round(float(words[5])))
 
+    if t_min > t_max:
+        print('!Not Good', line)
+        continue
+
     json_dict['detail']['combinations'].append({'smiles': [smiles],
                                                 'names': [name],
                                                 't': [t_min, t_max],
                                                 })
-    json_dict['remark'] = remark
 
 print(json_dict)
 r = requests.post('http://localhost:5050/api/submit', json=json_dict)
