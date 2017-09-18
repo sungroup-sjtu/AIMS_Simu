@@ -422,12 +422,11 @@ class Task(db.Model):
             log.warning('No job need to extend %s' % self)
             return
 
-        n_jobs_extend = len(jobs_extend)
-        if Config.GMX_MULTI:
-            n_jobs_extend = math.ceil(n_jobs_extend / Config.GMX_MULTI_EXTEND_NJOB)
+        n_extend = len(jobs_extend)
+        n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_EXTEND_NJOB) if Config.GMX_MULTI else n_extend
 
         try:
-            if not ignore_pbs_limit and jobmanager.n_running_jobs + n_jobs_extend >= Config.PBS_NJOB_LIMIT:
+            if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend >= Config.PBS_NJOB_LIMIT:
                 raise Exception('PBS_NJOB_LIMIT reached')
 
             self.cycle += 1
@@ -447,13 +446,13 @@ class Task(db.Model):
                                                    sh='_job.extend-%i.sh' % (job.cycle + 1))
 
                 # use different -ntomp if only small number of jobs
-                n_jobs_reminder = n_jobs_extend % Config.GMX_MULTI_EXTEND_NJOB
-                n_omp_reminder = Config.GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP.get(n_jobs_reminder) or Config.GMX_MULTI_NOMP
-                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[:-n_jobs_reminder], multi_cmds,
+                n_reminder = n_extend % Config.GMX_MULTI_EXTEND_NJOB
+                n_omp_reminder = Config.GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP.get(n_reminder) or Config.GMX_MULTI_NOMP
+                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[:-n_reminder], multi_cmds,
                                                                           n_parallel=Config.GMX_MULTI_EXTEND_NJOB,
                                                                           n_gpu=0,
                                                                           n_thread=Config.GMX_MULTI_NOMP)
-                commands_list += simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[-n_jobs_reminder:], multi_cmds,
+                commands_list += simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[-n_reminder:], multi_cmds,
                                                                            n_parallel=Config.GMX_MULTI_EXTEND_NJOB,
                                                                            n_gpu=0,
                                                                            n_thread=n_omp_reminder)
@@ -464,7 +463,7 @@ class Task(db.Model):
                     pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
 
                     # use different -ntomp if only small number of jobs
-                    n_thread = Config.GMX_MULTI_NOMP if i < n_jobs_extend - n_jobs_reminder else n_omp_reminder
+                    n_thread = Config.GMX_MULTI_NOMP if i < n_extend - n_reminder else n_omp_reminder
                     jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
                                            n_thread=n_thread, exclusive=True)
 
