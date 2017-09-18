@@ -249,13 +249,6 @@ class Task(db.Model):
         ).first()
 
     @property
-    def n_pbs_jobs(self) -> int:
-        n = self.jobs.count()
-        if Config.GMX_MULTI:
-            n = math.ceil(n / Config.GMX_MULTI_NJOB)
-        return n
-
-    @property
     def n_mol_total(self) -> int:
         n_mol = 0
         for i in json.loads(self.n_mol_list):
@@ -336,20 +329,26 @@ class Task(db.Model):
 
     def run(self, ignore_pbs_limit=False, sleep=0.2):
         log.info('Run task %s' % self)
+
+        n_pbs_run = self.jobs.count()
+        if Config.GMX_MULTI:
+            n_pbs_run = math.ceil(n_pbs_run / Config.GMX_MULTI_NJOB)
+
+        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_run >= Config.PBS_NJOB_LIMIT:
+            log.warning('PBS_NJOB_LIMIT reached')
+            return
+
         try:
             if self.stage != Compute.Stage.BUILDING:
                 raise Exception('Incorrect stage: %s' % Compute.Stage.text[self.stage])
             elif self.status != Compute.Status.DONE:
                 raise Exception('Incorrect status: %s' % Compute.Status.text[self.status])
 
-            if not ignore_pbs_limit and jobmanager.n_running_jobs + self.n_pbs_jobs >= Config.PBS_NJOB_LIMIT:
-                raise Exception('PBS_NJOB_LIMIT reached')
-
-            os.chdir(self.dir)
-
             self.stage = Compute.Stage.RUNNING
             self.status = Compute.Status.STARTED
             db.session.commit()
+
+            os.chdir(self.dir)
 
             if not Config.GMX_MULTI:
                 for job in self.jobs:
@@ -395,14 +394,14 @@ class Task(db.Model):
         if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.STARTED):
             return False
 
-        # extend the task only if all jobs are finished (done or failed)
+        # do not extend the task if some job is running
         for job in self.jobs:
             if job.status == Compute.Status.STARTED:
                 return False
 
-        # do not extend the task if all jobs are failed
+        # do not extend the task if no job need extend
         for job in self.jobs:
-            if job.status != Compute.Status.FAILED:
+            if job.need_extend:
                 return True
         else:
             return False
@@ -425,12 +424,14 @@ class Task(db.Model):
         n_extend = len(jobs_extend)
         n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_EXTEND_NJOB) if Config.GMX_MULTI else n_extend
 
+        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend >= Config.PBS_NJOB_LIMIT:
+            log.warning('PBS_NJOB_LIMIT reached')
+            return
+
+        self.cycle += 1
+        db.session.commit()
+
         try:
-            if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend >= Config.PBS_NJOB_LIMIT:
-                raise Exception('PBS_NJOB_LIMIT reached')
-
-            self.cycle += 1
-
             if not Config.GMX_MULTI:
                 for job in jobs_extend:
                     job.extend()
