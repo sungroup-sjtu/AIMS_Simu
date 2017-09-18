@@ -463,10 +463,12 @@ class Task(db.Model):
                     sh = os.path.join(self.dir, '_job.extend-%i-%i.sh' % (self.cycle, i))
                     pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
 
-                    # use different -ntomp if only small number of jobs
-                    n_thread = Config.GMX_MULTI_NOMP if i < n_extend - n_reminder else n_omp_reminder
+                    # use different -ntomp for reminder jobs (the last PBS job)
+                    n_omp = Config.GMX_MULTI_NOMP
+                    if n_reminder > 0 and i == n_pbs_extend - 1:
+                        n_omp = n_omp_reminder
                     jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                           n_thread=n_thread, exclusive=True)
+                                           n_thread=n_omp, exclusive=True)
 
                     # instead of run directly, we add a record to pbs_job
                     pbs_job = PbsJob()
