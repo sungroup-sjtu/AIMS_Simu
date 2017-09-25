@@ -22,6 +22,8 @@ class BaseConfig:
 
     GMX_MULTI = False  # do not perform gmx multidir simulation
 
+    EXTEND_CYCLE_LIMIT = 8
+
 
 class ClusterConfig(BaseConfig):
     WORK_DIR = '/share/workspace/msdserver/MSDServer/'

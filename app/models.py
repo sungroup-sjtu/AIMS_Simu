@@ -421,6 +421,10 @@ class Task(db.Model):
             log.warning('No job need to extend %s' % self)
             return
 
+        if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
+            log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
+            return
+
         n_extend = len(jobs_extend)
         n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_EXTEND_NJOB) if Config.GMX_MULTI else n_extend
 
@@ -683,6 +687,10 @@ class Job(db.Model):
             log.warning('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
             return
 
+        if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
+            log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
+            return
+
         os.chdir(self.dir)
 
         pbs_name = '%s-%i' % (self.name, self.cycle + 1)
@@ -753,6 +761,8 @@ class Job(db.Model):
             else:
                 self.converged = True
                 self.result = json.dumps(result)
+                # clean useless files if the simulation converged
+                simulation.clean()
             db.session.commit()
 
     def remove(self):
