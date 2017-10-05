@@ -778,3 +778,12 @@ class Job(db.Model):
 
         db.session.delete(self)
         db.session.commit()
+
+    def remove_trj(self):
+        os.chdir(self.dir)
+        for f in os.listdir(os.getcwd()):
+            if f.endswith('.trr') or f.endswith('.xtc') or f.startswith('.#'):
+                try:
+                    os.remove(f)
+                except:
+                    pass
