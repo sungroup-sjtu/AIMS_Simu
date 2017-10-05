@@ -68,6 +68,6 @@ for line in lines:
                                                 't': [t_min, t_max],
                                                 })
 
-    print(json_dict)
-    r = requests.post('http://localhost:5050/api/submit', json=json_dict)
-    print(r.text)
+print(json_dict)
+r = requests.post('http://localhost:5050/api/submit', json=json_dict)
+print(r.text)
