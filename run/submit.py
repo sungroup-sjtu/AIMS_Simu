@@ -6,6 +6,7 @@ Usage: submit.py mols.txt 'remark for this computation'
 '''
 
 import sys
+
 import requests
 
 json_dict = {
@@ -34,11 +35,32 @@ for line in lines:
     words = line.split()
     name = words[2]
     smiles = words[3]
-    t_min = int(round(float(words[4])))
-    t_max = int(round(float(words[5])))
+    t_fus = words[4]
+    t_vap = words[5]
+    t_c = words[6]
+
+    if t_vap == 'None':
+        print('!ERROR: Tvap is None: %s' % line)
+        continue
+
+    t_vap = int(round(float(t_vap)))
+
+    if t_fus == 'None':
+        print('!WARNING: Tfus is None: %s' % line)
+        t_min = 298
+    else:
+        t_fus = int(round(float(t_fus)))
+        t_min = t_fus + 25
+
+    if t_c == 'None':
+        print('!WARNING: Tc is None: %s' % line)
+        t_max = t_vap + 100
+    else:
+        t_c = int(round(float(t_c)))
+        t_max = t_c - 100
 
     if t_min > t_max:
-        print('!Not Good', line)
+        print('!ERROR: t_min > t_max: %s' % line)
         continue
 
     json_dict['detail']['combinations'].append({'smiles': [smiles],
@@ -46,6 +68,6 @@ for line in lines:
                                                 't': [t_min, t_max],
                                                 })
 
-print(json_dict)
-r = requests.post('http://localhost:5050/api/submit', json=json_dict)
-print(r.text)
+    print(json_dict)
+    r = requests.post('http://localhost:5050/api/submit', json=json_dict)
+    print(r.text)
