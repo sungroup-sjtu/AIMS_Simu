@@ -334,7 +334,7 @@ class Task(db.Model):
         if Config.GMX_MULTI:
             n_pbs_run = math.ceil(n_pbs_run / Config.GMX_MULTI_NJOB)
 
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_run >= Config.PBS_NJOB_LIMIT:
+        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_run > Config.PBS_NJOB_LIMIT:
             log.warning('PBS_NJOB_LIMIT reached')
             return
 
@@ -428,7 +428,7 @@ class Task(db.Model):
         n_extend = len(jobs_extend)
         n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_EXTEND_NJOB) if Config.GMX_MULTI else n_extend
 
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend >= Config.PBS_NJOB_LIMIT:
+        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend > Config.PBS_NJOB_LIMIT:
             log.warning('PBS_NJOB_LIMIT reached')
             return
 

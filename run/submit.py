@@ -57,9 +57,9 @@ for line in lines:
         t_max = t_vap + 100
     else:
         t_c = int(round(float(t_c)))
-        t_max = t_c - 100
+        t_max = int(round(t_c * 0.8))
 
-    if t_min > t_max:
+    if t_min >= t_max:
         print('!ERROR: t_min > t_max: %s' % line)
         continue
 
