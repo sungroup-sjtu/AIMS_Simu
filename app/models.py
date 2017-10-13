@@ -33,7 +33,7 @@ else:
 
 def init_simulation(procedure):
     from mstools.simulation import gmx as simulationEngine
-    kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT,
+    kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT, 'dff_table': Config.DFF_TABLE,
               'gmx_bin': Config.GMX_BIN, 'jobmanager': jobmanager}
 
     if procedure == 'npt':
@@ -95,9 +95,9 @@ class Compute(db.Model):
                 if p not in Procedure.choices:
                     raise Exception('Invalid simulation procedure: %s' % p)
 
-                prior = Procedure.prior.get(p)
-                if prior is not None and prior not in procedures:
-                    procedures = [prior] + procedures  # Put prerequisite at first
+                    # prior = Procedure.prior.get(p)
+                    # if prior is not None and prior not in procedures:
+                    #     procedures = [prior] + procedures  # Put prerequisite at first
 
             # TODO ignore duplicated smiles combinations
             # all_smiles_list = []
@@ -228,7 +228,10 @@ class Task(db.Model):
 
     @property
     def dir(self) -> str:
-        return os.path.join(Config.WORK_DIR, self.name)
+        if self.procedure == 'npt':
+            return os.path.join(Config.WORK_DIR, self.name)
+        else:
+            return os.path.join(Config.WORK_DIR, self.procedure, self.name)
 
     @property
     def prior_task(self):
@@ -236,15 +239,15 @@ class Task(db.Model):
         if prior_procedure is None:
             return None
 
-        # TODO Herein we suppose there is no duplicated task
+        # TODO Herein we suppose there is no duplicated task. Do not consider T and P
         return Task.query.filter(
             and_(Task.smiles_list == self.smiles_list,
                  Task.procedure == prior_procedure,
-                 Task.t_min == self.t_min,
-                 Task.t_max == self.t_max,
-                 Task.t_interval == self.t_interval,
-                 Task.p_min == self.p_max,
-                 Task.p_max == self.p_max
+                 # Task.t_min == self.t_min,
+                 # Task.t_max == self.t_max,
+                 # Task.t_interval == self.t_interval,
+                 # Task.p_min == self.p_max,
+                 # Task.p_max == self.p_max
                  )
         ).first()
 
@@ -624,9 +627,11 @@ class Job(db.Model):
         if prior_task is None:
             return None
 
-        for job in prior_task.jobs:
-            if job.t == self.t and job.p == self.p:
-                return job
+        return prior_task.jobs.filter(
+            and_(Job.t == self.t,
+                 Job.p == self.p
+                 )
+        ).first()
 
     @property
     def pbs_job_done(self) -> bool:
@@ -647,8 +652,8 @@ class Job(db.Model):
             prior_job_dir = None
         else:
             if not prior_job.converged:
-                log.warning('Prepare job failed %s Prior job not converged' % repr(self))
-                return
+                log.warning('Prepare job %s Prior job not converged' % repr(self))
+                prior_job_dir = None
             else:
                 prior_job_dir = prior_job.dir
 
