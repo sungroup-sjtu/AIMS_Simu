@@ -8,6 +8,8 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --nodes=1
 #SBATCH --exclusive
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=unimisia@gmail.com
 
 
 cd /HOME/sjtu_hsun_1/Project/msd-server/run

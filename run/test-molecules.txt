@@ -1,3 +1,0 @@
-#Category Formula Name SMILES T_min(K) T_max P_min(bar) P_max
-alkane C6H14 1-6 CCCCCC 178 342 1 100
-alkane C7H16 2-10 CC(C)C(C)(C)C 249 354 1 100
