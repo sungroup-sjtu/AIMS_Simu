@@ -302,9 +302,9 @@ class Task(db.Model):
         if self.p_min is None or self.p_max is None:
             P_list = [None]
         else:
-            P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2, 5))
-            # remove P in the range of (1,10] bar
-            P_list = list(filter(lambda x: x == 1 or x > 10, P_list))
+            # P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2, 5))
+            # P_list = list(filter(lambda x: x == 1 or x > 10, P_list))  # remove P in the range of (1,10] bar
+            P_list = [1, 50, 100, 250, 500, 750, 1000]
 
         for p in P_list:
             for t in T_list:

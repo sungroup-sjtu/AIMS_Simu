@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 class BaseConfig:
     CWD = os.path.dirname(os.path.abspath(__file__))
-    DB_NAME = 'msdserver-old.sqlite'
+    DB_NAME = 'msdserver.sqlite'
     DB_PATH = os.path.join(CWD, DB_NAME)
     LOG = os.path.join(CWD, '_LOG_.txt')
 
@@ -17,7 +17,7 @@ class BaseConfig:
 
     PBS_MANAGER = 'local'
     PBS_QUEUE_DICT = OrderedDict([(None, 2)])
-    PBS_NJOB_LIMIT = 100
+    PBS_NJOB_LIMIT = 10
     PBS_ENV_CMD = ''
 
     GMX_MULTI = False  # do not perform gmx multidir simulation
@@ -47,7 +47,7 @@ module load intel-compilers/mkl-15
 module load gcc/5.3.0
 '''
 
-    WORK_DIR = '/BIGDATA/sjtu_hsun_1/MSDServer'
+    WORK_DIR = '/BIGDATA/sjtu_hsun_1/_MSDServer'
     DFF_ROOT = '/HOME/sjtu_hsun_1/apps/DFF/Developing'
     PACKMOL_BIN = '/WORK/app/packmol/bin/packmol'
     GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'

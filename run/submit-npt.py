@@ -6,7 +6,6 @@ Usage: submit.py mols.txt 'remark for this computation'
 '''
 
 import sys
-
 import requests
 
 json_dict = {
@@ -15,7 +14,7 @@ json_dict = {
     'detail': {
         'procedures': ['npt'],
         'combinations': [],
-        'p': [1, 1000]  # bar
+        'p': [1, 1000]  # bar. This option is useless
     }
 }
 
@@ -42,22 +41,23 @@ for line in lines:
     if t_vap == 'None':
         print('!ERROR: Tvap is None: %s' % line)
         continue
-
     t_vap = int(round(float(t_vap)))
 
     if t_fus == 'None':
         print('!WARNING: Tfus is None: %s' % line)
-        t_min = 298
+        t_min = t_vap * 0.4 + 100
     else:
         t_fus = int(round(float(t_fus)))
         t_min = t_fus + 25
 
     if t_c == 'None':
         print('!WARNING: Tc is None: %s' % line)
-        t_max = t_vap + 100
+        t_max = t_vap + 75
     else:
         t_c = int(round(float(t_c)))
         t_max = int(round(t_c * 0.8))
+
+    t_max = min(t_max, 600)
 
     if t_min >= t_max:
         print('!ERROR: t_min > t_max: %s' % line)
