@@ -530,7 +530,12 @@ class Task(db.Model):
 
     def remove(self):
         for job in self.jobs:
-            job.remove()
+            if not job.pbs_job_done:
+                try:
+                    jobmanager.kill_job(job.pbs_name)
+                except Exception as e:
+                    log.warning('Kill job %s Cannot kill PBS job: %s' % (job, repr(e)))
+            db.session.delete(job)
         try:
             shutil.rmtree(self.dir)
         except:
@@ -771,10 +776,11 @@ class Job(db.Model):
             db.session.commit()
 
     def remove(self):
-        try:
-            jobmanager.kill_job(self.pbs_name)
-        except Exception as e:
-            log.warning('Remove job %s Cannot kill PBS job: %s' % (self, repr(e)))
+        if not self.pbs_job_done:
+            try:
+                jobmanager.kill_job(self.pbs_name)
+            except Exception as e:
+                log.warning('Kill job %s Cannot kill PBS job: %s' % (self, repr(e)))
 
         try:
             shutil.rmtree(self.dir)
