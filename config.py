@@ -5,11 +5,11 @@ from collections import OrderedDict
 
 class BaseConfig:
     CWD = os.path.dirname(os.path.abspath(__file__))
-    DB_NAME = 'msdserver.sqlite'
+    DB_NAME = 'msdserver-old.sqlite'
     DB_PATH = os.path.join(CWD, DB_NAME)
     LOG = os.path.join(CWD, '_LOG_.txt')
 
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s' % DB_PATH
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % DB_PATH
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     SQLALCHEMY_TRACK_MODIFICATIONS = True
 

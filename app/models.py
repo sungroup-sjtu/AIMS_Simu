@@ -219,6 +219,7 @@ class Task(db.Model):
     status = NotNullColumn(Integer, default=Compute.Status.DONE)
     commands = Column(Text, nullable=True)
     remark = Column(Text, nullable=True)
+    post_result = Column(Text, nullable=True)
 
     compute = db.relationship(Compute)
     jobs = db.relationship('Job', lazy='dynamic')
@@ -594,6 +595,95 @@ class Task(db.Model):
                         stderr_list['hvap'].append(v[1] / self.n_mol_total)
 
         return T_list, result_list, stderr_list
+
+    def post_process(self):
+        if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.DONE):
+            return
+
+        from sklearn import linear_model
+        from sklearn.preprocessing import PolynomialFeatures
+
+        skx = []
+        skv = []
+        skv_einter = []
+        for job in self.jobs:
+            skx.append([job.t, job.p])
+            skv.append(json.loads(job.result)['density'][0])
+            skv_einter.append(json.loads(job.result)['e_inter'][0])
+
+        poly3 = PolynomialFeatures(3)
+        skx3_ = poly3.fit_transform(skx)
+        clf3 = linear_model.LinearRegression()
+        clf3.fit(skx3_, skv)
+        k0 = clf3.intercept_
+        json_dict = {'density-poly3': [k0] + list(clf3.coef_[1:]),
+                     'density-poly3-score': clf3.score(skx3_, skv)
+                     }
+        clf3.fit(skx3_, skv_einter)
+        k0 = clf3.intercept_
+        json_dict.update({'einter-poly3': [k0] + list(clf3.coef_[1:]),
+                          'einter-poly3-score': clf3.score(skx3_, skv_einter)
+                          })
+
+        poly4 = PolynomialFeatures(4)
+        skx4_ = poly4.fit_transform(skx)
+        clf4 = linear_model.LinearRegression()
+        clf4.fit(skx4_, skv)
+        k0 = clf4.intercept_
+
+        json_dict.update({'density-poly4': [k0] + list(clf4.coef_[1:]),
+                          'density-poly4-score': clf4.score(skx4_, skv)
+                          })
+
+        self.post_result = json.dumps(json_dict)
+
+        db.session.commit()
+
+    def get_expan_compress(self, T=298, P=1):
+        json_dict = json.loads(self.post_result)
+        k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = json_dict['density-poly3']
+        score = json_dict['density-poly3-score']
+
+        density = k0 \
+                  + k1 * T + k2 * P \
+                  + k3 * T * T + k4 * T * P + k5 * P * P \
+                  + k6 * T * T * T + k7 * T * T * P + k8 * T * P * P + k9 * P * P * P
+        dDdT = k1 + 2 * k3 * T + k4 * P + 3 * k6 * T * T + 2 * k7 * P * T + k8 * P * P
+        dDdP = k2 + k4 * T + 2 * k5 * P + k7 * T * T + 2 * k8 * T * P + 3 * k9 * P * P
+        expan = -1 / density * dDdT
+        compress = 1 / density * dDdP
+        print('Poly3-Density: ', density, expan, compress, score)
+
+        k0, k1, k2, k3, k4, k5, k6, k7, k8, k9 = json_dict['einter-poly3']
+        score = json_dict['einter-poly3-score']
+
+        einter = k0 \
+                 + k1 * T + k2 * P \
+                 + k3 * T * T + k4 * T * P + k5 * P * P \
+                 + k6 * T * T * T + k7 * T * T * P + k8 * T * P * P + k9 * P * P * P
+        dEdT = k1 + 2 * k3 * T + k4 * P + 3 * k6 * T * T + 2 * k7 * P * T + k8 * P * P
+        Cv_inter = dEdT * 1000 / self.n_mol_total
+
+        import pybel
+        py_mol = pybel.readstring('smi', json.loads(self.smiles_list)[0])
+        Cv_PV = - py_mol.molwt * P / density ** 2 * dDdT
+        print('Poly3-Einter: ', einter, Cv_inter, Cv_PV, score)
+
+        k0, k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, k13, k14 = json_dict['density-poly4']
+        score = json_dict['density-poly4-score']
+
+        density = k0 \
+                  + k1 * T + k2 * P \
+                  + k3 * T * T + k4 * T * P + k5 * P * P \
+                  + k6 * T * T * T + k7 * T * T * P + k8 * T * P * P + k9 * P * P * P \
+                  + k10 * T ** 4 + k11 * T ** 3 * P + k12 * T ** 2 * P ** 2 + k13 * T * P ** 3 + k14 * P ** 4
+        dDdT = k1 + 2 * k3 * T + k4 * P + 3 * k6 * T * T + 2 * k7 * P * T + k8 * P * P \
+               + 4 * k10 * T ** 3 + 3 * k11 * P * T ** 2 + 2 * k12 * P ** 2 * T + k13 * P ** 3
+        dDdP = k2 + k4 * T + 2 * k5 * P + k7 * T * T + 2 * k8 * T * P + 3 * k9 * P * P \
+               + k11 * T ** 3 + 2 * k12 * T ** 2 * P + 3 * k13 * T * P ** 2 + 4 * k14 * P ** 3
+        expan = -1 / density * dDdT
+        compress = 1 / density * dDdP
+        print('Poly4-Density: ', density, expan, compress, score)
 
 
 class Job(db.Model):
