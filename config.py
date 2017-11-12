@@ -28,11 +28,15 @@ class BaseConfig:
 
 
 class ClusterConfig(BaseConfig):
-    WORK_DIR = '/share/workspace/msdserver/MSDServer/'
-    DFF_ROOT = '/share/apps/dff/msdserver'
+    PBS_ENV_CMD = '''
+    export MALLOC_CHECK_=0
+'''
+
+    WORK_DIR = '/share/workspace/gongzheng/_MSDServer/'
+    DFF_ROOT = '/home/gongzheng/apps/DFF/Developing'
     PACKMOL_BIN = '/share/apps/tools/packmol'
     LMP_BIN = '/share/apps/lammps/lmp-stable'
-    GMX_BIN = '/share/apps/gromacs/2016.3-msdserver/bin/gmx_gpu'
+    GMX_BIN = '/share/apps/gromacs/2016.3/bin/gmx_gpu'
 
     PBS_MANAGER = 'torque'
     PBS_QUEUE_DICT = OrderedDict([('cpu', 8)])
