@@ -365,7 +365,7 @@ class Task(db.Model):
                 gmx = GMX(gmx_bin=Config.GMX_BIN)
                 commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
                                                                n_parallel=Config.GMX_MULTI_NJOB,
-                                                               n_gpu=0,
+                                                               n_gpu=Config.GMX_MULTI_NGPU,
                                                                n_thread=Config.GMX_MULTI_NOMP)
                 for i, commands in enumerate(commands_list):
                     # instead of run directly, we add a record to pbs_job
@@ -430,7 +430,7 @@ class Task(db.Model):
             return
 
         n_extend = len(jobs_extend)
-        n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_EXTEND_NJOB) if Config.GMX_MULTI else n_extend
+        n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_NJOB) if Config.GMX_MULTI else n_extend
 
         if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend > Config.PBS_NJOB_LIMIT:
             log.warning('PBS_NJOB_LIMIT reached')
@@ -454,29 +454,41 @@ class Task(db.Model):
                     multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
                                                    sh='_job.extend-%i.sh' % (job.cycle + 1))
 
-                # use different -ntomp if only small number of jobs
-                n_reminder = n_extend % Config.GMX_MULTI_EXTEND_NJOB
-                n_omp_reminder = Config.GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP.get(n_reminder) or Config.GMX_MULTI_NOMP
-                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[:-n_reminder], multi_cmds,
-                                                                          n_parallel=Config.GMX_MULTI_EXTEND_NJOB,
-                                                                          n_gpu=0,
-                                                                          n_thread=Config.GMX_MULTI_NOMP)
-                commands_list += simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[-n_reminder:], multi_cmds,
-                                                                           n_parallel=Config.GMX_MULTI_EXTEND_NJOB,
-                                                                           n_gpu=0,
-                                                                           n_thread=n_omp_reminder)
+                if Config.GMX_MULTI_NGPU > 0:
+                    commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                              n_parallel=Config.GMX_MULTI_NJOB,
+                                                                              n_gpu=Config.GMX_MULTI_NGPU,
+                                                                              n_thread=Config.GMX_MULTI_NOMP)
+                else:
+                    # use different -ntomp if only small number of jobs
+                    n_reminder = n_extend % Config.GMX_MULTI_NJOB
+                    n_omp_reminder = Config.GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP.get(n_reminder) or Config.GMX_MULTI_NOMP
+                    commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[:-n_reminder], multi_cmds,
+                                                                              n_parallel=Config.GMX_MULTI_NJOB,
+                                                                              n_gpu=Config.GMX_MULTI_NGPU,
+                                                                              n_thread=Config.GMX_MULTI_NOMP)
+                    commands_list += simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[-n_reminder:], multi_cmds,
+                                                                               n_parallel=Config.GMX_MULTI_NJOB,
+                                                                               n_gpu=Config.GMX_MULTI_NGPU,
+                                                                               n_thread=n_omp_reminder)
 
                 os.chdir(self.dir)
                 for i, commands in enumerate(commands_list):
                     sh = os.path.join(self.dir, '_job.extend-%i-%i.sh' % (self.cycle, i))
                     pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
 
-                    # use different -ntomp for reminder jobs (the last PBS job)
-                    n_omp = Config.GMX_MULTI_NOMP
-                    if n_reminder > 0 and i == n_pbs_extend - 1:
-                        n_omp = n_omp_reminder
-                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                           n_thread=n_omp, exclusive=True)
+                    if Config.GMX_MULTI_NGPU > 0:
+                        jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
+                                               n_thread=Config.GMX_MULTI_NOMP, exclusive=True)
+                    else:
+                        # use different -ntomp for reminder jobs (the last PBS job)
+                        if n_reminder > 0 and i == n_pbs_extend - 1:
+                            n_omp = n_omp_reminder
+                        else:
+                            n_omp = Config.GMX_MULTI_NOMP
+
+                        jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
+                                               n_thread=n_omp, exclusive=True)
 
                     # instead of run directly, we add a record to pbs_job
                     pbs_job = PbsJob()
@@ -486,7 +498,7 @@ class Task(db.Model):
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in jobs_extend[i * Config.GMX_MULTI_EXTEND_NJOB:(i + 1) * Config.GMX_MULTI_EXTEND_NJOB]:
+                    for job in jobs_extend[i * Config.GMX_MULTI_NJOB:(i + 1) * Config.GMX_MULTI_NJOB]:
                         job.pbs_job_id = pbs_job.id
                         job.cycle += 1
                         job.status = Compute.Status.STARTED

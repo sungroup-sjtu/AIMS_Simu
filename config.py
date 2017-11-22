@@ -5,10 +5,7 @@ from collections import OrderedDict
 
 class BaseConfig:
     CWD = os.path.dirname(os.path.abspath(__file__))
-    # DB = 'msdserver.sqlite'
-    # DB = 'msdserver.sqlite-171107'
-    DB = 'msdserver.sqlite-171026'
-    # DB = 'msdserver.sqlite-171006'
+    DB = 'msdserver.sqlite'
     LOG = os.path.join(CWD, '_LOG_.txt')
 
     SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database', DB)
@@ -27,6 +24,7 @@ class BaseConfig:
     PBS_ENV_CMD = ''
 
     GMX_MULTI = False  # do not perform gmx multidir simulation
+    GMX_MULTI_NGPU = 0  # do not use GPU in gmx multidir simulation
 
     EXTEND_CYCLE_LIMIT = 8
 
@@ -45,8 +43,14 @@ class ClusterConfig(BaseConfig):
     GMX_BIN = '/share/apps/gromacs/2016.3/bin/gmx_gpu'
 
     PBS_MANAGER = 'torque'
-    PBS_QUEUE_DICT = OrderedDict([('cpu', 8)])
-    PBS_NJOB_LIMIT = 20
+
+    PBS_QUEUE_DICT = OrderedDict([('gtx', 2)])
+    PBS_NJOB_LIMIT = 200
+
+    GMX_MULTI = True
+    GMX_MULTI_NJOB = 8
+    GMX_MULTI_NGPU = 2
+    GMX_MULTI_NOMP = None  # do not set this if NGPU > 0
 
 
 class TH2Config(BaseConfig):
@@ -68,10 +72,9 @@ module load gcc/5.3.0
 
     GMX_MULTI = True
     GMX_MULTI_NJOB = 8
-    GMX_MULTI_NOMP = 6
-
-    GMX_MULTI_EXTEND_NJOB = 8
-    GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP = {1: 24, 2: 12, 3: 8, 5: 4, 6: 4}
+    GMX_MULTI_NGPU = 0  # do not use GPU in gmx multidir simulation
+    GMX_MULTI_NOMP = 6  # set this if NGPU == 0
+    GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP = {1: 24, 2: 12, 3: 8, 5: 4, 6: 4}  # set this if NGPU == 0
 
 
 class PIConfig(BaseConfig):
