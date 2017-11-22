@@ -601,9 +601,10 @@ class Task(db.Model):
 
         return T_list, result_list, stderr_list
 
-    def post_process(self):
-        if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.DONE):
-            return
+    def post_process(self, force=False):
+        if not force:
+            if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.DONE):
+                return
 
         from mstools.analyzer.fitting import polyfit_2d
 
@@ -612,11 +613,16 @@ class Task(db.Model):
         Density = []
         E_inter = []
         for job in self.jobs:
+            if not job.converged:
+                continue
             T.append(job.t)
             P.append(job.p)
             result = json.loads(job.result)
             Density.append(result['density'][0])
             E_inter.append(result['e_inter'][0])
+
+        if len(T) < 5 or len(P) < 5:
+            return
 
         coeff_density, score_density = polyfit_2d(T, P, Density, 4)
         json_dict = {'density-poly4-coeff': list(coeff_density),
@@ -639,7 +645,7 @@ class Task(db.Model):
         score_density = post_result['density-poly4-score']
 
         density, dDdT, dDdP = polyval_derivative_2d(T, P, 4, coeff_density)  # g/mL
-        expansivity = -1 / density * dDdT  # K^-1
+        expansion = -1 / density * dDdT  # K^-1
         compressibility = 1 / density * dDdP  # bar^-1
 
         coeff_e_inter = post_result['e_inter-poly4-coeff']
@@ -656,12 +662,12 @@ class Task(db.Model):
 
         return {
             'density': density,
-            'expansivity': expansivity,
+            'expansion': expansion,
             'compressibility': compressibility,
-            'e_inter': e_inter,
-            'hvap': hvap,
-            'Cv_inter': Cv_inter,
-            'Cv_PV': Cv_PV,
+            'E_inter': e_inter,
+            'Hvap': hvap,
+            'Cp_inter': Cv_inter,
+            'Cp_PV': Cv_PV,
             'score-density': score_density,
             'score-e_inter': score_e_inter,
         }
