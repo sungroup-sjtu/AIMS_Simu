@@ -6,7 +6,7 @@ from config import Config
 from app import app
 from app import db
 
-if not os.path.exists(Config.DB_PATH):
+if not os.path.exists(Config.DB):
     db.create_all()
 
 app.run(host='0.0.0.0', port=5050, debug=True, threaded=True)

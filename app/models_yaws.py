@@ -64,13 +64,22 @@ class YawsMolecule(db.Model):
     def n_heavy_atom(self):
         return pybel.readstring('smi', self.smiles).OBMol.NumHvyAtoms()
 
+    def get_Tfus(self):
+        return self.Tfus
+
     @property
     def Tfus_is_exp(self):
         return is_exp_from_code(self.Tfus_code)
 
+    def get_Tvap(self):
+        return self.Tvap
+
     @property
     def Tvap_is_exp(self):
         return is_exp_from_code(self.Tvap_code)
+
+    def get_Tc(self):
+        return self.Tc
 
     @property
     def Tc_is_exp(self):

@@ -305,6 +305,7 @@ class Task(db.Model):
             # P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2, 5))
             # P_list = list(filter(lambda x: x == 1 or x > 10, P_list))  # remove P in the range of (1,10] bar
             P_list = [1, 50, 100, 250, 500, 750, 1000]
+            # P_list = [1, 50, 100, 250, 500]
 
         for p in P_list:
             for t in T_list:
@@ -633,7 +634,7 @@ class Task(db.Model):
             Density.append(result['density'][0])
             E_inter.append(result['e_inter'][0])
 
-        if len(T) < 5 or len(P) < 5:
+        if len(set(T)) < 5 or len(set(P)) < 5:
             return
 
         coeff_density, score_density = polyfit_2d(T, P, Density, 4)
