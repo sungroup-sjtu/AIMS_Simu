@@ -28,13 +28,11 @@ def show_job(job_id):
     return render_template('job.html', job=job)
 
 
-@main.route('/stat/')
+@main.route('/stat/', methods=['GET', 'POST'])
 def show_stat():
-    return render_template('stat.html')
+    if request.method == 'GET':
+        return render_template('stat.html')
 
-
-@main.route('/stat/', methods=['POST'])
-def get_stat_json():
     smiles_str = request.form.get('smiles')
     smiles_list = [line.strip() for line in smiles_str.splitlines()]
     smiles_list = list(filter(lambda x: x != '', smiles_list))
@@ -42,28 +40,104 @@ def get_stat_json():
     statAction = StatAction()
     statAction.update_mol_task_list(smiles_list)
 
-    dens_298K_list = statAction.get_density(smiles_list, T=298)
-    dens_Tvap_list = statAction.get_density(smiles_list, T='Tvap')
-    dens_Tc_list = statAction.get_density(smiles_list, T='Tc')
+    ### NIST
+    dens_Tm25_nist_list = statAction.get_density_nist(T='Tm25')
+    dens_Tvap_nist_list = statAction.get_density_nist(T='Tvap')
+    dens_Tcx8_nist_list = statAction.get_density_nist(T='Tcx8')
 
-    Cp_298K_list = statAction.get_Cp(smiles_list, T=298)
-    Cp_Tvap_list = statAction.get_Cp(smiles_list, T='Tvap')
-    Cp_Tc_list = statAction.get_Cp(smiles_list, T='Tc')
+    hvap_Tm25_list = statAction.get_hvap_nist(T='Tm25')
+    hvap_Tvap_list = statAction.get_hvap_nist(T='Tvap')
+    hvap_Tcx8_list = statAction.get_hvap_nist(T='Tcx8')
 
-    Hvap_298K_list = statAction.get_Hvap(smiles_list, T=298)
-    Hvap_Tvap_list = statAction.get_Hvap(smiles_list, T='Tvap')
+    cp_Tm25_nist_list = statAction.get_cp_nist(T='Tm25')
+    cp_Tvap_nist_list = statAction.get_cp_nist(T='Tvap')
+    cp_Tcx8_nist_list = statAction.get_cp_nist(T='Tcx8')
 
-    return json.dumps(dict(n_smiles=len(smiles_list),
-                           n_matched=len(statAction.yaws_list),
-                           datasets=[
-                               dict(name='dens_298K', data=dens_298K_list),
-                               dict(name='dens_Tvap', data=dens_Tvap_list),
-                               dict(name='dens_Tc', data=dens_Tc_list),
-                               dict(name='Cp_298K', data=Cp_298K_list),
-                               dict(name='Cp_Tvap', data=Cp_Tvap_list),
-                               dict(name='Cp_Tc', data=Cp_Tc_list),
-                               dict(name='Hvap_298K', data=Hvap_298K_list),
-                               dict(name='Hvap_Tvap', data=Hvap_Tvap_list),
-                           ]
-                           )
-                      )
+    tc_nist_list = statAction.get_tc_nist()
+    dc_nist_list = statAction.get_dc_nist()
+
+    dgas_Tcx8_nist_list = statAction.get_dgas_nist(T='Tcx8')
+
+    st_Tm25_nist_list = statAction.get_st_nist(T='Tm25')
+    st_Tvap_nist_list = statAction.get_st_nist(T='Tvap')
+    st_Tcx8_nist_list = statAction.get_st_nist(T='Tcx8')
+
+    # ei_Tm25_nist_list = statAction.get_ei_nist(T='Tm25')
+    # ei_Tvap_nist_list = statAction.get_ei_nist(T='Tvap')
+    # ei_Tcx8_nist_list = statAction.get_ei_nist(T='Tcx8')
+
+    # pv_Tm25_nist_list = statAction.get_pv_nist(T='Tm25')
+    # pv_Tvap_nist_list = statAction.get_pv_nist(T='Tvap')
+    # pv_Tcx8_nist_list = statAction.get_pv_nist(T='Tcx8')
+
+    # sound_Tm25_nist_list = statAction.get_sound_nist(T='Tm25')
+    # sound_Tvap_nist_list = statAction.get_sound_nist(T='Tvap')
+    # sound_Tcx8_nist_list = statAction.get_sound_nist(T='Tcx8')
+
+    ### Yaws
+    # expan_Tm25_list = statAction.get_expansion(T='Tm25')
+    # expan_Tvap_list = statAction.get_expansion(T='Tvap')
+    # expan_Tcx8_list = statAction.get_expansion(T='Tcx8')
+
+    import pylab
+    import base64
+    import numpy as np
+    from io import BytesIO
+
+    pngs = []
+    for data_exp_sim_list in [
+        dens_Tm25_nist_list, dens_Tvap_nist_list, dens_Tcx8_nist_list,
+        hvap_Tm25_list, hvap_Tvap_list, hvap_Tcx8_list,
+        cp_Tm25_nist_list, cp_Tvap_nist_list, cp_Tcx8_nist_list,
+        tc_nist_list, dc_nist_list,
+        dgas_Tcx8_nist_list,
+        st_Tm25_nist_list, st_Tvap_nist_list, st_Tcx8_nist_list,
+        # ei_Tm25_nist_list, ei_Tvap_nist_list, ei_Tcx8_nist_list,
+        # pv_Tm25_nist_list, pv_Tvap_nist_list, pv_Tcx8_nist_list,
+        # sound_Tm25_nist_list, sound_Tvap_nist_list, sound_Tcx8_nist_list,
+        # expan_Tm25_list, expan_Tvap_list, expan_Tcx8_list,
+    ]:
+        ref_list = []
+        sim_list = []
+        dev_list = []
+        u_list = []
+        for ref, sim, u in data_exp_sim_list:
+            abs_dev = abs(sim / ref - 1) * 100
+            if abs_dev < 50:
+                dev_list.append(abs_dev)  # incorrect expt. data
+            ref_list.append(ref)
+            sim_list.append(sim)
+            u_list.append(u / ref * 100)
+
+        p = BytesIO()
+        fig = pylab.figure(figsize=(13, 4))
+        fig.tight_layout()
+
+        sp1 = fig.add_subplot(131)
+        sp1.set_xlabel('Expt.')
+        sp1.set_ylabel('Simu.')
+        sp1.plot(ref_list, ref_list, '-')
+        sp1.plot(ref_list, sim_list, '.', alpha=0.7, label='%i molecules' % len(data_exp_sim_list))
+        sp1.legend()
+
+        y, _ = np.histogram(dev_list, bins=30, range=[0, 30])
+        x = (_[1:] + _[:-1]) / 2
+        sp2 = fig.add_subplot(132)
+        sp2.set_xlabel('Absolute deviation (%)')
+        sp2.set_ylabel('Number of molecules')
+        sp2.bar(x, y, color='C1', alpha=0.7, label='Mean = %.1f %%' % np.mean(dev_list))
+        sp2.legend()
+
+        y, _ = np.histogram(u_list, bins=30, range=[0, 30])
+        x = (_[1:] + _[:-1]) / 2
+        sp3 = fig.add_subplot(133)
+        sp3.set_xlabel('Uncertainty of expt. data(%)')
+        sp3.set_ylabel('Number of molecules')
+        sp3.bar(x, y, alpha=0.7, label='Mean = %.1f %%' % np.mean(u_list))
+        sp3.legend()
+
+        pylab.savefig(p, format='png')
+        pylab.close()
+        pngs.append(base64.b64encode(p.getvalue()).decode())
+
+    return render_template('stat.html', smiles_list=smiles_list, pngs=pngs)

@@ -12,7 +12,7 @@ json_dict = {
     'id': 1,
     'user_id': 1,
     'detail': {
-        'procedures': ['npt'],
+        'procedures': ['nvt-slab'],
         'combinations': [],
         'p': [1, 1000]  # bar. This option is useless
     }
@@ -52,10 +52,12 @@ for line in lines:
 
     if t_c == 'None':
         print('!WARNING: Tc is None: %s' % line)
-        t_max = int(round(t_vap + 75))
+        #t_max = int(round(t_vap + 75))
+        t_max = int(round(t_vap + 100))
     else:
         t_c = float(t_c)
-        t_max = int(round(t_c * 0.8))
+        #t_max = int(round(t_c * 0.8))
+        t_max = int(round(t_c * 0.85))
 
     t_max = min(t_max, 600)
 

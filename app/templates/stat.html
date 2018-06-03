@@ -4,151 +4,24 @@
     Statistical Analysis
 {% endblock %}
 
-{% block head %}
-    {{ super() }}
-    <script src="{{ url_for('static', filename='js/echarts.common.min.js') }}"></script>
-{% endblock %}
-
 {% block body %}
     <div class="main">
         <div class="left">
-            SMILES
-            <br/>
-            <textarea cols="30" rows="50" name="smiles"></textarea>
-            <br/>
-            <button id="update-chart">Submit</button>
+            <form method="post" action="#">
+                SMILES
+                <br/>
+                <textarea cols="30" rows="50" name="smiles">{{ '\n'.join(smiles_list)}}</textarea>
+                <br/>
+                <button id="update-chart" type="submit">Submit</button>
+            </form>
             <br/>
             <div id="count"></div>
         </div>
         <div class="right">
-            <div id="chart1" class="chart"></div>
-            <div id="chart2" class="chart"></div>
-            <div id="chart3" class="chart"></div>
-            <div id="chart4" class="chart"></div>
-            <div id="chart5" class="chart"></div>
-            <div id="chart6" class="chart"></div>
-            <div id="chart7" class="chart"></div>
-            <div id="chart8" class="chart"></div>
-            <div id="chart9" class="chart"></div>
+            {% for png in pngs %}
+                <div class="chart"><img src="data:image/png;base64,{{ png }}"/></div>
+            {% endfor %}
             <div class="clear"></div>
         </div>
-        <div class="clear"></div>
     </div>
-{% endblock %}
-
-{% block script %}
-    <script>
-        function max2d(arrays) {
-            var merged = [].concat.apply([], arrays);
-            return Math.max.apply(Math, merged);
-        }
-        function min2d(arrays) {
-            var merged = [].concat.apply([], arrays);
-            return Math.min.apply(Math, merged);
-        }
-        function expexp(arrays) {
-            var new_arrays = JSON.parse(JSON.stringify(arrays));
-            new_arrays.forEach(function (element) {
-                element[1] = element[0];
-            });
-            return new_arrays;
-        }
-    </script>
-    <script>
-        var chart1 = echarts.init(document.getElementById('chart1'));
-        var chart2 = echarts.init(document.getElementById('chart2'));
-        var chart3 = echarts.init(document.getElementById('chart3'));
-        var chart4 = echarts.init(document.getElementById('chart4'));
-        var chart5 = echarts.init(document.getElementById('chart5'));
-        var chart6 = echarts.init(document.getElementById('chart6'));
-        var chart7 = echarts.init(document.getElementById('chart7'));
-        var chart8 = echarts.init(document.getElementById('chart8'));
-        var charts = [chart1, chart2, chart3, chart4, chart5, chart6, chart7, chart8];
-
-        var options = {
-            animation: false,
-            title: {
-                text: 'Property'
-            },
-            tooltip: {},
-            legend: {
-                data: ['Sim', 'Ref']
-            },
-            dataZoom: [{
-                orient: 'horizontal',
-                height: 12
-            }, {
-                orient: 'vertical',
-                width: 12
-            }],
-            xAxis: {},
-            yAxis: {},
-            series: [
-                {
-                    name: 'Sim',
-                    type: 'scatter',
-                    data: []
-                },
-                {
-                    name: 'Ref',
-                    type: 'line',
-                    data: [[0, 0], [1, 1]]
-                }
-            ]
-        };
-
-        charts.forEach(function (chart) {
-            chart.setOption(options);
-        });
-
-    </script>
-    <script>
-        $('#update-chart').click(function () {
-            charts.forEach(function (chart) {
-                chart.showLoading();
-            });
-            $.post({{ url_for('main.get_stat_json')}},
-                {'smiles': $('textarea[name=smiles]').val()},
-                function (response) {
-                    json = JSON.parse(response);
-                    $('#count').html("" + json.n_smiles + " SMILES<br/>" + json.n_matched + " have data");
-                    charts.forEach(function (chart, i) {
-                        dataset = json.datasets[i];
-                        chart.setOption({
-                            title: {text: dataset.name},
-                            xAxis: {
-                                min: function (value) {
-                                    return value.min * 0.6
-                                },
-                                max: function (value) {
-                                    return value.max * 1.2
-                                }
-                            },
-                            yAxis: {
-                                min: function (value) {
-                                    return value.min * 0.6
-                                },
-                                max: function (value) {
-                                    return value.max * 1.2
-                                }
-                            },
-                            series: [{
-                                name: 'Sim',
-                                type: 'scatter',
-                                symbolSize: 5,
-                                data: dataset.data
-                            }, {
-                                name: 'Ref',
-                                type: 'line',
-                                symbol: 'none',
-                                lineStyle: {normal: {width: 2}},
-                                data: expexp(dataset.data)
-                            }]
-                        });
-                        chart.hideLoading();
-                    });
-                }
-            );
-        });
-    </script>
 {% endblock %}

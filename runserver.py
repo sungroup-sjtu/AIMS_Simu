@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-import os, sys
-from config import Config
-from app import app
-from app import db
+import os
+from app import app, db, Config
 
 if not os.path.exists(Config.DB):
     db.create_all()

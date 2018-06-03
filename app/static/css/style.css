@@ -1,5 +1,5 @@
 .main {
-    width: 1200px;
+    width: 1600px;
     margin: auto;
 }
 
@@ -9,7 +9,7 @@
 }
 
 .right {
-    width: 78%;
+    width: 79%;
     float: right;
 }
 
@@ -17,8 +17,7 @@
     clear: both;
 }
 
-.chart {
-    width: 300px;
-    height: 330px;
+.chart img {
+    /*width: 350px;*/
     float: left;
 }

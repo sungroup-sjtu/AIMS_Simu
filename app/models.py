@@ -1,16 +1,15 @@
-import sys
-import re
 import json
+import re
 import shutil
+import sys
 import time
 from datetime import datetime
 from functools import partial
 
 from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateTime, and_
 
-from . import db, log
-
 from config import Config
+from . import db, log
 
 sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.simulation.procedure import Procedure
@@ -21,20 +20,34 @@ NotNullColumn = partial(Column, nullable=False)
 from mstools.jobmanager import *
 from mstools.wrapper import GMX
 
-if Config.PBS_MANAGER == 'local':
-    jobmanager = Local(queue_dict=Config.PBS_QUEUE_DICT, env_cmd=Config.PBS_ENV_CMD)
+if Config.PBS_MANAGER == 'slurm':
+    PBS = Slurm
 elif Config.PBS_MANAGER == 'torque':
-    jobmanager = Torque(queue_dict=Config.PBS_QUEUE_DICT, env_cmd=Config.PBS_ENV_CMD)
-elif Config.PBS_MANAGER == 'slurm':
-    jobmanager = Slurm(queue_dict=Config.PBS_QUEUE_DICT, env_cmd=Config.PBS_ENV_CMD)
+    PBS = Torque
+elif Config.PBS_MANAGER == 'local':
+    PBS = Local
 else:
     raise Exception('Job manager not supported')
+jobmanager = PBS(queue_list=Config.PBS_QUEUE_LIST, env_cmd=Config.PBS_ENV_CMD)
+jm_extend = PBS(queue_list=Config.EXTEND_PBS_QUEUE_LIST, env_cmd=Config.PBS_ENV_CMD)
+if hasattr(Config, 'PBS_SUBMIT_CMD'):
+    jobmanager.submit_cmd = Config.PBS_SUBMIT_CMD
+    jm_extend.submit_cmd = Config.PBS_SUBMIT_CMD
 
 
-def init_simulation(procedure):
+def init_simulation(procedure, extend=False):
     from mstools.simulation import gmx as simulationEngine
-    kwargs = {'packmol_bin': Config.PACKMOL_BIN, 'dff_root': Config.DFF_ROOT, 'dff_table': Config.DFF_TABLE,
-              'gmx_bin': Config.GMX_BIN, 'jobmanager': jobmanager}
+    kwargs = {'packmol_bin': Config.PACKMOL_BIN,
+              'dff_root'   : Config.DFF_ROOT,
+              'dff_table'  : Config.DFF_TABLE,
+              'gmx_bin'    : Config.GMX_BIN,
+              'jobmanager' : jobmanager
+              }
+    if extend:
+        kwargs.update({
+            'gmx_bin'   : Config.EXTEND_GMX_BIN,
+            'jobmanager': jm_extend
+        })
 
     if procedure == 'npt':
         return simulationEngine.Npt(**kwargs)
@@ -44,6 +57,12 @@ def init_simulation(procedure):
         return simulationEngine.NvtSlab(**kwargs)
     else:
         raise Exception('Unknown simulation procedure')
+
+
+def wrapper_cls_func(cls_funcname_args_kwargs):
+    cls, funcname, args, kwargs = cls_funcname_args_kwargs
+    func = getattr(cls, funcname)
+    return func(*args, **kwargs)
 
 
 class PbsJob(db.Model):
@@ -99,16 +118,10 @@ class Compute(db.Model):
                     # if prior is not None and prior not in procedures:
                     #     procedures = [prior] + procedures  # Put prerequisite at first
 
-            # TODO ignore duplicated smiles combinations
-            # all_smiles_list = []
             for combination in combinations:
                 # check for smiles and name
                 smiles_list = combination['smiles']
                 name_list = combination.get('names')
-
-                # if smiles_list in all_smiles_list:
-                #     raise Exception('Duplicated smiles combinations')
-                # all_smiles_list.append(smiles_list)
 
                 if len(smiles_list) > len(set(smiles_list)):
                     raise Exception('Duplicated smiles %s' % smiles_list)
@@ -137,9 +150,9 @@ class Compute(db.Model):
                     p_min, p_max = None, None
 
                 for procedure in procedures:
+                    # ignore existed task
                     if Task.query.filter(
-                            and_(Task.compute_id == self.id,
-                                 Task.smiles_list == json.dumps(smiles_list),
+                            and_(Task.smiles_list == json.dumps(smiles_list),
                                  Task.procedure == procedure
                                  )
                     ).first() is not None:
@@ -182,8 +195,8 @@ class Compute(db.Model):
 
         text = {
             SUBMITTED: 'Submitted',
-            BUILDING: 'Building...',
-            RUNNING: 'Running...',
+            BUILDING : 'Building...',
+            RUNNING  : 'Running...',
         }
 
     class Status:
@@ -193,9 +206,9 @@ class Compute(db.Model):
         ANALYZED = 10
 
         text = {
-            STARTED: 'Started',
-            DONE: 'Done',
-            FAILED: 'Failed',
+            STARTED : 'Started',
+            DONE    : 'Done',
+            FAILED  : 'Failed',
             ANALYZED: 'Analyzed',
         }
 
@@ -242,14 +255,14 @@ class Task(db.Model):
 
         # TODO Herein we suppose there is no duplicated task. Do not consider T and P
         return Task.query.filter(
-            and_(Task.smiles_list == self.smiles_list,
-                 Task.procedure == prior_procedure,
-                 # Task.t_min == self.t_min,
-                 # Task.t_max == self.t_max,
-                 # Task.t_interval == self.t_interval,
-                 # Task.p_min == self.p_max,
-                 # Task.p_max == self.p_max
-                 )
+                and_(Task.smiles_list == self.smiles_list,
+                     Task.procedure == prior_procedure,
+                     # Task.t_min == self.t_min,
+                     # Task.t_max == self.t_max,
+                     # Task.t_interval == self.t_interval,
+                     # Task.p_min == self.p_max,
+                     # Task.p_max == self.p_max
+                     )
         ).first()
 
     @property
@@ -260,7 +273,7 @@ class Task(db.Model):
         return n_mol
 
     def build(self):
-        log.info('Build task %s' % self)
+        log.info('Build %s' % self)
         try:
             cd_or_create_and_cd(self.dir)
             cd_or_create_and_cd('build')
@@ -270,50 +283,46 @@ class Task(db.Model):
             db.session.commit()
 
             simulation = init_simulation(self.procedure)
-            try:
-                simulation.set_system(json.loads(self.smiles_list), n_atoms=3000)
-                simulation.build()
-                self.n_mol_list = json.dumps(simulation.n_mol_list)
-            except:
-                self.status = Compute.Status.FAILED
-                db.session.commit()
-                raise
-            else:
-                try:
-                    self.prepare_jobs()
-                except:
-                    self.status = Compute.Status.FAILED
-                    db.session.commit()
-                    raise
-                else:
-                    self.status = Compute.Status.DONE
-                    db.session.commit()
+            simulation.set_system(json.loads(self.smiles_list))
+            simulation.build()
+            self.n_mol_list = json.dumps(simulation.n_mol_list)
         except Exception as e:
             log.error('Build task failed %s: %s' % (self, repr(e)))
+            self.status = Compute.Status.FAILED
+            db.session.commit()
+        else:
+            try:
+                self.insert_jobs()
+                for job in self.jobs:
+                    job.prepare()
+            except Exception as e:
+                log.error('Build task failed %s: %s' % (self, repr(e)))
+                self.status = Compute.Status.FAILED
+                db.session.commit()
+            else:
+                self.status = Compute.Status.DONE
+                db.session.commit()
 
-    def prepare_jobs(self):
+    def insert_jobs(self):
         if not os.path.exists(os.path.join(self.dir, 'build')):
             raise Exception('Should build simulation box first')
 
         if self.t_min is None or self.t_max is None:
             T_list = [None]
         else:
-            T_list = get_T_list_from_range(self.t_min, self.t_max, interval=self.t_interval)
+            if self.procedure == 'nvt-slab':
+                T_list = get_T_list_VLE_from_range(self.t_min, self.t_max)
+            else:
+                T_list = get_T_list_from_range(self.t_min, self.t_max)
+
         if self.p_min is None or self.p_max is None:
             P_list = [None]
         else:
-            # P_list = get_P_list_from_range(self.p_min, self.p_max, multiple=(2, 5))
-            # P_list = list(filter(lambda x: x == 1 or x > 10, P_list))  # remove P in the range of (1,10] bar
             P_list = [1, 50, 100, 250, 500, 750, 1000]
-            # P_list = [1, 50, 100, 250, 500]
 
         for p in P_list:
             for t in T_list:
-                if Job.query.filter(
-                        and_(Job.task_id == self.id,
-                             Job.t == t,
-                             Job.p == p)
-                ).first() is not None:
+                if Job.query.filter(Job.task_id == self.id).filter(Job.t == t).filter(Job.p == p).first() is not None:
                     continue
 
                 job = Job()
@@ -329,11 +338,8 @@ class Task(db.Model):
             db.session.rollback()
             raise
 
-        for job in self.jobs:
-            job.prepare()
-
-    def run(self, ignore_pbs_limit=False, sleep=0.2):
-        log.info('Run task %s' % self)
+    def run(self, ignore_pbs_limit=False) -> bool:
+        log.info('Run %s' % self)
 
         n_pbs_run = self.jobs.count()
         if Config.GMX_MULTI:
@@ -341,24 +347,23 @@ class Task(db.Model):
 
         if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_run > Config.PBS_NJOB_LIMIT:
             log.warning('PBS_NJOB_LIMIT reached')
-            return
+            return False
 
+        if self.stage != Compute.Stage.BUILDING:
+            print('Incorrect stage: %s' % Compute.Stage.text[self.stage])
+            return False
+        elif self.status != Compute.Status.DONE:
+            print('Incorrect status: %s' % Compute.Status.text[self.status])
+            return False
+
+        self.stage = Compute.Stage.RUNNING
         try:
-            if self.stage != Compute.Stage.BUILDING:
-                raise Exception('Incorrect stage: %s' % Compute.Stage.text[self.stage])
-            elif self.status != Compute.Status.DONE:
-                raise Exception('Incorrect status: %s' % Compute.Status.text[self.status])
-
-            self.stage = Compute.Stage.RUNNING
-            self.status = Compute.Status.STARTED
-            db.session.commit()
-
             os.chdir(self.dir)
 
             if not Config.GMX_MULTI:
                 for job in self.jobs:
                     job.run()
-                    time.sleep(sleep)
+                    time.sleep(0.2)
             else:
                 multi_dirs = [job.dir for job in self.jobs]
                 multi_cmds = json.loads(self.commands)
@@ -366,14 +371,20 @@ class Task(db.Model):
                 gmx = GMX(gmx_bin=Config.GMX_BIN)
                 commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
                                                                n_parallel=Config.GMX_MULTI_NJOB,
-                                                               n_gpu=Config.GMX_MULTI_NGPU,
-                                                               n_thread=Config.GMX_MULTI_NOMP)
+                                                               n_gpu=jobmanager.ngpu,
+                                                               n_omp=Config.GMX_MULTI_NOMP)
                 for i, commands in enumerate(commands_list):
                     # instead of run directly, we add a record to pbs_job
                     sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
                     pbs_name = '%s-run-%i' % (self.name, i)
-                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                           n_thread=Config.GMX_MULTI_NOMP, exclusive=True)
+
+                    if Config.GMX_MULTI_NOMP == None:
+                        n_tasks = None
+                    else:
+                        n_tasks = Config.GMX_MULTI_NJOB * Config.GMX_MULTI_NOMP * \
+                                  jobmanager.nprocs_request / jobmanager.nprocs
+
+                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh, n_tasks=n_tasks)
 
                     pbs_job = PbsJob()
                     pbs_job.name = pbs_name
@@ -389,10 +400,17 @@ class Task(db.Model):
 
                     # submit job, record if success or failed
                     pbs_job.submit()
-                    time.sleep(sleep)
+                    time.sleep(0.2)
 
         except Exception as e:
             log.error('Run task failed %s %s' % (self, repr(e)))
+            self.status = Compute.Status.FAILED
+            db.session.commit()
+            return False
+        else:
+            self.status = Compute.Status.STARTED
+            db.session.commit()
+            return True
 
     @property
     def ready_to_extend(self) -> bool:
@@ -411,12 +429,12 @@ class Task(db.Model):
         else:
             return False
 
-    def extend(self, ignore_pbs_limit=False, sleep=0.2):
-        log.info('Extend task %s' % self)
+    def extend(self, ignore_pbs_limit=False) -> bool:
+        log.info('Extend %s' % self)
 
         if not self.ready_to_extend:
             log.warning('Not ready to extend %s' % self)
-            return
+            return False
 
         jobs_extend = []
         for job in self.jobs:
@@ -424,72 +442,49 @@ class Task(db.Model):
                 jobs_extend.append(job)
         if len(jobs_extend) == 0:
             log.warning('No job need to extend %s' % self)
-            return
+            return False
 
         if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
             log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
-            return
+            return False
 
-        n_extend = len(jobs_extend)
-        n_pbs_extend = math.ceil(n_extend / Config.GMX_MULTI_NJOB) if Config.GMX_MULTI else n_extend
+        n_pbs_extend = len(jobs_extend)
+        if Config.EXTEND_GMX_MULTI:
+            n_pbs_extend = math.ceil(n_pbs_extend / Config.EXTEND_GMX_MULTI_NJOB)
 
         if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend > Config.PBS_NJOB_LIMIT:
             log.warning('PBS_NJOB_LIMIT reached')
-            return
+            return False
 
         self.cycle += 1
         db.session.commit()
 
         try:
-            if not Config.GMX_MULTI:
+            if not Config.EXTEND_GMX_MULTI:
                 for job in jobs_extend:
                     job.extend()
-                    time.sleep(sleep)
+                    time.sleep(0.2)
             else:
                 multi_dirs = []
                 multi_cmds = []
-                simulation = init_simulation(self.procedure)
+                simulation = init_simulation(self.procedure, extend=True)
                 for job in jobs_extend:
                     os.chdir(job.dir)
                     multi_dirs.append(job.dir)
                     multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
                                                    sh='_job.extend-%i.sh' % (job.cycle + 1))
 
-                if Config.GMX_MULTI_NGPU > 0:
-                    commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                                              n_parallel=Config.GMX_MULTI_NJOB,
-                                                                              n_gpu=Config.GMX_MULTI_NGPU,
-                                                                              n_thread=Config.GMX_MULTI_NOMP)
-                else:
-                    # use different -ntomp if only small number of jobs
-                    n_reminder = n_extend % Config.GMX_MULTI_NJOB
-                    n_omp_reminder = Config.GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP.get(n_reminder) or Config.GMX_MULTI_NOMP
-                    commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[:-n_reminder], multi_cmds,
-                                                                              n_parallel=Config.GMX_MULTI_NJOB,
-                                                                              n_gpu=Config.GMX_MULTI_NGPU,
-                                                                              n_thread=Config.GMX_MULTI_NOMP)
-                    commands_list += simulation.gmx.generate_gpu_multidir_cmds(multi_dirs[-n_reminder:], multi_cmds,
-                                                                               n_parallel=Config.GMX_MULTI_NJOB,
-                                                                               n_gpu=Config.GMX_MULTI_NGPU,
-                                                                               n_thread=n_omp_reminder)
+                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                          n_parallel=Config.EXTEND_GMX_MULTI_NJOB,
+                                                                          n_gpu=jobmanager.ngpu,
+                                                                          n_procs=jobmanager.nprocs)
 
                 os.chdir(self.dir)
                 for i, commands in enumerate(commands_list):
                     sh = os.path.join(self.dir, '_job.extend-%i-%i.sh' % (self.cycle, i))
                     pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
 
-                    if Config.GMX_MULTI_NGPU > 0:
-                        jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                               n_thread=Config.GMX_MULTI_NOMP, exclusive=True)
-                    else:
-                        # use different -ntomp for reminder jobs (the last PBS job)
-                        if n_reminder > 0 and i == n_pbs_extend - 1:
-                            n_omp = n_omp_reminder
-                        else:
-                            n_omp = Config.GMX_MULTI_NOMP
-
-                        jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh,
-                                               n_thread=n_omp, exclusive=True)
+                    jm_extend.generate_sh(self.dir, commands, name=pbs_name, sh=sh)
 
                     # instead of run directly, we add a record to pbs_job
                     pbs_job = PbsJob()
@@ -499,7 +494,7 @@ class Task(db.Model):
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in jobs_extend[i * Config.GMX_MULTI_NJOB:(i + 1) * Config.GMX_MULTI_NJOB]:
+                    for job in jobs_extend[i * Config.EXTEND_GMX_MULTI_NJOB:(i + 1) * Config.EXTEND_GMX_MULTI_NJOB]:
                         job.pbs_job_id = pbs_job.id
                         job.cycle += 1
                         job.status = Compute.Status.STARTED
@@ -507,46 +502,93 @@ class Task(db.Model):
 
                     # submit job, record if success or failed
                     pbs_job.submit()
-                    time.sleep(sleep)
+                    time.sleep(0.2)
 
         except Exception as e:
             log.error('Extend task failed %s %s' % (self, repr(e)))
+            return False
+        else:
+            return True
 
     def check_finished(self):
         """
         check if all jobs in this tasks are finished
         if finished, analyze the job
         """
-        log.info('Check task status %s' % self)
-        try:
-            for job in self.jobs:
+        log.info('Check status %s' % self)
+
+        for job in self.jobs:
+            try:
+                job.check_finished()
+            except Exception as e:
+                log.error('Check job status failed %s %s' % (job, repr(e)))
+
+            if job.status == Compute.Status.DONE:
                 try:
-                    job.check_finished()
+                    log.info('Analyze %s' % job)
+                    job.analyze()
                 except Exception as e:
-                    log.error('Check job status failed %s %s' % (job, repr(e)))
+                    log.error('Analyze failed %s %s' % (job, repr(e)))
 
-                if job.status == Compute.Status.DONE:
-                    try:
-                        log.info('Analyze job %s' % job)
-                        job.analyze()
-                    except Exception as e:
-                        log.error('Analyze job failed %s %s' % (job, repr(e)))
+        # Set status as DONE only if all jobs are converged
+        for job in self.jobs:
+            if not job.converged:
+                break
+        else:
+            self.status = Compute.Status.DONE
+            db.session.commit()
 
-            # Set status as DONE only if all jobs are converged
-            for job in self.jobs:
-                if not job.converged:
-                    break
-            else:
-                self.status = Compute.Status.DONE
-                db.session.commit()
-        except Exception as e:
-            log.error('Check task status failed %s %s' % (self, repr(e)))
+    def check_finished_multiprocessing(self):
+        """
+        check if all jobs in this tasks are finished
+        if finished, analyze the job
+        """
+        from multiprocessing import Pool
 
-    def remove(self):
+        log.info('Check status %s' % self)
+        jobs_to_analyze = []
+        for job in self.jobs:
+            try:
+                job.check_finished()
+            except Exception as e:
+                log.error('Check job status failed %s %s' % (job, repr(e)))
+
+            if job.status == Compute.Status.DONE:
+                log.info('Analyze %s' % job)
+                jobs_to_analyze.append(job)
+
+        n_process = 8
+        n_group = int(math.ceil(len(jobs_to_analyze) / n_process))
+        for i in range(n_group):
+            job_group = jobs_to_analyze[i * n_process:(i + 1) * n_process]
+            with Pool(n_process) as p:
+                return_dicts = p.map(wrapper_cls_func,
+                                     [(job, 'analyze_multiprocessing', [],
+                                       {'job_dir': job.dir, 'job_procedure': job.task.procedure})
+                                      for job in job_group])
+            for i, job in enumerate(job_group):
+                return_dict = return_dicts[i]
+                exception = return_dict.pop('exception')
+                if exception != None:
+                    log.error('Analyze failed %s %s' % (job, exception))
+                for k, v in return_dict.items():
+                    setattr(job, k, v)
+
+        db.session.commit()
+
+        # Set status as DONE only if all jobs are converged
+        for job in self.jobs:
+            if not job.converged:
+                break
+        else:
+            self.status = Compute.Status.DONE
+            db.session.commit()
+
+    def reset(self):
         for job in self.jobs:
             if not job.pbs_job_done:
                 try:
-                    jobmanager.kill_job(job.pbs_name)
+                    jobmanager.kill_job(job.pbs_job.name)
                 except Exception as e:
                     log.warning('Kill job %s Cannot kill PBS job: %s' % (job, repr(e)))
             db.session.delete(job)
@@ -555,135 +597,48 @@ class Task(db.Model):
         except:
             log.warning('Remove task %s Cannot remove folder: %s' % (self, self.dir))
 
-        db.session.delete(self)
+        self.n_mol_list = None
+        self.cycle = 0
+        self.stage = Compute.Stage.SUBMITTED
+        self.status = Compute.Status.DONE
+        self.commands = None
+        self.post_result = None
         db.session.commit()
 
-    def get_isothermal_result(self, T=298) -> ([int], [float], [float]):
-        P_list = []
-        result_list = {}
-        stderr_list = {}
-        jobs = self.jobs.filter(Job.t == T)
-        for job in jobs:
-            if job.converged:
-                P_list.append(job.p)
-                results = json.loads(job.result)
-                for k, v in results.items():
-                    if not k in result_list:
-                        result_list[k] = []
-                        stderr_list[k] = []
-                    if type(v) == list:
-                        result_list[k].append(v[0])
-                        stderr_list[k].append(v[1])
-                    else:
-                        result_list[k].append(v)
-
-                    if k == 'e_inter':
-                        if not 'hvap' in result_list:
-                            result_list['hvap'] = []
-                            stderr_list['hvap'] = []
-                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / self.n_mol_total)
-                        stderr_list['hvap'].append(v[1] / self.n_mol_total)
-
-        return P_list, result_list, stderr_list
-
-    def get_isobaric_result(self, P=1) -> ([int], [float], [float]):
-        T_list = []
-        result_list = {}
-        stderr_list = {}
-        jobs = self.jobs.filter(Job.p == P)
-        for job in jobs:
-            if job.converged:
-                T_list.append(job.t)
-                results = json.loads(job.result)
-                for k, v in results.items():
-                    if not k in result_list:
-                        result_list[k] = []
-                        stderr_list[k] = []
-                    if type(v) == list:
-                        result_list[k].append(v[0])
-                        stderr_list[k].append(v[1])
-                    else:
-                        result_list[k].append(v)
-
-                    if k == 'e_inter':
-                        if not 'hvap' in result_list:
-                            result_list['hvap'] = []
-                            stderr_list['hvap'] = []
-                        result_list['hvap'].append(8.314 * job.t / 1000 - v[0] / self.n_mol_total)
-                        stderr_list['hvap'].append(v[1] / self.n_mol_total)
-
-        return T_list, result_list, stderr_list
+    def remove(self):
+        self.reset()
+        db.session.delete(self)
+        db.session.commit()
 
     def post_process(self, force=False):
         if not force:
             if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.DONE):
                 return
 
-        from mstools.analyzer.fitting import polyfit_2d
-
-        T = []
-        P = []
-        Density = []
-        E_inter = []
+        T_list = []
+        P_list = []
+        result_list = []
         for job in self.jobs:
             if not job.converged:
                 continue
-            T.append(job.t)
-            P.append(job.p)
-            result = json.loads(job.result)
-            Density.append(result['density'][0])
-            E_inter.append(result['e_inter'][0])
+            T_list.append(job.t)
+            P_list.append(job.p)
+            result_list.append(json.loads(job.result))
 
-        if len(set(T)) < 5 or len(set(P)) < 5:
-            return
+        sim = init_simulation(self.procedure)
+        post_result, post_info = sim.post_process(T_list=T_list, P_list=P_list, result_list=result_list)
 
-        coeff_density, score_density = polyfit_2d(T, P, Density, 4)
-        json_dict = {'density-poly4-coeff': list(coeff_density),
-                     'density-poly4-score': score_density,
-                     }
-        coeff_e_inter, score_e_inter = polyfit_2d(T, P, E_inter, 4)
-        json_dict.update({'e_inter-poly4-coeff': list(coeff_e_inter),
-                          'e_inter-poly4-score': score_e_inter,
-                          })
+        if post_result != None:
+            self.post_result = json.dumps(post_result)
+            db.session.commit()
 
-        self.post_result = json.dumps(json_dict)
-        db.session.commit()
+        return post_info
 
-        return score_density, score_e_inter
-
-    def get_post_result(self, T=298, P=1):
-        from mstools.analyzer.fitting import polyval_derivative_2d
-        post_result = json.loads(self.post_result)
-        coeff_density = post_result['density-poly4-coeff']
-        score_density = post_result['density-poly4-score']
-
-        density, dDdT, dDdP = polyval_derivative_2d(T, P, 4, coeff_density)  # g/mL
-        expansion = -1 / density * dDdT  # K^-1
-        compressibility = 1 / density * dDdP  # bar^-1
-
-        coeff_e_inter = post_result['e_inter-poly4-coeff']
-        score_e_inter = post_result['e_inter-poly4-score']
-
-        e_inter, dEdT, dEdP = polyval_derivative_2d(T, P, 4, coeff_e_inter)
-        e_inter /= self.n_mol_total  # kJ/mol
-        hvap = 8.314 * T / 1000 - e_inter  # kJ/mol
-        Cv_inter = dEdT * 1000 / self.n_mol_total  # J/mol.K
-
-        import pybel
-        py_mol = pybel.readstring('smi', json.loads(self.smiles_list)[0])
-        Cv_PV = - py_mol.molwt * P / density ** 2 * dDdT  # J/mol/K
-
-        return {
-            'density': density,
-            'expansion': expansion,
-            'compressibility': compressibility,
-            'E_inter': e_inter,
-            'Hvap': hvap,
-            'Cp_inter': Cv_inter,
-            'Cp_PV': Cv_PV,
-            'score-density': score_density,
-            'score-e_inter': score_e_inter,
-        }
+    def get_post_data(self, T=298, P=1):
+        sim = init_simulation(self.procedure)
+        post_data = sim.get_post_data(post_result=json.loads(self.post_result), T=T, P=P,
+                                      smiles_list=json.loads(self.smiles_list), n_mol_list=json.loads(self.n_mol_list))
+        return post_data
 
 
 class Job(db.Model):
@@ -718,9 +673,9 @@ class Job(db.Model):
             return None
 
         return prior_task.jobs.filter(
-            and_(Job.t == self.t,
-                 Job.p == self.p
-                 )
+                and_(Job.t == self.t,
+                     Job.p == self.p
+                     )
         ).first()
 
     @property
@@ -793,7 +748,7 @@ class Job(db.Model):
 
         # instead of run directly, we add a record to pbs_job
 
-        simulation = init_simulation(self.task.procedure)
+        simulation = init_simulation(self.task.procedure, extend=True)
         simulation.extend(jobname=pbs_name, sh=sh)
 
         pbs_job = PbsJob()
@@ -827,7 +782,7 @@ class Job(db.Model):
         db.session.commit()
         return True
 
-    def analyze(self, rerun=False):
+    def analyze(self, rerun=False, **kwargs):
         if self.status == Compute.Status.ANALYZED and not rerun:
             log.warning('Will not analyze %s Already analyzed' % self)
             return
@@ -841,29 +796,69 @@ class Job(db.Model):
         os.chdir(self.dir)
 
         simulation = init_simulation(self.task.procedure)
-        dirs = [self.dir]
         try:
-            result = simulation.analyze(dirs)
+            result = simulation.analyze(**kwargs)
         except:
+            # One kine of fail -- simulation fail
             self.status = Compute.Status.FAILED
             db.session.commit()
             raise
+
+        if result == None:
+            self.status = Compute.Status.ANALYZED
+            self.converged = False
+        elif result.get('failed') == True:
+            # Another kine of fail -- result not what we want. Record the reason
+            self.status = Compute.Status.FAILED
+            self.result = json.dumps(result)
         else:
             self.status = Compute.Status.ANALYZED
-            if result is None:
-                self.converged = False
-                self.result = None
+            self.converged = True
+            self.result = json.dumps(result)
+
+        # Clean intermediate files after analysis
+        simulation.clean()
+        db.session.commit()
+
+    def analyze_multiprocessing(self, job_dir, job_procedure, **kwargs):
+        _exception = None
+        _status = self.status
+        _converged = self.converged
+        _result = self.result
+
+        os.chdir(job_dir)
+        simulation = init_simulation(job_procedure)
+        try:
+            result = simulation.analyze(**kwargs)
+        except Exception as e:
+            # One kine of fail -- simulation fail
+            _status = Compute.Status.FAILED
+            _exception = repr(e)
+        else:
+            if result == None:
+                _status = Compute.Status.ANALYZED
+                _converged = False
+            elif result.get('failed') == True:
+                # Another kine of fail -- result not what we want. Record the reason
+                _status = Compute.Status.FAILED
+                _result = json.dumps(result)
             else:
-                self.converged = True
-                self.result = json.dumps(result)
-                # clean useless files if the simulation converged
-                simulation.clean()
-            db.session.commit()
+                _status = Compute.Status.ANALYZED
+                _converged = True
+                _result = json.dumps(result)
+
+        # Clean intermediate files after analysis
+        simulation.clean()
+        return {'exception': _exception,
+                'status'   : _status,
+                'converged': _converged,
+                'result'   : _result,
+                }
 
     def remove(self):
         if not self.pbs_job_done:
             try:
-                jobmanager.kill_job(self.pbs_name)
+                jobmanager.kill_job(self.pbs_job.name)
             except Exception as e:
                 log.warning('Kill job %s Cannot kill PBS job: %s' % (self, repr(e)))
 

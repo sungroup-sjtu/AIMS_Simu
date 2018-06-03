@@ -8,34 +8,53 @@ from app.models import Task, Compute, PbsJob
 from app import log
 
 
-def process_pbs_jobs():
+def process_pbs_job():
     for pbs_job in PbsJob.query.filter(PbsJob.submitted == False):
         pbs_job.submit()
 
+def process_task_build_run(procedure=None, n_task=20):
+    tasks = Task.query.filter(Task.stage==Compute.Stage.SUBMITTED).filter(Task.status==Compute.Status.DONE)
+    if procedure != None:
+        tasks = tasks.filter(Task.procedure==procedure)
+    for task in tasks.limit(n_task):
+        task.build()
+        task.run()
 
-def process_tasks():
-    n_build_tasks = 0
-    for task in Task.query.all():
-        if task.stage == Compute.Stage.SUBMITTED and task.status == Compute.Status.DONE:
-            # do not build too much tasks once
-            if n_build_tasks <= 25:
-                task.build()
-                n_build_tasks += 1
+def process_task_run(procedure=None, n_task=20):
+    tasks = Task.query.filter(Task.stage==Compute.Stage.BUILDING).filter(Task.status==Compute.Status.DONE)
+    if procedure != None:
+        tasks = tasks.filter(Task.procedure==procedure)
+    for task in tasks.limit(n_task):
+        task.run()
 
-        if task.stage == Compute.Stage.BUILDING and task.status == Compute.Status.DONE:
-            task.run()
+def process_task_check(procedure=None, n_task=100):
+    tasks = Task.query.filter(Task.stage==Compute.Stage.RUNNING).filter(Task.status==Compute.Status.STARTED)
+    if procedure != None:
+        tasks = tasks.filter(Task.procedure==procedure)
+    for task in tasks.limit(n_task):
+        #task.check_finished()
+        task.check_finished_multiprocessing()
 
-
-        elif task.stage == Compute.Stage.RUNNING and task.status == Compute.Status.STARTED:
-            task.check_finished()
-
+def process_task_extend(procedure=None):
+    tasks = Task.query
+    if procedure != None:
+        tasks = tasks.filter(Task.procedure==procedure)
+    for task in tasks:
         if task.ready_to_extend:
             task.extend()
+
+            #sys.exit()
 
 
 if __name__ == '__main__':
     while True:
-        process_pbs_jobs()
-        process_tasks()
-        log.info('Sleep 300 seconds ...')
-        time.sleep(300)
+        process_pbs_job()
+        process_task_run(procedure='nvt-slab', n_task=1000)
+        process_task_build_run(procedure='nvt-slab', n_task=100)
+        #process_task_check(procedure='npt', n_task=1000)
+        #process_task_extend(procedure='npt')
+        #process_task_check(procedure='nvt-slab', n_task=1000)
+        #process_task_extend(procedure='nvt-slab')
+        sys.exit()
+        log.info('Sleep 60 seconds ...')
+        time.sleep(60)

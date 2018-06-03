@@ -5,13 +5,14 @@ from collections import OrderedDict
 
 class BaseConfig:
     CWD = os.path.dirname(os.path.abspath(__file__))
-    DB = 'msdserver.sqlite'
+    DB = 'database/msdserver.sqlite'
     LOG = os.path.join(CWD, '_LOG_.txt')
 
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database', DB)
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
     SQLALCHEMY_BINDS = {
-        'cv': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database', 'cv.sqlite'),
-        'yaws': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database', 'yaws.sqlite')
+        'cv'  : 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/cv.sqlite'),
+        'yaws': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/yaws.sqlite'),
+        'nist': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/nist.sqlite'),
     }
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     SQLALCHEMY_TRACK_MODIFICATIONS = True
@@ -33,24 +34,64 @@ class BaseConfig:
 
 class ClusterConfig(BaseConfig):
     PBS_ENV_CMD = '''
-    export MALLOC_CHECK_=0
+#export MALLOC_CHECK_=0
+module purge
+module load gcc gromacs/2016.5
+#export OMPI_MCA_rmaps_base_oversubscribe=1
 '''
 
     WORK_DIR = '/share/workspace/gongzheng/_MSDServer/'
     DFF_ROOT = '/home/gongzheng/apps/DFF/Developing'
     PACKMOL_BIN = '/share/apps/tools/packmol'
     LMP_BIN = '/share/apps/lammps/lmp-stable'
-    GMX_BIN = '/share/apps/gromacs/2016.3/bin/gmx_gpu'
+    GMX_BIN = '/share/apps/gromacs/2016.5-gcc-openmpi/bin/gmx_gpu'
 
-    PBS_MANAGER = 'torque'
-
-    PBS_QUEUE_DICT = OrderedDict([('gtx', 2)])
+    PBS_MANAGER = 'slurm'
     PBS_NJOB_LIMIT = 200
 
+    PBS_QUEUE_LIST = [('gtx', 32, 2, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 8
-    GMX_MULTI_NGPU = 2
-    GMX_MULTI_NOMP = None  # do not set this if NGPU > 0
+    GMX_MULTI_NJOB = 4
+    GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
+
+    ### Extend
+    EXTEND_GMX_BIN = 'gmx_fast'
+    EXTEND_PBS_QUEUE_LIST = [('fast', 24, 0, 12)]
+    EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
+    EXTEND_GMX_MULTI_NJOB = 2  # Not used
+
+
+class PIConfig(BaseConfig):
+    PBS_ENV_CMD = '''
+source /usr/share/Modules/init/bash
+module purge
+unset MODULEPATH
+module use /lustre/usr/modulefiles/pi
+module load icc/16.0 mkl/11.3 impi/5.1 tbb/4.3
+export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
+export I_MPI_FABRICS=shm:dapl
+'''
+
+    _base_dir = '/lustre/home/acct-nishsun/nishsun-1/'
+    WORK_DIR = _base_dir + 'workspace/_MSDServer/'
+    DFF_ROOT = _base_dir + 'apps/DFF/Developing'
+    PACKMOL_BIN = _base_dir + 'apps/tools/packmol'
+    GMX_BIN = 'gmx'
+
+    PBS_MANAGER = 'slurm'
+    PBS_SUBMIT_CMD = 'sbatch --reservation=cpu_nishsun'
+    PBS_NJOB_LIMIT = 64
+
+    PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
+    GMX_MULTI = True
+    GMX_MULTI_NJOB = 4
+    GMX_MULTI_NOMP = 4
+
+    ### Extend
+    EXTEND_GMX_BIN = 'gmx'
+    EXTEND_PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]
+    EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
+    EXTEND_GMX_MULTI_NJOB = 2  # Not used
 
 
 class TH2Config(BaseConfig):
@@ -67,26 +108,12 @@ module load gcc/5.3.0
     GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'
 
     PBS_MANAGER = 'slurm'
-    PBS_QUEUE_DICT = OrderedDict([('bigdata', 24)])
+    PBS_QUEUE_DICT = [('bigdata', 24, 0, 24)]
     PBS_NJOB_LIMIT = 64
 
     GMX_MULTI = True
     GMX_MULTI_NJOB = 8
-    GMX_MULTI_NGPU = 0  # do not use GPU in gmx multidir simulation
     GMX_MULTI_NOMP = 6  # set this if NGPU == 0
-    GMX_MULTI_EXTEND_SPECIAL_NJOB_NOMP = {1: 24, 2: 12, 3: 8, 5: 4, 6: 4}  # set this if NGPU == 0
-
-
-class PIConfig(BaseConfig):
-    PBS_ENV_CMD = '''
-source /usr/share/Modules/init/bash
-unset MODULEPATH
-module use /lustre/usr/modulefiles/pi
-module purge
-module load icc/16.0 impi/5.1 mkl/11.3
-export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
-export I_MPI_FABRICS=shm:dapl
-'''
 
 
 class MacConfig(BaseConfig):

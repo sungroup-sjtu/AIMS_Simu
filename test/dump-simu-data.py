@@ -1,56 +1,65 @@
 #!/usr/bin/env python3
 
 import sys
+import pybel
 
 sys.path.append('..')
+sys.path.append('../../ms-tools')
 
 from app.models import *
-from app.models_cv import *
-from app.models_yaws import *
+from app.models_cv import Cv
+from mstools.formula import Formula
 
-content = ''
-for f in sys.argv[1:]:
-    with open(f) as fin:
-        content += fin.read()
+npt = init_simulation('npt')
 
 molecules = []
 
-for line in content.splitlines():
-    line = line.strip()
-    if line == '' or line.startswith('#'):
+print(
+        '#SMILES T(K) P(bar) density(g/mL) einter(kJ/mol) expansion(/K) compressibility(/bar) cp(J/mol.K) raw_density raw_einter raw_expansion raw_compressibility')
+tasks = Task.query.filter(Task.procedure == 'npt')
+
+# for task in tasks.limit(2):
+for task in tasks:
+    smiles = json.loads(task.smiles_list)[0]
+    m = pybel.readstring('smi', smiles)
+    if set(Formula.read(m.formula).atomdict.keys()) != {'C', 'H'}:
         continue
 
-    mol = YawsMolecule.query.filter(YawsMolecule.cas == line.split()[2]).first()
-    molecules.append(mol)
-
-print('molecule,property,t,p,value,stderr,ff')
-for mol in molecules:
-    smiles = mol.smiles
-
-    task = Task.query.filter(Task.smiles_list == '["%s"]' % smiles).first()
-    if task is None:
-        continue
     if task.post_result is None:
         continue
 
-    cv = Cv.query.filter(Cv.cas == mol.cas).first()
+    cv = Cv.query.filter(Cv.smiles == smiles).first()
+
+    post_result = json.loads(task.post_result)
+    if post_result['density-poly4-score'] < 0.999 or post_result['e_inter-poly4-score'] < 0.999:
+        continue
 
     for job in task.jobs:
         T = job.t
         P = job.p
-
-        post_result = task.get_post_result(T, P)
-        if post_result['score-density'] < 0.999 or post_result['score-e_inter'] < 0.999:
+        if not job.converged:
             continue
 
-        if cv is None:
-            cp_sim = None
-        else:
-            cv_intra = cv.get_post_result(T)
-            cp_sim = cv_intra + post_result['Cp_inter'] + post_result['Cp_PV']
+        post_result = task.get_post_data(T, P)
+        density = post_result['density']
+        e_inter = post_result['e_inter']
+        expansion = post_result['expansion']
+        compressibility = post_result['compressibility']
 
-        print('%s,%s,%i,%i,%f,,TEAM_LS' % (smiles, 'density', T, P*100000, post_result['density']))
-        print('%s,%s,%i,%i,%f,,TEAM_LS' % (smiles, 'expansion', T, P*100000, post_result['expansion']))
-        print('%s,%s,%i,%i,%f,,TEAM_LS' % (smiles, 'compressibility', T, P*100000, post_result['compressibility']))
-        if cp_sim != None:
-            print('%s,%s,%i,%i,%f,,TEAM_LS' % (smiles, 'Cp', T, P*100000, cp_sim))
+        raw_result = json.loads(job.result)
+        begin = raw_result['converged_from']
+        raw_density = raw_result['density'][0]
+        raw_e_inter = raw_result['e_inter'][0] / json.loads(task.n_mol_list)[0]
+        raw_expansion = raw_result['expansion'][0]
+        raw_compressibility = raw_result['compressibility'][0]
+
+        if cv is None:
+            cp_sim = 0  ### TODO Be careful, cv data not found
+        else:
+            cv_intra = cv.get_post_data(T)
+            cp_sim = cv_intra + post_result['cp_inter'] + post_result['cp_pv']
+
+        print('%s %i %i %.2e %.2e %.2e %.2e %.2e %.2e %.2e %.2e %.2e' % (
+            smiles, T, P,
+            density, e_inter, expansion, compressibility, cp_sim,
+            raw_density, raw_e_inter, raw_expansion, raw_compressibility))
