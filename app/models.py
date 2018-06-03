@@ -43,11 +43,19 @@ def init_simulation(procedure, extend=False):
               'gmx_bin'    : Config.GMX_BIN,
               'jobmanager' : jobmanager
               }
+    if hasattr(Config, 'GMX_MDRUN'):
+        kwargs.update({
+            'mdrun': Config.GMX_MDRUN
+        })
     if extend:
         kwargs.update({
             'gmx_bin'   : Config.EXTEND_GMX_BIN,
             'jobmanager': jm_extend
         })
+        if hasattr(Config, 'EXTEND_GMX_MDRUN'):
+            kwargs.update({
+                'mdrun': Config.EXTEND_GMX_MDRUN
+            })
 
     if procedure == 'npt':
         return simulationEngine.Npt(**kwargs)

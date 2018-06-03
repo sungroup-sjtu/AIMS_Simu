@@ -76,7 +76,8 @@ export I_MPI_FABRICS=shm:dapl
     WORK_DIR = _base_dir + 'workspace/_MSDServer/'
     DFF_ROOT = _base_dir + 'apps/DFF/Developing'
     PACKMOL_BIN = _base_dir + 'apps/tools/packmol'
-    GMX_BIN = 'gmx'
+    GMX_BIN = 'gmx_serial'
+    GMX_MDRUN = 'gmx mdrun'
 
     PBS_MANAGER = 'slurm'
     PBS_SUBMIT_CMD = 'sbatch --reservation=cpu_nishsun'
@@ -88,7 +89,8 @@ export I_MPI_FABRICS=shm:dapl
     GMX_MULTI_NOMP = 4
 
     ### Extend
-    EXTEND_GMX_BIN = 'gmx'
+    EXTEND_GMX_BIN = 'gmx_serial'
+    EXTEND_GMX_MDRUN = 'gmx mdrun'
     EXTEND_PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]
     EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
     EXTEND_GMX_MULTI_NJOB = 2  # Not used
@@ -128,6 +130,8 @@ Config = ClusterConfig
 hostname = socket.gethostname()
 if hostname == 'cluster.hpc.org':
     Config = ClusterConfig
+elif hostname.endswith('sjtu.edu.cn'):
+    Config = PIConfig
 elif hostname.startswith('ln') or hostname.startswith('cn'):
     Config = TH2Config
 elif hostname == 'z-Mac.local':
