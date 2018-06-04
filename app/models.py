@@ -3,6 +3,7 @@ import re
 import shutil
 import sys
 import time
+import traceback
 from datetime import datetime
 from functools import partial
 
@@ -296,20 +297,22 @@ class Task(db.Model):
             self.n_mol_list = json.dumps(simulation.n_mol_list)
         except Exception as e:
             log.error('Build task failed %s: %s' % (self, repr(e)))
+            traceback.print_exc()
             self.status = Compute.Status.FAILED
             db.session.commit()
         else:
             try:
                 self.insert_jobs()
                 for job in self.jobs:
-                    job.prepare()
+                    commands = job.prepare()
+                    self.commands = json.dumps(commands)
             except Exception as e:
                 log.error('Build task failed %s: %s' % (self, repr(e)))
+                traceback.print_exc()
                 self.status = Compute.Status.FAILED
-                db.session.commit()
             else:
                 self.status = Compute.Status.DONE
-                db.session.commit()
+            db.session.commit()
 
     def insert_jobs(self):
         if not os.path.exists(os.path.join(self.dir, 'build')):
@@ -340,11 +343,7 @@ class Task(db.Model):
                 job.name = '%s-%i-%i' % (self.name, t or 0, p or 0)
                 db.session.add(job)
 
-        try:
-            db.session.commit()
-        except:
-            db.session.rollback()
-            raise
+        db.session.commit()
 
     def run(self, ignore_pbs_limit=False) -> bool:
         log.info('Run %s' % self)
@@ -412,6 +411,7 @@ class Task(db.Model):
 
         except Exception as e:
             log.error('Run task failed %s %s' % (self, repr(e)))
+            traceback.print_exc()
             self.status = Compute.Status.FAILED
             db.session.commit()
             return False
@@ -514,6 +514,7 @@ class Task(db.Model):
 
         except Exception as e:
             log.error('Extend task failed %s %s' % (self, repr(e)))
+            traceback.print_exc()
             return False
         else:
             return True
@@ -530,6 +531,7 @@ class Task(db.Model):
                 job.check_finished()
             except Exception as e:
                 log.error('Check job status failed %s %s' % (job, repr(e)))
+                traceback.print_exc()
 
             if job.status == Compute.Status.DONE:
                 try:
@@ -537,6 +539,7 @@ class Task(db.Model):
                     job.analyze()
                 except Exception as e:
                     log.error('Analyze failed %s %s' % (job, repr(e)))
+                    traceback.print_exc()
 
         # Set status as DONE only if all jobs are converged
         for job in self.jobs:
@@ -553,13 +556,14 @@ class Task(db.Model):
         """
         from multiprocessing import Pool
 
-        log.info('Check status %s' % self)
+        log.info('Check status Multi %s' % self)
         jobs_to_analyze = []
         for job in self.jobs:
             try:
                 job.check_finished()
             except Exception as e:
                 log.error('Check job status failed %s %s' % (job, repr(e)))
+                traceback.print_exc()
 
             if job.status == Compute.Status.DONE:
                 log.info('Analyze %s' % job)
@@ -594,7 +598,7 @@ class Task(db.Model):
 
     def reset(self):
         for job in self.jobs:
-            if not job.pbs_job_done:
+            if job.pbs_job_id != None and not job.pbs_job_done:
                 try:
                     jobmanager.kill_job(job.pbs_job.name)
                 except Exception as e:
@@ -716,9 +720,7 @@ class Job(db.Model):
                                       prior_job_dir=prior_job_dir, drde=True)  # Temperature dependent parameters
 
         # all jobs under one task share same commands, save this for GMX -multidir simulation
-        if self.task.commands is None:
-            self.task.commands = json.dumps(commands)
-            db.session.commit()
+        return commands
 
     def run(self):
         try:
@@ -864,7 +866,7 @@ class Job(db.Model):
                 }
 
     def remove(self):
-        if not self.pbs_job_done:
+        if self.pbs_job_id != None and not self.pbs_job_done:
             try:
                 jobmanager.kill_job(self.pbs_job.name)
             except Exception as e:
