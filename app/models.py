@@ -825,9 +825,9 @@ class Job(db.Model):
             self.status = Compute.Status.ANALYZED
             self.converged = True
             self.result = json.dumps(result)
+            # Clean intermediate files if converged
+            simulation.clean()
 
-        # Clean intermediate files after analysis
-        simulation.clean()
         db.session.commit()
 
     def analyze_multiprocessing(self, job_dir, job_procedure, **kwargs):
@@ -856,9 +856,9 @@ class Job(db.Model):
                 _status = Compute.Status.ANALYZED
                 _converged = True
                 _result = json.dumps(result)
+                # Clean intermediate files if converged
+                simulation.clean()
 
-        # Clean intermediate files after analysis
-        simulation.clean()
         return {'exception': _exception,
                 'status'   : _status,
                 'converged': _converged,

@@ -273,9 +273,6 @@ class StatAction():
             if value == None:
                 continue
 
-            if math.isnan(value):
-                continue
-
             task = self.task_list[i]
             if _P < 2:
                 hvap_sim = task.get_post_data(_T, _P)['hvap']
@@ -317,7 +314,7 @@ class StatAction():
             if None in [spline_hvap, spline_dliq, spline_dgas]:
                 continue
             v_hvap, uncertainty = spline_hvap.get_data(_T)
-            if v_hvap == None or math.isnan(v_hvap):
+            if v_hvap == None:
                 continue
 
             if _P < 2:
