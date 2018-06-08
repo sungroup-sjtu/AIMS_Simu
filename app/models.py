@@ -339,7 +339,16 @@ class Task(db.Model):
 
         db.session.commit()
 
-    def run(self, ignore_pbs_limit=False) -> bool:
+    def run(self, ignore_pbs_limit=False) -> int:
+        '''
+        :return: -1  if PBS_NJOB_LIMIT reached
+                  0  if no job submit or failed
+                  N  if N pbs jobs submit
+        '''
+        if self.stage != Compute.Stage.BUILDING or self.status != Compute.Status.DONE:
+            raise Exception('Incorrect stage or status: %s %s' %
+                            (Compute.Stage.text[self.stage], Compute.Status.text[self.status]))
+
         log.info('Run %s' % self)
 
         n_pbs_run = self.jobs.count()
@@ -348,14 +357,7 @@ class Task(db.Model):
 
         if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_run > Config.PBS_NJOB_LIMIT:
             log.warning('PBS_NJOB_LIMIT reached')
-            return False
-
-        if self.stage != Compute.Stage.BUILDING:
-            print('Incorrect stage: %s' % Compute.Stage.text[self.stage])
-            return False
-        elif self.status != Compute.Status.DONE:
-            print('Incorrect status: %s' % Compute.Status.text[self.status])
-            return False
+            return -1
 
         self.stage = Compute.Stage.RUNNING
         try:
@@ -408,11 +410,11 @@ class Task(db.Model):
             traceback.print_exc()
             self.status = Compute.Status.FAILED
             db.session.commit()
-            return False
+            return 0
         else:
             self.status = Compute.Status.STARTED
             db.session.commit()
-            return True
+            return n_pbs_run
 
     @property
     def ready_to_extend(self) -> bool:

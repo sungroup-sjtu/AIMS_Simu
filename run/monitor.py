@@ -4,14 +4,9 @@
 import sys, time
 
 sys.path.append('..')
-from app.models import Task, Compute, PbsJob, jobmanager
-from app import log, Config
+from app.models import Task, Compute, PbsJob
+from app import log
 
-def get_n_task_free():
-    n_task_free = Config.PBS_NJOB_LIMIT - jobmanager.n_running_jobs
-    if Config.GMX_MULTI:
-        n_task_free /= Config.GMX_MULTI_NJOB
-    return n_task_free
 
 def process_pbs_job():
     for pbs_job in PbsJob.query.filter(PbsJob.submitted == False):
@@ -32,7 +27,8 @@ def process_task_run(procedure=None, n_task=20):
     if procedure != None:
         tasks = tasks.filter(Task.procedure == procedure)
     for task in tasks.limit(n_task):
-        task.run()
+        if task.run() == -1:
+            break
 
 
 def process_task_check(procedure=None, n_task=20):
@@ -57,9 +53,8 @@ if __name__ == '__main__':
     while True:
         process_pbs_job()
         process_task_extend(procedure='nvt-slab')
-        n_task_free = get_n_task_free()
-        process_task_run(procedure='nvt-slab', n_task=n_task_free)
-        process_task_build(procedure='nvt-slab', n_task=n_task_free)
-        process_task_check(procedure='nvt-slab')
+        process_task_run(procedure='nvt-slab', n_task=20)
+        process_task_build(procedure='nvt-slab', n_task=20)
+        process_task_check(procedure='nvt-slab', n_task=1000)
         log.info('Sleep 1800 seconds ...')
         time.sleep(1800)
