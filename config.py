@@ -24,8 +24,9 @@ class BaseConfig:
     PBS_NJOB_LIMIT = 10
     PBS_ENV_CMD = ''
 
+    GMX_MDRUN = None
+    EXTEND_GMX_MDRUN = None
     GMX_MULTI = False  # do not perform gmx multidir simulation
-    GMX_MULTI_NGPU = 0  # do not use GPU in gmx multidir simulation
 
     EXTEND_CYCLE_LIMIT = 8
 
@@ -43,20 +44,19 @@ module load gcc gromacs/2016.5
     WORK_DIR = '/share/workspace/gongzheng/_MSDServer/'
     DFF_ROOT = '/home/gongzheng/apps/DFF/Developing'
     PACKMOL_BIN = '/share/apps/tools/packmol'
-    LMP_BIN = '/share/apps/lammps/lmp-stable'
-    GMX_BIN = '/share/apps/gromacs/2016.5-gcc-openmpi/bin/gmx_gpu'
 
     PBS_MANAGER = 'slurm'
     PBS_NJOB_LIMIT = 200
-
     PBS_QUEUE_LIST = [('gtx', 32, 2, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
+
+    GMX_BIN = 'gmx_gpu'
     GMX_MULTI = True
     GMX_MULTI_NJOB = 4
     GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
 
     ### Extend
-    EXTEND_GMX_BIN = 'gmx_fast'
     EXTEND_PBS_QUEUE_LIST = [('fast', 24, 0, 12)]
+    EXTEND_GMX_BIN = 'gmx_fast'
     EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
     EXTEND_GMX_MULTI_NJOB = 2  # Not used
 
@@ -76,22 +76,22 @@ export I_MPI_FABRICS=shm:dapl
     WORK_DIR = _base_dir + 'workspace/_MSDServer/'
     DFF_ROOT = _base_dir + 'apps/DFF/Developing'
     PACKMOL_BIN = _base_dir + 'apps/tools/packmol'
-    GMX_BIN = 'gmx_serial'
-    GMX_MDRUN = 'gmx mdrun'
 
     PBS_MANAGER = 'slurm'
     PBS_SUBMIT_CMD = 'sbatch --reservation=cpu_nishsun'
     PBS_NJOB_LIMIT = 64
-
     PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
+
+    GMX_BIN = 'gmx_serial'
+    GMX_MDRUN = 'gmx mdrun'
     GMX_MULTI = True
     GMX_MULTI_NJOB = 4
     GMX_MULTI_NOMP = 4
 
     ### Extend
+    EXTEND_PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]
     EXTEND_GMX_BIN = 'gmx_serial'
     EXTEND_GMX_MDRUN = 'gmx mdrun'
-    EXTEND_PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]
     EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
     EXTEND_GMX_MULTI_NJOB = 2  # Not used
 

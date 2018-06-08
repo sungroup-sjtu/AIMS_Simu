@@ -8,7 +8,7 @@ sys.path.append('../../ms-tools')
 from app.models import *
 from app.models_nist import *
 
-print('#SMILES T(K) P(bar) density(g/mL) e_inter(kJ/mol) cp(J/mol.K)')
+print('#SMILES T(K) P(bar) density(g/mL) u e_inter(kJ/mol) u cp(J/mol.K) u')
 
 for nist in NistMolecule.query.filter(NistMolecule.remark == 'alkane').filter(
         NistMolecule.n_heavy < 20).order_by(NistMolecule.n_heavy):
@@ -40,27 +40,50 @@ for nist in NistMolecule.query.filter(NistMolecule.remark == 'alkane').filter(
         p = spline_pvap.get_data(t)[0]  # kPa
         if p == None:
             continue
+        p /= 100  # bar
 
-        t = int(round(t))  # K
-        p = int(round(p / 100))  # bar
+        density, den_u, hvap, hvap_u, ei, ei_u, cp, cp_u = [None] * 8
 
         if spline_dens != None:
-            density = spline_dens.get_data(t)[0] or 0
-        else:
-            density = 0
+            density, den_u = spline_dens.get_data(t)
 
         if spline_hvap != None:
-            hvap = spline_hvap.get_data(t)[0] or 0
-        else:
-            hvap = 0
-        if p <= 1 and hvap != 0:
-            ei = 8.314 * t / 1000 - hvap  # kJ/mol
-        else:
-            ei = 0
+            hvap, hvap_u = spline_hvap.get_data(t)
 
         if spline_cp != None:
-            cp = spline_cp.get_data(t)[0] or 0
-        else:
-            cp = 0
+            cp, cp_u = spline_cp.get_data(t)
 
-        print('%s %i %i %.3e %.3e %.3e' % (nist.smiles, t, p, density / 1000, ei, cp))
+        if hvap != None:
+            if p <= 1:
+                ei = 8.314 * t / 1000 - hvap  # kJ/mol
+            else:
+                spline_dgl = NistSpline.query.join(NistProperty).filter(NistSpline.molecule == nist).filter(
+                        NistProperty.name == 'density-gl').first()
+                if spline_dgl != None:
+                    dgas, _ = spline_dgl.get_data(t)
+                    if dgas != None and density != None:
+                        pVg_l = p * nist.weight * (1 / dgas - 1 / density) / 10  # kJ/mol
+                        ei = pVg_l - hvap
+
+        if density == None:
+            density, den_u = 0, 0
+        else:
+            den_u = den_u / density
+
+        if ei == None:
+            ei, ei_u = 0, 0
+        else:
+            ei_u = hvap_u / hvap
+
+        if cp == None:
+            cp, cp_u = 0, 0
+        else:
+            cp_u = cp_u / cp
+
+        t = int(round(t))  # K
+        p = int(round(p))  # bar
+        print('%s %i %i %.3e %.1e %.3e %.1e %.3e %.1e' % (nist.smiles, t, p,
+                                                       density / 1000, den_u,
+                                                       ei, ei_u,
+                                                       cp, cp_u,
+                                                       ))
