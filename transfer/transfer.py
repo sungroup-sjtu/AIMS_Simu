@@ -61,19 +61,22 @@ def create_pbs() -> int:
 
 def load_tasks(compute_id, task_offset):
     df = pd.read_csv('tasks.csv')
+    df.procedure += '-import'
     df.compute_id = compute_id
-    df.id += task_offset
+    df.id += (task_offset - df.id.min() + 1)
 
-    df.to_sql('task', db.session)
+    # df.to_sql('task', db.engine, if_exists='append')
+    df.to_csv('tasks-load.csv', index=False)
 
 
 def load_jobs(pbs_job_id, task_offset, job_offset):
     df = pd.read_csv('jobs.csv')
     df.pbs_job_id = pbs_job_id
-    df.task_id += task_offset
-    df.id += job_offset
+    df.task_id += (task_offset - df.task_id.min() + 1)
+    df.id += (job_offset - df.id.min() + 1)
 
-    df.to_sql('job', db.session)
+    # df.to_sql('job', db.engine, if_exists='append')
+    df.to_csv('jobs-load.csv', index=False)
 
 
 def untar_tasks():

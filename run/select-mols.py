@@ -11,13 +11,16 @@ import pybel
 from collections import OrderedDict
 
 
-def get_N(n):
-    if n <= 20:
-        return n
-    elif n >= 60:
-        return n // 2
+def get_N(N, n_heavy):
+    if n_heavy <= 5:
+        return N
+
+    if N <= 20:
+        return N
+    elif N >= 80:
+        return N // 2
     else:
-        return 20 + (n - 20) // 4
+        return 20 + (N - 20) // 3
 
 
 class MolLine():
@@ -47,13 +50,24 @@ for line in lines:
     n_heavy = m.OBMol.NumHvyAtoms()
     n_heavy_mols[n_heavy].append(MolLine(m, line))
 
-print('n_heav n_mols n_need n_matc')
-for k, v in n_heavy_mols.items():
-    N = get_N(len(v))
+fout = open('out.txt', 'w')
+print('n_heav n_mols n_need n_matc n_rema')
+for k, molLine_list in n_heavy_mols.items():
+    N = get_N(len(molLine_list), k)
 
     n_matched = 0
-    for molLine in v:
+    for molLine in molLine_list:
         if Task.query.filter(Task.smiles_list == json.dumps([molLine.smiles])).first() != None:
+            fout.write(molLine.line + '\n')
+            molLine.matched = True
             n_matched += 1
 
-    print('%6i %6i %6i %6i' % (k, len(v), N, n_matched))
+    n_remain = N - n_matched
+    print('%6i %6i %6i %6i %6i' % (k, len(molLine_list), N, n_matched, n_remain))
+    n_remain = max(n_remain, 0)
+
+    l = [molLine for molLine in molLine_list if not molLine.matched]
+    random.shuffle(l)
+    for molLine in l[:n_remain]:
+        fout.write(molLine.line + '\n')
+fout.close()
