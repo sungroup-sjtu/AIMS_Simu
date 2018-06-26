@@ -11,16 +11,16 @@ import pybel
 from collections import OrderedDict
 
 
-def get_N(N, n_heavy):
+def get_N(N, n_heavy, frac=0.5):
     if n_heavy <= 5:
         return N
 
     if N <= 20:
         return N
     elif N >= 80:
-        return N // 2
+        return int(N * frac)
     else:
-        return 20 + (N - 20) // 3
+        return 20 + int((N - 20) * (4 * frac - 1) / 3)
 
 
 class MolLine():
@@ -53,7 +53,7 @@ for line in lines:
 fout = open('out.txt', 'w')
 print('n_heav n_mols n_need n_matc n_rema')
 for k, molLine_list in n_heavy_mols.items():
-    N = get_N(len(molLine_list), k)
+    N = get_N(len(molLine_list), k, float(sys.argv[2]))
 
     n_matched = 0
     for molLine in molLine_list:
