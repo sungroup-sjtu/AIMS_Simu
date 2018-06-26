@@ -10,7 +10,7 @@ class ComputeAction():
         try:
             compute.web_id = json_dict['id']
             compute.web_user_id = json_dict['user_id']
-            compute.json = json.dumps(json_dict['detail'])
+            compute.json_detail = json.dumps(json_dict['detail'])
             compute.remark = json_dict['remark']
         except:
             raise Exception('Incomplete information')

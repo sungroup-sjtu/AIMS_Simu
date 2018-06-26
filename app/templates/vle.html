@@ -1,0 +1,27 @@
+{% extends '_base.html' %}
+
+{% block title %}
+    Statistical Analysis
+{% endblock %}
+
+{% block body %}
+    <div class="main">
+        <div class="left">
+            <form method="post" action="#">
+                SMILES
+                <br/>
+                <textarea cols="30" rows="50" name="smiles">{{ '\n'.join(smiles_list)}}</textarea>
+                <br/>
+                <button id="update-chart" type="submit">Submit</button>
+            </form>
+            <br/>
+            <div id="count"></div>
+        </div>
+        <div class="right">
+            {% for png in pngs %}
+                <div class="chart"><img src="data:image/png;base64,{{ png }}"/></div>
+            {% endfor %}
+            <div class="clear"></div>
+        </div>
+    </div>
+{% endblock %}

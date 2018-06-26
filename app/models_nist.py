@@ -1,5 +1,7 @@
+from scipy import interpolate
+import json
 from . import db
-from sqlalchemy import Column, Integer, Float, Text, String, ForeignKey
+from sqlalchemy import Column, Integer, Float, Text, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 
 from functools import partial
@@ -7,12 +9,24 @@ from functools import partial
 NotNullColumn = partial(Column, nullable=False)
 
 
+class NistGroup(db.Model):
+    __bind_key__ = 'nist'
+    __tablename__ = 'nist_group'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100))
+    smarts = Column(String(100))
+
+    molecules = db.relationship('NistMolecule', secondary='nist_molecule_group')
+
+    def __repr__(self):
+        return '<Group: %s %s>' % (self.name, self.smarts)
+
+
 class NistMolecule(db.Model):
     __bind_key__ = 'nist'
     __tablename__ = 'nist_molecule'
     id = Column(Integer, primary_key=True)
     content_id = Column(String(100), unique=True)
-    knovel_id = Column(Integer)
     cas = Column(String(100))  # CAS could be duplicated for isomers
     formula = Column(String(100))
     name = Column(Text)
@@ -33,9 +47,14 @@ class NistMolecule(db.Model):
     hfus_u = Column(Float)  # kJ/mol
     remark = Column(Text)
     n_heavy = Column(Integer)
+    constant_inserted = Column(Boolean, default=False)
+    data_inserted = Column(Boolean, default=False)
+    spline_inserted = Column(Boolean, default=False)
 
     datas = relationship('NistData', lazy='dynamic')
     splines = relationship('NistSpline', lazy='dynamic')
+
+    groups = db.relationship('NistGroup', secondary='nist_molecule_group')
 
     def __repr__(self):
         return '<NistMolecule: %s %s %s>' % (self.formula, self.smiles, self.name)
@@ -44,6 +63,13 @@ class NistMolecule(db.Model):
         import pybel
         m = pybel.readstring('smi', self.smiles)
         self.n_heavy = m.OBMol.NumHvyAtoms()
+
+
+class NistMoleculeGroup(db.Model):
+    __bind_key__ = 'nist'
+    __tablename__ = 'nist_molecule_group'
+    molecule_id = Column(Integer, ForeignKey(NistMolecule.id), primary_key=True)
+    group_id = Column(Integer, ForeignKey(NistGroup.id), primary_key=True)
 
 
 class NistProperty(db.Model):
@@ -91,12 +117,9 @@ class NistSpline(db.Model):
         if T < self.t_min or T > self.t_max:
             return None, None
 
-        import json
-        from scipy.interpolate import splev
-
         coef_v = json.loads(self.coef_v)
         coef_u = json.loads(self.coef_u)
 
-        v = splev(T, coef_v)
-        u = splev(T, coef_u)
+        v = interpolate.splev(T, coef_v)
+        u = interpolate.splev(T, coef_u)
         return float(v), float(u)

@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import sys
+import pybel
 
 sys.path.append('..')
 from app.models import *
@@ -10,34 +11,35 @@ from config import Config
 
 sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.simulation.gauss import Cv as GaussCv
-from mstools.jobmanager import Torque
+from mstools.jobmanager import Slurm
 from mstools.utils import cd_or_create_and_cd
 
-from collections import OrderedDict
-
-QUEUE_DICT = OrderedDict([('cpu', 4)])
-GAUSS_BIN = '/share/apps/g16/g16'
-#QUEUE_DICT = OrderedDict([('fast', 6)])
-#QUEUE_DICT = OrderedDict([('batch', 4)])
-#GAUSS_BIN = '/share/apps/g09-b01/g09/g09'
+# QUEUE_LIST = [('gtx', 8, 0, 8)]
+# QUEUE_LIST = [('cpu', 8, 0, 8)]
+# GAUSS_BIN = '/share/apps/g16/g16'
+QUEUE_LIST = [('fast', 6, 0, 6)]
+GAUSS_BIN = '/share/apps/g09/g09'
 
 n_conformer = 1
 
-torque = Torque(queue_dict=QUEUE_DICT)
-gauss_cv = GaussCv(gauss_bin=GAUSS_BIN, jobmanager=torque)
+slurm = Slurm(queue_list=QUEUE_LIST)
+gauss = GaussCv(gauss_bin=GAUSS_BIN, jobmanager=slurm)
 
 
 class Mol():
-    def __init__(self, name, smiles):
+    def __init__(self, name, smiles, formula=None):
         self.name = name
         self.smiles = smiles
+        if formula == None:
+            formula = pybel.readstring('smi', smiles).formula
+        self.formula = formula
         self.T_list = []
 
     def __repr__(self):
         return '<Mol: %s %s>' % (self.name, self.smiles)
 
-    def __eq__(self, mol2):
-        return self.name == mol2.name
+    def __eq__(self, m2):
+        return self.smiles == m2.smiles
 
 
 def get_mols():
@@ -47,12 +49,17 @@ def get_mols():
     for line in lines:
         if line.strip() == '' or line.startswith('#'):
             continue
+
         words = line.strip().split()
-        cas = words[1]
-        smiles = words[2]
-        mol = Mol(cas, smiles)
+        name = words[2]  # str, could be 'None'
+        smiles = words[3]
+
+        mol = Mol(name, smiles)
         mol.T_list = [100, 200, 300, 400, 500, 600, 700]
-        mols.append(mol)
+
+        if mol not in mols:
+            mols.append(mol)
+
     return mols
 
 
@@ -62,14 +69,12 @@ if __name__ == '__main__':
 
     if cmd == 'print':
         n = 0
-        tasks = Task.query
-        for task in tasks:
-            cas = task.name[:-5]
-            smiles = json.loads(task.smiles_list)[0]
-            if Cv.query.filter(Cv.smiles == smiles).count() > 0:
+        mols = get_mols()
+        for mol in mols:
+            if Cv.query.filter(Cv.smiles == mol.smiles).count() > 0:
                 continue
             n += 1
-            print(n, cas, smiles, sep='\t')
+            print(n, mol.formula, mol.name + '_' + random_string(4), mol.smiles, sep='\t')
 
     if cmd == 'cv':
         mols = get_mols()
@@ -81,9 +86,9 @@ if __name__ == '__main__':
             except:
                 pass
             cd_or_create_and_cd(mol.name)
-            gauss_cv.set_system([mol.smiles], n_mol_list=[1])
-            gauss_cv.prepare(n_conformer=n_conformer, T_list=mol.T_list, jobname=mol.name)
-            gauss_cv.run()
+            gauss.set_system([mol.smiles], n_mol_list=[1])
+            gauss.prepare(n_conformer=n_conformer, T_list=mol.T_list, jobname=mol.name)
+            gauss.run()
             os.chdir('..')
         os.chdir(CWD)
 
@@ -91,25 +96,29 @@ if __name__ == '__main__':
         mols = get_mols()
         from mstools.analyzer.fitting import polyfit
 
-        cd_or_create_and_cd(os.path.join(Config.WORK_DIR, 'Cv'))
         for mol in mols:
-            cd_or_create_and_cd(mol.name)
-            gauss_cv.logs = ['conf-%i.log' % i for i in range(n_conformer)]
             try:
-                result = gauss_cv.analyze()
+                os.chdir(os.path.join(Config.WORK_DIR, 'Cv', mol.name))
+            except:
+                print(mol, 'Error: Dir not exist')
+                continue
+
+            gauss.logs = ['conf-%i.log' % i for i in range(n_conformer)]
+            try:
+                result = gauss.analyze()
             except Exception as e:
                 print(mol, str(e))
-            else:
-                T_list = []
-                Cv_list = []
-                for T, val_stderr in result['Cv-corrected'].items():
-                    T_list.append(T)
-                    Cv_list.append(val_stderr[0])
-                if T_list != [100, 200, 300, 400, 500, 600, 700]:
-                    print(mol, 'Some temperatures are failed')
-                else:
-                    coef, score = polyfit(T_list, Cv_list, 4)
-                    print(mol, *coef)
+                continue
 
-            os.chdir('..')
-        os.chdir(CWD)
+            T_list = []
+            Cv_list = []
+            for T, val_stderr in result['Cv-corrected'].items():
+                T_list.append(T)
+                Cv_list.append(val_stderr[0])
+            if T_list != [100, 200, 300, 400, 500, 600, 700]:
+                print(mol, 'Some temperatures are failed')
+            else:
+                coef, score = polyfit(T_list, Cv_list, 4)
+                print(mol, *coef)
+
+            os.chdir(CWD)

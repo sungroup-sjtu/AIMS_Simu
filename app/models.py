@@ -95,7 +95,7 @@ class Compute(db.Model):
     web_user_id = NotNullColumn(Integer)
     web_ip = NotNullColumn(String(200))
     time = NotNullColumn(DateTime, default=datetime.now)
-    json = NotNullColumn(Text)
+    json_detail = NotNullColumn('json', Text)
     remark = NotNullColumn(Text)
 
     tasks = db.relationship('Task', lazy='dynamic')
@@ -106,7 +106,7 @@ class Compute(db.Model):
     def create_tasks(self):
         log.info('Create tasks from %s' % self)
         try:
-            detail = json.loads(self.json)
+            detail = json.loads(self.json_detail)
             procedures = detail['procedures']
             combinations = detail['combinations']
             t_range_default = detail.get('t')
@@ -198,8 +198,8 @@ class Compute(db.Model):
 
         text = {
             SUBMITTED: 'Submitted',
-            BUILDING : 'Building...',
-            RUNNING  : 'Running...',
+            BUILDING : 'Building',
+            RUNNING  : 'Running',
         }
 
     class Status:
@@ -270,10 +270,30 @@ class Task(db.Model):
 
     @property
     def n_mol_total(self) -> int:
-        n_mol = 0
-        for i in json.loads(self.n_mol_list):
-            n_mol += i
-        return n_mol
+        return sum(json.loads(self.n_mol_list))
+
+    def get_smiles_list(self):
+        if self.smiles_list == None:
+            return None
+        else:
+            return json.loads(self.smiles_list)
+
+    def get_mol_list(self):
+        if self.smiles_list == None:
+            return None
+        else:
+            import pybel
+            return [pybel.readstring('smi', smiles) for smiles in json.loads(self.smiles_list)]
+
+    def get_post_result(self):
+        if self.post_result == None:
+            return None
+        else:
+            return json.loads(self.post_result)
+
+    @classmethod
+    def get_task(cls, smiles, procedure='npt'):
+        return Task.query.filter(Task.smiles_list == json.dumps([smiles])).filter(Task.procedure == procedure).first()
 
     def build(self):
         log.info('Build %s' % self)
@@ -698,6 +718,12 @@ class Job(db.Model):
     @property
     def need_extend(self) -> bool:
         return self.status == Compute.Status.ANALYZED and not self.converged
+
+    def get_result(self):
+        if self.result == None:
+            return None
+        else:
+            return json.loads(self.result)
 
     def prepare(self):
         prior_job = self.prior_job

@@ -7,6 +7,7 @@ sys.path.append('..')
 sys.path.append('../../ms-tools')
 
 from app.models import *
+from app.models_yaws import *
 from app.models_cv import Cv
 from mstools.formula import Formula
 
@@ -20,7 +21,7 @@ tasks = Task.query.filter(Task.procedure == 'npt')
 
 # for task in tasks.limit(2):
 for task in tasks:
-    smiles = json.loads(task.smiles_list)[0]
+    smiles = task.get_smiles_list()[0]
     m = pybel.readstring('smi', smiles)
     if set(Formula.read(m.formula).atomdict.keys()) != {'C', 'H'}:
         continue
@@ -28,11 +29,15 @@ for task in tasks:
     if task.post_result is None:
         continue
 
-    cv = Cv.query.filter(Cv.smiles == smiles).first()
-
-    post_result = json.loads(task.post_result)
+    post_result = task.get_post_result()
     if post_result['density-poly4-score'] < 0.999 or post_result['e_inter-poly4-score'] < 0.999:
         continue
+
+    # yaws = YawsMolecule.query.filter(YawsMolecule.isomeric_smiles==smiles).first()
+    # print(smiles,yaws.formula, yaws.cas, yaws.name, yaws.get_Tfus(), yaws.get_Tvap(), yaws.get_Tc(), yaws.n_heavy_atom, sep='\t')
+    # continue
+
+    cv = Cv.query.filter(Cv.smiles == smiles).first()
 
     for job in task.jobs:
         T = job.t

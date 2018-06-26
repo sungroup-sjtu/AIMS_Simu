@@ -1,5 +1,6 @@
 import json
-from sqlalchemy import Integer, Text
+from sqlalchemy import Integer, Text, Column, DateTime
+from datetime import datetime
 from . import db
 from .models import NotNullColumn
 
@@ -8,12 +9,13 @@ class Cv(db.Model):
     __bind_key__ = 'cv'
     __tablename__ = 'cv'
     id = NotNullColumn(Integer, primary_key=True)
-    cas = NotNullColumn(Text)
+    name = NotNullColumn(Text)
     smiles = NotNullColumn(Text)
     post_result = NotNullColumn(Text)
+    time = Column(DateTime, default=datetime.now)
 
     def __repr__(self):
-        return '<Cv: %i: %s %s>' % (self.id, self.cas, self.smiles)
+        return '<Cv: %i: %s>' % (self.id, self.smiles)
 
     def get_post_data(self, T=298):
         from numpy.polynomial.polynomial import polyval
@@ -28,18 +30,16 @@ class Cv(db.Model):
         for line in lines:
             if line == '' or line.startswith('#'):
                 continue
-            if 'failed' in line or 'Errno' in line:
+            if 'failed' in line or 'Err' in line:
                 continue
 
             words = line.strip().split()
-            cas = words[1]
+            name = words[1]
             smiles = words[2]
             smiles = smiles.replace('>', '')
             coef = list(map(float, words[3:8]))
-            cv = Cv(cas=cas, smiles=smiles, post_result=json.dumps(coef))
+
+            cv = Cv(name=name, smiles=smiles, post_result=json.dumps(coef))
             db.session.add(cv)
-        try:
-            db.session.commit()
-        except Exception as e:
-            print(repr(e))
-            db.session.rollback()
+
+        db.session.commit()
