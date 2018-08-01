@@ -52,12 +52,12 @@ for line in lines:
 
     if t_c == 'None':
         print('!WARNING: Tc is None: %s' % line)
-        t_max = int(round(t_vap + 75))
+        t_max = int(round(t_vap * 1.2))
     else:
         t_c = float(t_c)
-        t_max = int(round(t_c * 0.8))
+        t_max = int(round(t_c * 0.85))
 
-    t_max = min(t_max, 600)
+    t_max = min(t_max, 650)
 
     if t_min >= t_max:
         print('!ERROR: t_min > t_max: %s' % line)

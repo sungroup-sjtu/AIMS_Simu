@@ -28,74 +28,14 @@ def show_job(job_id):
     return render_template('job.html', job=job)
 
 
-@main.route('/stat/', methods=['GET', 'POST'])
-def show_stat():
-    if request.method == 'GET':
-        return render_template('stat.html')
-
-    smiles_str = request.form.get('smiles')
-    smiles_list = [line.strip() for line in smiles_str.splitlines()]
-    smiles_list = list(set(filter(lambda x: x != '', smiles_list)))
-
-    statAction = StatAction()
-    statAction.update_mol_task_list(smiles_list)
-
-    ### NIST
-    dens_Tm25_nist_list = statAction.get_density_nist(_T='Tm25')
-    dens_Tvap_nist_list = statAction.get_density_nist(_T='Tvap')
-    dens_Tcx8_nist_list = statAction.get_density_nist(_T='Tcx8')
-
-    hvap_Tm25_list = statAction.get_hvap_nist(_T='Tm25')
-    hvap_Tvap_list = statAction.get_hvap_nist(_T='Tvap')
-    hvap_Tcx8_list = statAction.get_hvap_nist(_T='Tcx8')
-
-    cp_Tm25_nist_list = statAction.get_cp_nist(_T='Tm25')
-    cp_Tvap_nist_list = statAction.get_cp_nist(_T='Tvap')
-    cp_Tcx8_nist_list = statAction.get_cp_nist(_T='Tcx8')
-
-    tc_nist_list = statAction.get_tc_nist()
-    dc_nist_list = statAction.get_dc_nist()
-
-    dgas_Tcx8_nist_list = statAction.get_dgas_nist(_T='Tcx8')
-
-    st_Tm25_nist_list = statAction.get_st_nist(_T='Tm25')
-    st_Tvap_nist_list = statAction.get_st_nist(_T='Tvap')
-    st_Tcx8_nist_list = statAction.get_st_nist(_T='Tcx8')
-
-    # sound_Tm25_nist_list = statAction.get_sound_nist(T='Tm25')
-    # sound_Tvap_nist_list = statAction.get_sound_nist(T='Tvap')
-    # sound_Tcx8_nist_list = statAction.get_sound_nist(T='Tcx8')
-
-    ### Yaws
-    # expan_Tm25_list = statAction.get_expansion(T='Tm25')
-    # expan_Tvap_list = statAction.get_expansion(T='Tvap')
-    # expan_Tcx8_list = statAction.get_expansion(T='Tcx8')
-
+def get_pngs_from_data(k_data_exp_sim_list):
     import pylab
     import base64
     import numpy as np
     from io import BytesIO
 
     pngs = []
-    for k, data_exp_sim_list in [
-        ('density @ Tm+', dens_Tm25_nist_list),
-        ('density @ Tvap', dens_Tvap_nist_list),
-        ('density @ T0.8*', dens_Tcx8_nist_list),
-        ('Hvap @ Tm+', hvap_Tm25_list),
-        ('Hvap @ Tvap', hvap_Tvap_list),
-        ('Hvap @ T0.8*', hvap_Tcx8_list),
-        ('Cp @ Tm+', cp_Tm25_nist_list),
-        ('Cp @ Tvap', cp_Tvap_nist_list),
-        ('Cp @ T0.8*', cp_Tcx8_nist_list),
-        ('critical temperatrue', tc_nist_list),
-        ('critical density', dc_nist_list),
-        ('density of vapor @ T0.8*', dgas_Tcx8_nist_list),
-        ('surface tension @ Tm+', st_Tm25_nist_list),
-        ('surface tension @ Tvap', st_Tvap_nist_list),
-        ('surface tension @ T0.8*', st_Tcx8_nist_list),
-        # sound_Tm25_nist_list, sound_Tvap_nist_list, sound_Tcx8_nist_list,
-        # expan_Tm25_list, expan_Tvap_list, expan_Tcx8_list,
-    ]:
+    for k, data_exp_sim_list in k_data_exp_sim_list:
         ref_list = []
         sim_list = []
         dev_list = []
@@ -149,6 +89,84 @@ def show_stat():
         pylab.savefig(p, format='png')
         pylab.close()
         pngs.append(base64.b64encode(p.getvalue()).decode())
+
+    return pngs
+
+
+@main.route('/stat/pvt', methods=['GET', 'POST'])
+def show_stat_pvt():
+    if request.method == 'GET':
+        return render_template('stat.html')
+
+    smiles_str = request.form.get('smiles')
+    smiles_list = [line.strip() for line in smiles_str.splitlines()]
+    smiles_list = list(set(filter(lambda x: x != '', smiles_list)))
+    print(len(smiles_list))
+
+    statAction = StatAction()
+    statAction.update_mol_task_list(smiles_list)
+    print(len(statAction.nist_list))
+
+    dens_Tm25_nist_list = statAction.get_density_nist(_T='Tm25')
+    dens_Tvap_nist_list = statAction.get_density_nist(_T='Tvap')
+    dens_Tcx8_nist_list = statAction.get_density_nist(_T='Tcx8')
+    hvap_Tm25_list = statAction.get_hvap_nist(_T='Tm25')
+    hvap_Tvap_list = statAction.get_hvap_nist(_T='Tvap')
+    hvap_Tcx8_list = statAction.get_hvap_nist(_T='Tcx8')
+    cp_Tm25_nist_list = statAction.get_cp_nist(_T='Tm25')
+    cp_Tvap_nist_list = statAction.get_cp_nist(_T='Tvap')
+    cp_Tcx8_nist_list = statAction.get_cp_nist(_T='Tcx8')
+    # sound_Tm25_nist_list = statAction.get_sound_nist(T='Tm25')
+    # sound_Tvap_nist_list = statAction.get_sound_nist(T='Tvap')
+    # sound_Tcx8_nist_list = statAction.get_sound_nist(T='Tcx8')
+
+    k_data_exp_sim_list = [
+        ('density @ Tm+', dens_Tm25_nist_list),
+        ('density @ Tvap', dens_Tvap_nist_list),
+        ('density @ T0.8*', dens_Tcx8_nist_list),
+        ('Hvap @ Tm+', hvap_Tm25_list),
+        ('Hvap @ Tvap', hvap_Tvap_list),
+        ('Hvap @ T0.8*', hvap_Tcx8_list),
+        ('Cp @ Tm+', cp_Tm25_nist_list),
+        ('Cp @ Tvap', cp_Tvap_nist_list),
+        ('Cp @ T0.8*', cp_Tcx8_nist_list),
+        # sound_Tm25_nist_list, sound_Tvap_nist_list, sound_Tcx8_nist_list,
+    ]
+    pngs = get_pngs_from_data(k_data_exp_sim_list)
+
+    return render_template('stat.html', smiles_list=smiles_list, pngs=pngs)
+
+
+@main.route('/stat/vle', methods=['GET', 'POST'])
+def show_stat_vle():
+    if request.method == 'GET':
+        return render_template('stat.html')
+
+    smiles_str = request.form.get('smiles')
+    smiles_list = [line.strip() for line in smiles_str.splitlines()]
+    smiles_list = list(set(filter(lambda x: x != '', smiles_list)))
+    print(len(smiles_list))
+
+    statAction = StatAction()
+    statAction.update_mol_slab_list(smiles_list)
+    print(len(statAction.nist_list))
+
+    tc_nist_list = statAction.get_tc_nist()
+    dc_nist_list = statAction.get_dc_nist()
+    dgas_Tcx8_nist_list = statAction.get_dgas_nist(_T='Tcx8')
+    st_Tm25_nist_list = statAction.get_st_nist(_T='Tm25')
+    st_Tvap_nist_list = statAction.get_st_nist(_T='Tvap')
+    st_Tcx8_nist_list = statAction.get_st_nist(_T='Tcx8')
+
+    k_data_exp_sim_list = [
+        ('critical temperatrue', tc_nist_list),
+        ('critical density', dc_nist_list),
+        ('density of vapor @ T0.8*', dgas_Tcx8_nist_list),
+        ('surface tension @ Tm+', st_Tm25_nist_list),
+        ('surface tension @ Tvap', st_Tvap_nist_list),
+        ('surface tension @ T0.8*', st_Tcx8_nist_list),
+    ]
+    pngs = get_pngs_from_data(k_data_exp_sim_list)
 
     return render_template('stat.html', smiles_list=smiles_list, pngs=pngs)
 

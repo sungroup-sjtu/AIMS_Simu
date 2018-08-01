@@ -1,6 +1,5 @@
 import os
 import socket
-from collections import OrderedDict
 
 
 class BaseConfig:
@@ -20,7 +19,7 @@ class BaseConfig:
     MS_TOOLS_DIR = os.path.join(CWD, '../ms-tools')
 
     PBS_MANAGER = 'local'
-    PBS_QUEUE_DICT = OrderedDict([(None, 2)])
+    PBS_QUEUE_LIST = [(2, 0)]
     PBS_NJOB_LIMIT = 10
     PBS_ENV_CMD = ''
 
@@ -35,10 +34,8 @@ class BaseConfig:
 
 class ClusterConfig(BaseConfig):
     PBS_ENV_CMD = '''
-#export MALLOC_CHECK_=0
 module purge
-module load gcc gromacs/2016.5
-#export OMPI_MCA_rmaps_base_oversubscribe=1
+module load gcc openmpi gromacs/2016.5
 '''
 
     WORK_DIR = '/share/workspace/gongzheng/_MSDServer/'
@@ -46,12 +43,13 @@ module load gcc gromacs/2016.5
     PACKMOL_BIN = '/share/apps/tools/packmol'
 
     PBS_MANAGER = 'slurm'
-    PBS_NJOB_LIMIT = 200
+    PBS_NJOB_LIMIT = 48
     PBS_QUEUE_LIST = [('gtx', 32, 2, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
+    PBS_TIME_LIMIT = 1.0  # hour
 
     GMX_BIN = 'gmx_gpu'
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 4
+    GMX_MULTI_NJOB = 8
     GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
 
     ### Extend

@@ -8,9 +8,46 @@ from ..models_nist import *
 
 class StatAction():
     def update_mol_task_list(self, smiles_list):
-        self.yaws_list = []
         self.nist_list = []
         self.task_list = []
+        self.TP_list = {
+            # 298: [],
+            'Tm25': [],
+            'Tvap': [],
+            'Tcx8': [],
+        }
+
+        for smiles in smiles_list:
+            nist = NistMolecule.query.filter(NistMolecule.smiles == smiles).first()
+            if nist == None:
+                continue
+
+            task = Task.query.filter(Task.smiles_list == json.dumps([smiles])).filter_by(procedure='npt').first()
+            if task != None:
+                post_result = task.get_post_result()
+                if post_result == None \
+                        or post_result['density-poly4-score'] < 0.999 \
+                        or post_result['e_inter-poly4-score'] < 0.999:
+                    task = None
+
+            if task == None:
+                continue
+
+            self.nist_list.append(nist)
+            self.task_list.append(task)
+
+            for _T in self.TP_list.keys():
+                T = self.get_T_nist(nist, _T)
+
+                if T == None:
+                    P = None
+                else:
+                    P = self.get_P_nist(nist, T)
+
+                self.TP_list[_T].append((T, P))
+
+    def update_mol_slab_list(self, smiles_list):
+        self.nist_list = []
         self.slab_list = []
         self.TP_list = {
             # 298: [],
@@ -20,30 +57,19 @@ class StatAction():
         }
 
         for smiles in smiles_list:
-            yaws = YawsMolecule.query.filter(YawsMolecule.isomeric_smiles == smiles).first()
             nist = NistMolecule.query.filter(NistMolecule.smiles == smiles).first()
-            if yaws == None and nist == None:
+            if nist == None:
                 continue
-
-            task = Task.query.filter(Task.smiles_list == json.dumps([smiles])).filter_by(procedure='npt').first()
-            if task != None:
-                post_result = task.get_post_result()
-                if post_result['density-poly4-score'] < 0.999 or post_result['e_inter-poly4-score'] < 0.999:
-                    task = None
 
             slab = Task.query.filter(Task.smiles_list == json.dumps([smiles])).filter_by(procedure='nvt-slab').first()
-            if (task == None or task.post_result == None) and (slab == None or slab.post_result == None):
+            if slab == None or slab.post_result == None:
                 continue
 
-            self.yaws_list.append(yaws)
             self.nist_list.append(nist)
-            self.task_list.append(task)
             self.slab_list.append(slab)
 
             for _T in self.TP_list.keys():
                 T = self.get_T_nist(nist, _T)
-                # if T == None:
-                #     T = self.get_T_yaws(yaws, _T)
 
                 if T == None:
                     P = None

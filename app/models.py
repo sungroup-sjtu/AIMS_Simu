@@ -29,11 +29,13 @@ elif Config.PBS_MANAGER == 'local':
     PBS = Local
 else:
     raise Exception('Job manager not supported')
-jobmanager = PBS(queue_list=Config.PBS_QUEUE_LIST, env_cmd=Config.PBS_ENV_CMD)
-jm_extend = PBS(queue_list=Config.EXTEND_PBS_QUEUE_LIST, env_cmd=Config.PBS_ENV_CMD)
+jobmanager = PBS(*Config.PBS_QUEUE_LIST[0], env_cmd=Config.PBS_ENV_CMD)
+jm_extend = PBS(*Config.EXTEND_PBS_QUEUE_LIST[0], env_cmd=Config.PBS_ENV_CMD)
 if hasattr(Config, 'PBS_SUBMIT_CMD'):
     jobmanager.submit_cmd = Config.PBS_SUBMIT_CMD
     jm_extend.submit_cmd = Config.PBS_SUBMIT_CMD
+if hasattr(Config, 'PBS_TIME_LIMIT'):
+    jobmanager.time= Config.PBS_TIME_LIMIT
 
 
 def init_simulation(procedure, extend=False):
@@ -454,6 +456,10 @@ class Task(db.Model):
             return False
 
     def extend(self, ignore_pbs_limit=False) -> bool:
+        if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
+            log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
+            return False
+
         log.info('Extend %s' % self)
 
         if not self.ready_to_extend:
@@ -466,10 +472,6 @@ class Task(db.Model):
                 jobs_extend.append(job)
         if len(jobs_extend) == 0:
             log.warning('No job need to extend %s' % self)
-            return False
-
-        if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
-            log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
             return False
 
         n_pbs_extend = len(jobs_extend)
@@ -623,7 +625,7 @@ class Task(db.Model):
         try:
             shutil.rmtree(self.dir)
         except:
-            log.warning('Remove task %s Cannot remove folder: %s' % (self, self.dir))
+            log.warning('Reset task %s Cannot remove folder: %s' % (self, self.dir))
 
         self.n_mol_list = None
         self.cycle = 0

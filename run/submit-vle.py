@@ -9,12 +9,12 @@ import sys
 import requests
 
 json_dict = {
-    'id': 1,
+    'id'     : 1,
     'user_id': 1,
-    'detail': {
-        'procedures': ['nvt-slab'],
+    'detail' : {
+        'procedures'  : ['nvt-slab'],
         'combinations': [],
-        'p': [1, 1000]  # bar. This option is useless
+        'p'           : [1, 1000]  # bar. This option is useless
     }
 }
 
@@ -52,22 +52,20 @@ for line in lines:
 
     if t_c == 'None':
         print('!WARNING: Tc is None: %s' % line)
-        #t_max = int(round(t_vap + 75))
-        t_max = int(round(t_vap + 100))
+        t_max = int(round(t_vap * 1.2))
     else:
         t_c = float(t_c)
-        #t_max = int(round(t_c * 0.8))
         t_max = int(round(t_c * 0.85))
 
-    t_max = min(t_max, 600)
+    t_max = min(t_max, 650)
 
     if t_min >= t_max:
         print('!ERROR: t_min > t_max: %s' % line)
         continue
 
     json_dict['detail']['combinations'].append({'smiles': [smiles],
-                                                'names': [name],
-                                                't': [t_min, t_max],
+                                                'names' : [name],
+                                                't'     : [t_min, t_max],
                                                 })
 
 print(json_dict)

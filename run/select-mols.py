@@ -15,12 +15,15 @@ def get_N(N, n_heavy, frac=0.5):
     if n_heavy <= 5:
         return N
 
-    if N <= 20:
+    Nmin = 15
+    Nmax = 60
+
+    if N <= Nmin:
         return N
-    elif N >= 80:
+    elif N >= Nmax:
         return int(N * frac)
     else:
-        return 20 + int((N - 20) * (4 * frac - 1) / 3)
+        return Nmin + int((N - Nmin) / (Nmax - Nmin) * (Nmax * frac - Nmin))
 
 
 class MolLine():
@@ -57,7 +60,7 @@ for k, molLine_list in n_heavy_mols.items():
 
     n_matched = 0
     for molLine in molLine_list:
-        if Task.query.filter(Task.smiles_list == json.dumps([molLine.smiles])).first() != None:
+        if Task.query.filter(Task.smiles_list == json.dumps([molLine.smiles])).filter(Task.procedure=='npt').first() != None:
             fout.write(molLine.line + '\n')
             molLine.matched = True
             n_matched += 1
