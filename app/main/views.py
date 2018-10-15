@@ -153,18 +153,18 @@ def show_stat_vle():
 
     tc_nist_list = statAction.get_tc_nist()
     dc_nist_list = statAction.get_dc_nist()
-    dgas_Tcx8_nist_list = statAction.get_dgas_nist(_T='Tcx8')
-    st_Tm25_nist_list = statAction.get_st_nist(_T='Tm25')
-    st_Tvap_nist_list = statAction.get_st_nist(_T='Tvap')
-    st_Tcx8_nist_list = statAction.get_st_nist(_T='Tcx8')
+    # dgas_Tcx8_nist_list = statAction.get_dgas_nist(_T='Tcx8')
+    # st_Tm25_nist_list = statAction.get_st_nist(_T='Tm25')
+    # st_Tvap_nist_list = statAction.get_st_nist(_T='Tvap')
+    # st_Tcx8_nist_list = statAction.get_st_nist(_T='Tcx8')
 
     k_data_exp_sim_list = [
         ('critical temperatrue', tc_nist_list),
         ('critical density', dc_nist_list),
-        ('density of vapor @ T0.8*', dgas_Tcx8_nist_list),
-        ('surface tension @ Tm+', st_Tm25_nist_list),
-        ('surface tension @ Tvap', st_Tvap_nist_list),
-        ('surface tension @ T0.8*', st_Tcx8_nist_list),
+        # ('density of vapor @ T0.8*', dgas_Tcx8_nist_list),
+        # ('surface tension @ Tm+', st_Tm25_nist_list),
+        # ('surface tension @ Tvap', st_Tvap_nist_list),
+        # ('surface tension @ T0.8*', st_Tcx8_nist_list),
     ]
     pngs = get_pngs_from_data(k_data_exp_sim_list)
 
@@ -180,10 +180,13 @@ def show_vle():
     smiles_list = [line.strip() for line in smiles_str.splitlines()]
     smiles_list = list(filter(lambda x: x != '', smiles_list))
 
+    import math
+    import numpy as np
     import pylab
     import base64
     from io import BytesIO
     pngs = []
+    pngs2 = []
 
     dg_absdev_list = []
     dg_dev_list = []
@@ -202,7 +205,7 @@ def show_vle():
         dls = action.dls_list[-1]
         dg = action.dg_list[-1]
         dg_u = action.dg_u_list[-1]
-        dgs = action.dgs_list[-1]
+        dgs = action.dgs_good_list[-1]
         if dl != None and dls != None:
             dl_absdev_list.append(abs(dls - dl))
             dl_dev_list.append(abs(dls - dl) / dl * 100)
@@ -212,27 +215,43 @@ def show_vle():
             dg_dev_list.append(abs(dgs - dg) / dg * 100)
             dg_u_list.append(dg_u / dg * 100)
 
+
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        text = '%s\n%s' % (action.nist.formula, action.nist.name)
+
         p = BytesIO()
         fig = pylab.figure(figsize=(2.7, 2.7))
         fig.tight_layout()
-
         sp1 = fig.add_subplot(111)
         sp1.plot(action.dl_list, action.t_list, '--', linewidth=2, color='C0')
         sp1.plot(action.dg_list, action.t_list, '--', linewidth=2, color='C0')
         sp1.plot(action.dls_list, action.ts_list, '.', markersize=10, alpha=0.8, color='C1')
-        sp1.plot(action.dgs_list, action.ts_list, '.', markersize=10, alpha=0.8, color='C1')
-
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        text = '%s\n%s' % (action.nist.formula, action.nist.name)
+        sp1.plot(action.dgs_good_list, action.ts_good_list, '.', markersize=10, alpha=0.8, color='C1')
+        sp1.plot(action.dgs_bad_list, action.ts_bad_list, 'x', markersize=6, alpha=0.8, color='C1')
         sp1.text(0.5, 0.05, text, transform=sp1.transAxes, ha='center', va='bottom', bbox=props)
 
         pylab.savefig(p, format='png')
         pylab.close()
         pngs.append(base64.b64encode(p.getvalue()).decode())
 
+        # p2 = BytesIO()
+        # fig = pylab.figure(figsize=(2.7, 2.7))
+        # fig.tight_layout()
+        # sp2 = fig.add_subplot(111)
+        # sp2.plot(1000 / np.array(action.t_list), action.log10pvap_list, '--', linewidth=2, color='C0')
+        # sp2.plot(1000 / np.array(action.ts_good_list), action.log10pvaps_good_list, '.', markersize=10, alpha=0.8, color='C1')
+        # sp2.errorbar(1000 / np.array(action.ts_good_list), action.log10pvaps_good_list, action.log10pvaps_u_good_list, elinewidth=2, linestyle='None', alpha=0.8, color='C1')
+        # sp2.text(0.5, 0.05, text, transform=sp2.transAxes, ha='center', va='bottom', bbox=props)
+        # sp2.set_xlim(int(1000 / max(action.ts_good_list) * 2) / 2, math.ceil(1000 / min(action.ts_good_list) * 2) / 2)
+        # sp2.set_ylim(-1, 2)
+        #
+        # pylab.savefig(p2, format='png')
+        # pylab.close()
+        # pngs2.append(base64.b64encode(p2.getvalue()).decode())
+
     import numpy as np
     print(len(dl_dev_list), len(dg_dev_list))
     print(np.mean(dl_absdev_list), np.mean(dl_dev_list), np.mean(dl_u_list))
     print(np.mean(dg_absdev_list), np.mean(dg_dev_list), np.mean(dg_u_list))
 
-    return render_template('vle.html', smiles_list=smiles_list, pngs=pngs)
+    return render_template('vle.html', smiles_list=smiles_list, pngs=pngs + pngs2)

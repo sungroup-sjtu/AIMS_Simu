@@ -308,7 +308,7 @@ class StatAction():
 
             # hvap_list.append([value, hvap_sim, uncertainty])
             # hvap_list.append([value, hvap_sim - 1.4 * (8.314 * T) / 1000 + 1.2 * math.log(nist.n_heavy), uncertainty])
-            hvap_list.append([value, hvap_sim - nist.n_heavy / 15 * (8.314 * T) / 1000, uncertainty])
+            hvap_list.append([value, hvap_sim - nist.n_CON / 15 * (8.314 * T) / 1000, uncertainty])
 
         return hvap_list
 
@@ -430,7 +430,8 @@ class VleAction():
 
         spline_dl = self.nist.splines.join(NistProperty).filter(NistProperty.name == 'density-lg').first()
         spline_dg = self.nist.splines.join(NistProperty).filter(NistProperty.name == 'density-gl').first()
-        if spline_dl == None or spline_dg == None:
+        spline_pvap = self.nist.splines.join(NistProperty).filter(NistProperty.name == 'pvap-lg').first()
+        if spline_dl == None and spline_dg == None:
             return False
 
         self.t_list = np.linspace(slab.t_min, slab.t_max / 0.85 * 0.9, 20)
@@ -438,33 +439,73 @@ class VleAction():
         self.dg_list = []
         self.dl_u_list = []
         self.dg_u_list = []
+        self.log10pvap_list = []
 
         for t in self.t_list:
-            dl, dl_u = spline_dl.get_data(t)
+            if spline_dl == None:
+                dl, dl_u = None, None
+            else:
+                dl, dl_u = spline_dl.get_data(t)
             if dl != None:
                 dl /= 1000
                 dl_u /= 1000
-            dg, dg_u = spline_dg.get_data(t)
+
+            if spline_dg == None:
+                dg, dg_u = None, None
+            else:
+                dg, dg_u = spline_dg.get_data(t)
             if dg != None:
                 dg /= 1000
                 dg_u /= 1000
+
+            if spline_pvap == None:
+                pvap, pvap_u = None, None
+            else:
+                pvap, pvap_u = spline_pvap.get_data(t)
+            if pvap != None:
+                pvap /= 100
+                pvap = np.log10(pvap)
 
             self.dl_list.append(dl)
             self.dl_u_list.append(dl_u)
             self.dg_list.append(dg)
             self.dg_u_list.append(dg_u)
+            self.log10pvap_list.append(pvap)
+
         self.dc = self.nist.dc
         if self.dc != None:
             self.dc /= 1000
         self.tc = self.nist.tc
 
-        self.ts_list = [job.t for job in slab.jobs]
+        self.ts_list = []
         self.dls_list = []
-        self.dgs_list = []
+        self.ts_good_list = []
+        self.dgs_good_list = []
+        self.ts_bad_list = []
+        self.dgs_bad_list = []
+        self.log10pvaps_good_list = []
+        self.log10pvaps_u_good_list = []
+        for job in slab.jobs:
+            result = job.get_result()
+            if result == None or result.get('failed') == True:
+                continue
+            self.ts_list.append(job.t)
+            if result['density_gas'][0] >= 0.01:  # density of gas phase smaller than 0.01 g/mL are not reliable
+                self.ts_good_list.append(job.t)
+                log10pvaps = np.log10(result['pzz'][0])
+                log10pvaps_min = np.log10(result['pzz'][0] - result['pzz'][1])
+                self.log10pvaps_good_list.append(log10pvaps)
+                self.log10pvaps_u_good_list.append(log10pvaps - log10pvaps_min)
+            else:
+                self.ts_bad_list.append(job.t)
+
         for i, t in enumerate(self.ts_list):
             post_data = slab.get_post_data(t)
             self.dls_list.append(post_data['density_liq'])
-            self.dgs_list.append(post_data['density_gas'])
+            if t in self.ts_good_list:
+                self.dgs_good_list.append(post_data['density_gas'])
+            else:
+                self.dgs_bad_list.append(post_data['density_gas'])
             self.tcs = post_data['tc']
             self.dcs = post_data['dc']
 

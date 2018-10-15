@@ -1,5 +1,6 @@
 from scipy import interpolate
 import json
+from mstools.formula import Formula
 from . import db
 from sqlalchemy import Column, Integer, Float, Text, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
@@ -63,6 +64,15 @@ class NistMolecule(db.Model):
         import pybel
         m = pybel.readstring('smi', self.smiles)
         self.n_heavy = m.OBMol.NumHvyAtoms()
+
+    @property
+    def n_CON(self):
+        f = Formula(self.formula)
+        N = 0
+        for a, n in f.atomlist:
+            if a not in ('H', 'F', 'Cl', 'Br'):
+                N += n
+        return N
 
 
 class NistMoleculeGroup(db.Model):

@@ -1,15 +1,15 @@
 .main {
-    width: 1600px;
+    width: 1700px;
     margin: auto;
 }
 
 .left {
-    width: 20%;
+    width: 15%;
     float: left;
 }
 
 .right {
-    width: 79%;
+    width: 84%;
     float: right;
 }
 
