@@ -5,6 +5,7 @@ import sys
 import pybel
 
 sys.path.append('..')
+from app import create_app
 from app.models import *
 from app.models_cv import Cv
 from config import Config
@@ -14,23 +15,25 @@ from mstools.simulation.gauss import Cv as GaussCv
 from mstools.jobmanager import Slurm
 from mstools.utils import cd_or_create_and_cd
 
-# QUEUE_LIST = [('gtx', 8, 0, 8)]
-# QUEUE_LIST = [('cpu', 8, 0, 8)]
+# QUEUE = ('cpu', 8, 0, 8)
 # GAUSS_BIN = '/share/apps/g16/g16'
-QUEUE_LIST = [('fast', 6, 0, 6)]
+QUEUE = ('fast', 6, 0, 6)
 GAUSS_BIN = '/share/apps/g09/g09'
 
 n_conformer = 1
 
-slurm = Slurm(queue_list=QUEUE_LIST)
+slurm = Slurm(*QUEUE)
 gauss = GaussCv(gauss_bin=GAUSS_BIN, jobmanager=slurm)
+
+app = create_app('npt')
+app.app_context().push()
 
 
 class Mol():
     def __init__(self, name, smiles, formula=None):
         self.name = name
         self.smiles = smiles
-        if formula == None:
+        if formula is None:
             formula = pybel.readstring('smi', smiles).formula
         self.formula = formula
         self.T_list = []

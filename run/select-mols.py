@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
+'''
+./select-mols.py procedure mols.txt fraction
+'''
+
 import sys
 
 sys.path.append('..')
+from app import create_app
 from app.models import *
 
 import random
@@ -34,7 +39,10 @@ class MolLine():
         self.matched = False
 
 
-with open(sys.argv[1]) as f:
+app = create_app(sys.argv[1])
+app.app_context().push()
+
+with open(sys.argv[2]) as f:
     lines = f.read().splitlines()
 
 smiles_list = []
@@ -56,11 +64,11 @@ for line in lines:
 fout = open('out.txt', 'w')
 print('n_heav n_mols n_need n_matc n_rema')
 for k, molLine_list in n_heavy_mols.items():
-    N = get_N(len(molLine_list), k, float(sys.argv[2]))
+    N = get_N(len(molLine_list), k, float(sys.argv[3]))
 
     n_matched = 0
     for molLine in molLine_list:
-        if Task.query.filter(Task.smiles_list == json.dumps([molLine.smiles])).filter(Task.procedure=='npt').first() != None:
+        if Task.query.filter(Task.smiles_list == json.dumps([molLine.smiles])).first() is not None:
             fout.write(molLine.line + '\n')
             molLine.matched = True
             n_matched += 1

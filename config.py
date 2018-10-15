@@ -1,13 +1,10 @@
 import os
-import socket
+import sys
+
+CWD = os.path.dirname(os.path.abspath(__file__))
 
 
-class BaseConfig:
-    CWD = os.path.dirname(os.path.abspath(__file__))
-    DB = 'database/msdserver.sqlite'
-    LOG = os.path.join(CWD, '_LOG_.txt')
-
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
+class Config:
     SQLALCHEMY_BINDS = {
         'cv'  : 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/cv.sqlite'),
         'yaws': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/yaws.sqlite'),
@@ -18,121 +15,113 @@ class BaseConfig:
 
     MS_TOOLS_DIR = os.path.join(CWD, '../ms-tools')
 
-    PBS_MANAGER = 'local'
-    PBS_QUEUE_LIST = [(2, 0)]
-    PBS_NJOB_LIMIT = 10
-    PBS_ENV_CMD = ''
-
-    GMX_MDRUN = None
-    EXTEND_GMX_MDRUN = None
-    GMX_MULTI = False  # do not perform gmx multidir simulation
+    WORK_DIR = '/share/md1400/_MSDServer/'
+    PACKMOL_BIN = '/share/apps/tools/packmol'
+    DFF_ROOT = '/home/gongzheng/apps/DFF/Developing'
+    DFF_TABLE = 'MGI'
 
     EXTEND_CYCLE_LIMIT = 8
 
-    DFF_TABLE = 'MGI'
+    @classmethod
+    def init_app(cls, app):
+        sys.path.append(Config.MS_TOOLS_DIR)
+        from mstools.jobmanager import Slurm, Torque, RemoteSlurm
+
+        _pbs_dict = {'slurm': Slurm, 'remote_slurm': RemoteSlurm, 'torque': Torque}
+
+        PBS = _pbs_dict[cls.PBS_MANAGER]
+        jobmanager = PBS(*cls.PBS_ARGS, **cls.PBS_KWARGS)
+        if hasattr(cls, 'PBS_SUBMIT_CMD'):
+            jobmanager.submit_cmd = cls.PBS_SUBMIT_CMD
+        if hasattr(cls, 'PBS_TIME_LIMIT'):
+            jobmanager.time = cls.PBS_TIME_LIMIT
+
+        PBS = _pbs_dict[cls.EXTEND_PBS_MANAGER]
+        jm_extend = PBS(*cls.EXTEND_PBS_ARGS, **cls.EXTEND_PBS_KWARGS)
+        if hasattr(cls, 'EXTEND_PBS_SUBMIT_CMD'):
+            jm_extend.submit_cmd = cls.EXTEND_PBS_SUBMIT_CMD
+        if hasattr(cls, 'EXTEND_PBS_TIME_LIMIT'):
+            jm_extend.time = cls.EXTEND_PBS_TIME_LIMIT
+
+        if jm_extend.is_remote:
+            raise Exception('Remote jobmanager is not compatible with extend')
+
+        app.jobmanager = jobmanager
+        app.jm_extend = jm_extend
 
 
-class ClusterConfig(BaseConfig):
-    PBS_ENV_CMD = '''
-module purge
-module load gcc openmpi gromacs/2016.5
-'''
-
-    WORK_DIR = '/share/workspace/gongzheng/_MSDServer/'
-    DFF_ROOT = '/home/gongzheng/apps/DFF/Developing'
-    PACKMOL_BIN = '/share/apps/tools/packmol'
-
-    PBS_MANAGER = 'slurm'
+class SunRunConfig:
     PBS_NJOB_LIMIT = 48
-    PBS_QUEUE_LIST = [('gtx', 32, 2, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
+    PBS_MANAGER = 'slurm'
+    # PBS_ARGS = ('cpu', 64, 0, 32)  # partition, cpu(hyperthreading), gpu, cpu_request
+    PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
+    # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
+    PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
     PBS_TIME_LIMIT = 1.0  # hour
 
     GMX_BIN = 'gmx_gpu'
+    # GMX_BIN = 'gmx_fast'
+    GMX_MDRUN = None
     GMX_MULTI = True
     GMX_MULTI_NJOB = 8
     GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
 
-    ### Extend
-    EXTEND_PBS_QUEUE_LIST = [('fast', 24, 0, 12)]
-    EXTEND_GMX_BIN = 'gmx_fast'
-    EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
-    EXTEND_GMX_MULTI_NJOB = 2  # Not used
+
+class SunExtendConfig:
+    EXTEND_PBS_NJOB_LIMIT = 48
+    EXTEND_PBS_MANAGER = 'slurm'
+    # EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
+    EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
+    # EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
+    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
+
+    EXTEND_GMX_BIN = 'gmx_gpu'
+    # EXTEND_GMX_BIN = 'gmx_fast'
+    EXTEND_GMX_MDRUN = None
+    EXTEND_GMX_MULTI = True
+    EXTEND_GMX_MULTI_NJOB = 2
 
 
-class PIConfig(BaseConfig):
-    PBS_ENV_CMD = '''
+class PiRunConfig:
+    _env_cmd = '''
 source /usr/share/Modules/init/bash
-module purge
-unset MODULEPATH
-module use /lustre/usr/modulefiles/pi
-module load icc/16.0 mkl/11.3 impi/5.1 tbb/4.3
-export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so
-export I_MPI_FABRICS=shm:dapl
+module purge; unset MODULEPATH; module use /lustre/usr/modulefiles; module load icc/16.0 mkl/2016 impi/2016
+export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so; export I_MPI_FABRICS=shm:dapl
 '''
 
-    _base_dir = '/lustre/home/acct-nishsun/nishsun-1/'
-    WORK_DIR = _base_dir + 'workspace/_MSDServer/'
-    DFF_ROOT = _base_dir + 'apps/DFF/Developing'
-    PACKMOL_BIN = _base_dir + 'apps/tools/packmol'
-
-    PBS_MANAGER = 'slurm'
-    PBS_SUBMIT_CMD = 'sbatch --reservation=cpu_nishsun'
-    PBS_NJOB_LIMIT = 64
-    PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]  # partition, cpu(hyperthreading), gpu, cpu_request
+    PBS_NJOB_LIMIT = 180
+    PBS_MANAGER = 'remote_slurm'
+    PBS_ARGS = ('cpu', 16, 0, 16,)  # partition, cpu(hyperthreading), gpu, cpu_request
+    PBS_KWARGS = {
+        'host'      : '202.120.58.230',
+        'username'  : 'nishsun-1',
+        'remote_dir': '/lustre/home/acct-nishsun/nishsun-1/workspace/_REMOTE_SLURM_/',
+        'env_cmd'   : _env_cmd
+    }
+    # PBS_SUBMIT_CMD = 'sbatch --reservation=cpu_nishsun'
 
     GMX_BIN = 'gmx_serial'
     GMX_MDRUN = 'gmx mdrun'
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 4
-    GMX_MULTI_NOMP = 4
-
-    ### Extend
-    EXTEND_PBS_QUEUE_LIST = [('cpu', 16, 0, 16)]
-    EXTEND_GMX_BIN = 'gmx_serial'
-    EXTEND_GMX_MDRUN = 'gmx mdrun'
-    EXTEND_GMX_MULTI = False  # Do not run -multidir simulation for Extend. So each job have same length
-    EXTEND_GMX_MULTI_NJOB = 2  # Not used
+    GMX_MULTI_NJOB = 2
+    GMX_MULTI_NOMP = 8
 
 
-class TH2Config(BaseConfig):
-    PBS_ENV_CMD = '''
-source /BIGDATA/app/toolshs/cnmodule.sh
-module purge
-module load intel-compilers/mkl-15
-module load gcc/5.3.0
-'''
-
-    WORK_DIR = '/BIGDATA/sjtu_hsun_1/_MSDServer'
-    DFF_ROOT = '/HOME/sjtu_hsun_1/apps/DFF/Developing'
-    PACKMOL_BIN = '/WORK/app/packmol/bin/packmol'
-    GMX_BIN = '/HOME/sjtu_hsun_1/apps/gromacs/2016.3/bin/gmx_mpi'
-
-    PBS_MANAGER = 'slurm'
-    PBS_QUEUE_DICT = [('bigdata', 24, 0, 24)]
-    PBS_NJOB_LIMIT = 64
-
-    GMX_MULTI = True
-    GMX_MULTI_NJOB = 8
-    GMX_MULTI_NOMP = 6  # set this if NGPU == 0
+class NptConfig(Config, SunRunConfig, SunExtendConfig):
+    DB = 'database/msd.npt.db'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
+    LOG = os.path.join(CWD, '_log.npt.txt')
+    ALLOWED_PROCEDURES = ['npt']
 
 
-class MacConfig(BaseConfig):
-    WORK_DIR = '/tmp/MSDServer/'
-    DFF_ROOT = '/Users/zheng/Projects/DFF/Developing'
-    PACKMOL_BIN = '/Users/zheng/Projects/DFF/Developing/bin64m/Packmol/packmol.exe'
-    LMP_BIN = '/Users/zheng/Projects/DFF/Developing/bin64m/Lammps/lammps'
-    GMX_BIN = '/opt/gromacs/2016.3/bin/gmx'
+class NvtSlabConfig(Config, PiRunConfig, SunExtendConfig):
+    DB = 'database/msd.nvt-slab.db'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
+    LOG = os.path.join(CWD, '_log.nvt-slab.txt')
+    ALLOWED_PROCEDURES = ['nvt-slab']
 
 
-Config = ClusterConfig
-hostname = socket.gethostname()
-if hostname == 'cluster.hpc.org':
-    Config = ClusterConfig
-elif hostname.endswith('sjtu.edu.cn'):
-    Config = PIConfig
-elif hostname.startswith('ln') or hostname.startswith('cn'):
-    Config = TH2Config
-elif hostname == 'z-Mac.local':
-    Config = MacConfig
-else:
-    raise Exception('msd-server will not work on this machine')
+configs = {
+    'npt'     : NptConfig,
+    'nvt-slab': NvtSlabConfig,
+}

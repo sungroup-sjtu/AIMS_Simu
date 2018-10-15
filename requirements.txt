@@ -5,3 +5,4 @@ openbabel
 numpy
 pandas
 scipy
+mdtraj # for analyze nvt_slab trajectory

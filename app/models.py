@@ -9,33 +9,17 @@ from functools import partial
 
 from sqlalchemy import Column, ForeignKey, Integer, Text, String, Boolean, DateTime, and_
 
+from flask import current_app
+
 from config import Config
-from . import db, log
+from . import db
 
 sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.simulation.procedure import Procedure
+from mstools.wrapper import GMX
 from mstools.utils import *
 
 NotNullColumn = partial(Column, nullable=False)
-
-from mstools.jobmanager import *
-from mstools.wrapper import GMX
-
-if Config.PBS_MANAGER == 'slurm':
-    PBS = Slurm
-elif Config.PBS_MANAGER == 'torque':
-    PBS = Torque
-elif Config.PBS_MANAGER == 'local':
-    PBS = Local
-else:
-    raise Exception('Job manager not supported')
-jobmanager = PBS(*Config.PBS_QUEUE_LIST[0], env_cmd=Config.PBS_ENV_CMD)
-jm_extend = PBS(*Config.EXTEND_PBS_QUEUE_LIST[0], env_cmd=Config.PBS_ENV_CMD)
-if hasattr(Config, 'PBS_SUBMIT_CMD'):
-    jobmanager.submit_cmd = Config.PBS_SUBMIT_CMD
-    jm_extend.submit_cmd = Config.PBS_SUBMIT_CMD
-if hasattr(Config, 'PBS_TIME_LIMIT'):
-    jobmanager.time= Config.PBS_TIME_LIMIT
 
 
 def init_simulation(procedure, extend=False):
@@ -43,15 +27,15 @@ def init_simulation(procedure, extend=False):
     kwargs = {'packmol_bin': Config.PACKMOL_BIN,
               'dff_root'   : Config.DFF_ROOT,
               'dff_table'  : Config.DFF_TABLE,
-              'gmx_bin'    : Config.GMX_BIN,
-              'gmx_mdrun'  : Config.GMX_MDRUN,
-              'jobmanager' : jobmanager
+              'gmx_bin'    : current_app.config['GMX_BIN'],
+              'gmx_mdrun'  : current_app.config['GMX_MDRUN'],
+              'jobmanager' : current_app.jobmanager
               }
     if extend:
         kwargs.update({
-            'gmx_bin'   : Config.EXTEND_GMX_BIN,
-            'gmx_mdrun' : Config.EXTEND_GMX_MDRUN,
-            'jobmanager': jm_extend
+            'gmx_bin'   : current_app.config['EXTEND_GMX_BIN'],
+            'gmx_mdrun' : current_app.config['EXTEND_GMX_MDRUN'],
+            'jobmanager': current_app.jm_extend
         })
 
     if procedure == 'npt':
@@ -64,9 +48,9 @@ def init_simulation(procedure, extend=False):
         raise Exception('Unknown simulation procedure')
 
 
-def wrapper_cls_func(cls_funcname_args_kwargs):
-    cls, funcname, args, kwargs = cls_funcname_args_kwargs
-    func = getattr(cls, funcname)
+def wrapper_cls_func(cls_func_args_kwargs):
+    cls, func, args, kwargs = cls_func_args_kwargs
+    func = getattr(cls, func)
     return func(*args, **kwargs)
 
 
@@ -75,19 +59,30 @@ class PbsJob(db.Model):
     id = NotNullColumn(Integer, primary_key=True)
     name = NotNullColumn(String(200))
     sh_file = NotNullColumn(Text)
-    sh_content = Column(Text, nullable=True)
+    extend = NotNullColumn(Boolean, default=False)
     submitted = NotNullColumn(Boolean, default=False)
 
     def __repr__(self):
         return '<PbsJob: %i: %s %s>' % (self.id, self.name, self.submitted)
 
-    def submit(self):
-        if jobmanager.submit(self.sh_file):
+    @property
+    def jm(self):
+        return current_app.jm_extend if self.extend else current_app.jobmanager
+
+    def submit(self, **kwargs):
+        if self.jm.submit(self.sh_file, **kwargs):
             self.submitted = True
         else:
             self.submitted = False
-            log.warning('Submit PBS job failed %s' % self.sh_file)
+            current_app.logger.warning('Submit PBS job failed %s' % self.sh_file)
         db.session.commit()
+
+    def kill(self):
+        if not self.jm.kill_job(self.name):
+            current_app.logger.warning('Kill PBS job failed %s' % self.name)
+
+    def is_running(self):
+        return self.jm.is_running(self.name)
 
 
 class Compute(db.Model):
@@ -106,7 +101,7 @@ class Compute(db.Model):
         return '<Compute: %i: %s>' % (self.id, self.remark)
 
     def create_tasks(self):
-        log.info('Create tasks from %s' % self)
+        current_app.logger.info('Create tasks from %s' % self)
         try:
             detail = json.loads(self.json_detail)
             procedures = detail['procedures']
@@ -123,6 +118,7 @@ class Compute(db.Model):
                     # if prior is not None and prior not in procedures:
                     #     procedures = [prior] + procedures  # Put prerequisite at first
 
+            N = 0
             for combination in combinations:
                 # check for smiles and name
                 smiles_list = combination['smiles']
@@ -155,12 +151,12 @@ class Compute(db.Model):
                     p_min, p_max = None, None
 
                 for procedure in procedures:
-                    # ignore existed task
-                    if Task.query.filter(
-                            and_(Task.smiles_list == json.dumps(smiles_list),
-                                 Task.procedure == procedure
-                                 )
-                    ).first() is not None:
+                    if procedure not in current_app.config['ALLOWED_PROCEDURES']:
+                        raise Exception('Invalid procedure for this config')
+
+                    # Ignore existed task
+                    if Task.query.filter(Task.smiles_list == json.dumps(smiles_list)) \
+                            .filter(Task.procedure == procedure).first() is not None:
                         continue
 
                     task = Task()
@@ -169,7 +165,7 @@ class Compute(db.Model):
                     task.smiles_list = json.dumps(smiles_list)
                     task.procedure = procedure
                     if procedure in Procedure.T_RELEVANT:
-                        if t_min == None or t_max == None:
+                        if t_min is None or t_max is None:
                             raise Exception('Invalid temperature')
                         task.t_min = t_min
                         task.t_max = t_max
@@ -177,7 +173,7 @@ class Compute(db.Model):
                         task.t_min = None
                         task.t_max = None
                     if procedure in Procedure.P_RELEVANT:
-                        if p_min == None or p_max == None:
+                        if p_min is None or p_max is None:
                             raise Exception('Invalid pressure')
                         task.p_min = p_min
                         task.p_max = p_max
@@ -187,10 +183,12 @@ class Compute(db.Model):
                     if name_list is not None:
                         task.name = '_'.join(name_list) + '_' + random_string(4)
                     db.session.add(task)
+                    N += 1
             db.session.commit()
+            current_app.logger.info('%i tasks created %s' % (N, self))
         except Exception as e:
             db.session.rollback()
-            log.error('Create tasks failed %s %s' % (self, repr(e)))
+            current_app.logger.error('Create tasks failed %s %s' % (self, repr(e)))
             raise Exception('Create tasks failed: ' + repr(e))
 
     class Stage:
@@ -247,10 +245,14 @@ class Task(db.Model):
 
     @property
     def dir(self) -> str:
-        if self.procedure == 'npt':
-            return os.path.join(Config.WORK_DIR, self.name)
+        return os.path.join(Config.WORK_DIR, self.procedure, self.name)
+
+    @property
+    def remote_dir(self) -> str:
+        if current_app.jobmanager.is_remote:
+            return os.path.join(current_app.jobmanager.remote_dir, self.procedure, self.name)
         else:
-            return os.path.join(Config.WORK_DIR, self.procedure, self.name)
+            return self.dir
 
     @property
     def prior_task(self):
@@ -259,36 +261,27 @@ class Task(db.Model):
             return None
 
         # TODO Herein we suppose there is no duplicated task. Do not consider T and P
-        return Task.query.filter(
-                and_(Task.smiles_list == self.smiles_list,
-                     Task.procedure == prior_procedure,
-                     # Task.t_min == self.t_min,
-                     # Task.t_max == self.t_max,
-                     # Task.t_interval == self.t_interval,
-                     # Task.p_min == self.p_max,
-                     # Task.p_max == self.p_max
-                     )
-        ).first()
+        return Task.query.filter(Task.smiles_list == self.smiles_list).filter(Task.procedure == prior_procedure).first()
 
     @property
     def n_mol_total(self) -> int:
         return sum(json.loads(self.n_mol_list))
 
     def get_smiles_list(self):
-        if self.smiles_list == None:
+        if self.smiles_list is None:
             return None
         else:
             return json.loads(self.smiles_list)
 
     def get_mol_list(self):
-        if self.smiles_list == None:
+        if self.smiles_list is None:
             return None
         else:
             import pybel
             return [pybel.readstring('smi', smiles) for smiles in json.loads(self.smiles_list)]
 
     def get_post_result(self):
-        if self.post_result == None:
+        if self.post_result is None:
             return None
         else:
             return json.loads(self.post_result)
@@ -298,7 +291,7 @@ class Task(db.Model):
         return Task.query.filter(Task.smiles_list == json.dumps([smiles])).filter(Task.procedure == procedure).first()
 
     def build(self):
-        log.info('Build %s' % self)
+        current_app.logger.info('Build %s' % self)
         try:
             cd_or_create_and_cd(self.dir)
             cd_or_create_and_cd('build')
@@ -307,12 +300,12 @@ class Task(db.Model):
             self.status = Compute.Status.STARTED
             db.session.commit()
 
-            simulation = init_simulation(self.procedure)
-            simulation.set_system(json.loads(self.smiles_list))
-            simulation.build()
-            self.n_mol_list = json.dumps(simulation.n_mol_list)
+            sim = init_simulation(self.procedure)
+            sim.set_system(json.loads(self.smiles_list))
+            sim.build()
+            self.n_mol_list = json.dumps(sim.n_mol_list)
         except Exception as e:
-            log.error('Build task failed %s: %s' % (self, repr(e)))
+            current_app.logger.error('Build task failed %s: %s' % (self, repr(e)))
             traceback.print_exc()
             self.status = Compute.Status.FAILED
             db.session.commit()
@@ -323,12 +316,20 @@ class Task(db.Model):
                     commands = job.prepare()
                     self.commands = json.dumps(commands)
             except Exception as e:
-                log.error('Build task failed %s: %s' % (self, repr(e)))
+                current_app.logger.error('Build task failed %s: %s' % (self, repr(e)))
                 traceback.print_exc()
                 self.status = Compute.Status.FAILED
             else:
                 self.status = Compute.Status.DONE
             db.session.commit()
+
+    def _rebuild(self):
+        cd_or_create_and_cd(self.dir)
+        cd_or_create_and_cd('build')
+
+        sim = init_simulation(self.procedure)
+        sim.set_system(json.loads(self.smiles_list), n_mol_list=json.loads(self.n_mol_list))
+        sim.build()
 
     def insert_jobs(self):
         if not os.path.exists(os.path.join(self.dir, 'build')):
@@ -363,53 +364,64 @@ class Task(db.Model):
 
     def run(self, ignore_pbs_limit=False) -> int:
         '''
-        :return: -1  if PBS_NJOB_LIMIT reached
+        :return: -1  if jobmanager not working or PBS_NJOB_LIMIT reached
                   0  if no job submit or failed
                   N  if N pbs jobs submit
         '''
-        if self.stage != Compute.Stage.BUILDING or self.status != Compute.Status.DONE:
+        if not (self.stage == Compute.Stage.BUILDING and self.status == Compute.Status.DONE):
             raise Exception('Incorrect stage or status: %s %s' %
                             (Compute.Stage.text[self.stage], Compute.Status.text[self.status]))
 
-        log.info('Run %s' % self)
+        current_app.logger.info('Run %s' % self)
+        if not current_app.jobmanager.is_working():
+            current_app.logger.warning('JobManager not working')
+            return -1
 
         n_pbs_run = self.jobs.count()
-        if Config.GMX_MULTI:
-            n_pbs_run = math.ceil(n_pbs_run / Config.GMX_MULTI_NJOB)
+        if current_app.config['GMX_MULTI']:
+            n_pbs_run = int(math.ceil(n_pbs_run / current_app.config['GMX_MULTI_NJOB']))
 
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_run > Config.PBS_NJOB_LIMIT:
-            log.warning('PBS_NJOB_LIMIT reached')
+        if not ignore_pbs_limit and \
+                current_app.jobmanager.n_running_jobs + n_pbs_run > current_app.config['PBS_NJOB_LIMIT']:
+            current_app.logger.warning('PBS_NJOB_LIMIT reached')
             return -1
+
+        os.chdir(self.dir)
+
+        # TODO Be careful, this is confusing. Upload task to remote server. May failed
+        if current_app.jobmanager.is_remote:
+            if not current_app.jobmanager.upload(remote_dir=self.remote_dir):
+                current_app.logger.warning('Failed upload %s' % self)
+                return 0
 
         self.stage = Compute.Stage.RUNNING
         try:
-            os.chdir(self.dir)
-
-            if not Config.GMX_MULTI:
+            if not current_app.config['GMX_MULTI']:
                 for job in self.jobs:
                     job.run()
                     time.sleep(0.2)
             else:
+                # Generate sh for multi simulation based on self.commands
                 multi_dirs = [job.dir for job in self.jobs]
                 multi_cmds = json.loads(self.commands)
 
-                gmx = GMX(gmx_bin=Config.GMX_BIN)
-                commands_list = gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                               n_parallel=Config.GMX_MULTI_NJOB,
-                                                               n_gpu=jobmanager.ngpu,
-                                                               n_omp=Config.GMX_MULTI_NOMP)
+                commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                               n_parallel=current_app.config['GMX_MULTI_NJOB'],
+                                                               n_gpu=current_app.jobmanager.ngpu,
+                                                               n_omp=current_app.config['GMX_MULTI_NOMP'])
+
                 for i, commands in enumerate(commands_list):
                     # instead of run directly, we add a record to pbs_job
                     sh = os.path.join(self.dir, '_job.run-%i.sh' % i)
                     pbs_name = '%s-run-%i' % (self.name, i)
 
-                    if Config.GMX_MULTI_NOMP == None:
+                    if current_app.config['GMX_MULTI_NOMP'] is None:
                         n_tasks = None
                     else:
-                        n_tasks = Config.GMX_MULTI_NJOB * Config.GMX_MULTI_NOMP * \
-                                  jobmanager.nprocs_request / jobmanager.nprocs
+                        n_tasks = current_app.config['GMX_MULTI_NJOB'] * current_app.config['GMX_MULTI_NOMP'] * \
+                                  current_app.jobmanager.nprocs_request / current_app.jobmanager.nprocs
 
-                    jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh, n_tasks=n_tasks)
+                    current_app.jobmanager.generate_sh(self.dir, commands, name=pbs_name, sh=sh, n_tasks=n_tasks)
 
                     pbs_job = PbsJob()
                     pbs_job.name = pbs_name
@@ -418,17 +430,18 @@ class Task(db.Model):
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in self.jobs[i * Config.GMX_MULTI_NJOB:(i + 1) * Config.GMX_MULTI_NJOB]:
+                    for job in self.jobs[
+                               i * current_app.config['GMX_MULTI_NJOB']:(i + 1) * current_app.config['GMX_MULTI_NJOB']]:
                         job.pbs_job_id = pbs_job.id
                         job.status = Compute.Status.STARTED
                     db.session.commit()
 
                     # submit job, record if success or failed
-                    pbs_job.submit()
+                    pbs_job.submit(remote_dir=self.remote_dir, local_dir=self.dir)
                     time.sleep(0.2)
 
         except Exception as e:
-            log.error('Run task failed %s %s' % (self, repr(e)))
+            current_app.logger.error('Run task failed %s %s' % (self, repr(e)))
             traceback.print_exc()
             self.status = Compute.Status.FAILED
             db.session.commit()
@@ -438,89 +451,83 @@ class Task(db.Model):
             db.session.commit()
             return n_pbs_run
 
-    @property
-    def ready_to_extend(self) -> bool:
+    def extend(self, ignore_pbs_limit=False) -> int:
+        '''
+        :return: -1  if EXTEND_PBS_NJOB_LIMIT reached
+                  0  if no job submit or failed
+                  N  if N pbs jobs submit
+        '''
         if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.STARTED):
-            return False
+            raise Exception('Incorrect stage or status: %s %s' %
+                            (Compute.Stage.text[self.stage], Compute.Status.text[self.status]))
 
+        jobs_extend = []
         # do not extend the task if some job is running
         for job in self.jobs:
             if job.status == Compute.Status.STARTED:
-                return False
+                return 0
+            if job.need_extend and job.cycle < Config.EXTEND_CYCLE_LIMIT:
+                jobs_extend.append(job)
 
         # do not extend the task if no job need extend
-        for job in self.jobs:
-            if job.need_extend:
-                return True
-        else:
-            return False
-
-    def extend(self, ignore_pbs_limit=False) -> bool:
-        if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
-            log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
-            return False
-
-        log.info('Extend %s' % self)
-
-        if not self.ready_to_extend:
-            log.warning('Not ready to extend %s' % self)
-            return False
-
-        jobs_extend = []
-        for job in self.jobs:
-            if job.need_extend:
-                jobs_extend.append(job)
         if len(jobs_extend) == 0:
-            log.warning('No job need to extend %s' % self)
-            return False
+            current_app.logger.warning('No job need extend or EXTEND_CYCLE_LIMIT reached %s' % self)
+            return 0
+
+        current_app.logger.info('Extend %s' % self)
+        if not current_app.jm_extend.is_working():
+            current_app.logger.warning('JobManager not working')
+            return -1
 
         n_pbs_extend = len(jobs_extend)
-        if Config.EXTEND_GMX_MULTI:
-            n_pbs_extend = math.ceil(n_pbs_extend / Config.EXTEND_GMX_MULTI_NJOB)
+        if current_app.config['EXTEND_GMX_MULTI']:
+            n_pbs_extend = math.ceil(n_pbs_extend / current_app.config['EXTEND_GMX_MULTI_NJOB'])
 
-        if not ignore_pbs_limit and jobmanager.n_running_jobs + n_pbs_extend > Config.PBS_NJOB_LIMIT:
-            log.warning('PBS_NJOB_LIMIT reached')
-            return False
+        if not ignore_pbs_limit and \
+                current_app.jm_extend.n_running_jobs + n_pbs_extend > current_app.config['EXTEND_PBS_NJOB_LIMIT']:
+            current_app.logger.warning('EXTEND_PBS_NJOB_LIMIT reached')
+            return -1
 
         self.cycle += 1
         db.session.commit()
 
         try:
-            if not Config.EXTEND_GMX_MULTI:
+            if not current_app.config['EXTEND_GMX_MULTI']:
                 for job in jobs_extend:
                     job.extend()
                     time.sleep(0.2)
             else:
                 multi_dirs = []
                 multi_cmds = []
-                simulation = init_simulation(self.procedure, extend=True)
+                sim = init_simulation(self.procedure, extend=True)
                 for job in jobs_extend:
                     os.chdir(job.dir)
                     multi_dirs.append(job.dir)
-                    multi_cmds = simulation.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
-                                                   sh='_job.extend-%i.sh' % (job.cycle + 1))
+                    multi_cmds = sim.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
+                                            sh='_job.extend-%i.sh' % (job.cycle + 1))
 
-                commands_list = simulation.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                                          n_parallel=Config.EXTEND_GMX_MULTI_NJOB,
-                                                                          n_gpu=jobmanager.ngpu,
-                                                                          n_procs=jobmanager.nprocs)
+                commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                               n_parallel=current_app.config['EXTEND_GMX_MULTI_NJOB'],
+                                                               n_gpu=current_app.jm_extend.ngpu,
+                                                               n_procs=current_app.jm_extend.nprocs)
 
                 os.chdir(self.dir)
                 for i, commands in enumerate(commands_list):
                     sh = os.path.join(self.dir, '_job.extend-%i-%i.sh' % (self.cycle, i))
                     pbs_name = '%s-extend-%i-%i' % (self.name, self.cycle, i)
 
-                    jm_extend.generate_sh(self.dir, commands, name=pbs_name, sh=sh)
+                    current_app.jm_extend.generate_sh(self.dir, commands, name=pbs_name, sh=sh)
 
                     # instead of run directly, we add a record to pbs_job
-                    pbs_job = PbsJob()
+                    pbs_job = PbsJob(extend=True)
                     pbs_job.name = pbs_name
                     pbs_job.sh_file = sh
                     db.session.add(pbs_job)
                     db.session.flush()
 
                     # save pbs_job_id for jobs
-                    for job in jobs_extend[i * Config.EXTEND_GMX_MULTI_NJOB:(i + 1) * Config.EXTEND_GMX_MULTI_NJOB]:
+                    for job in jobs_extend[i * current_app.config['EXTEND_GMX_MULTI_NJOB']:(i + 1) * current_app.config[
+                        'EXTEND_GMX_MULTI_NJOB']]:
                         job.pbs_job_id = pbs_job.id
                         job.cycle += 1
                         job.status = Compute.Status.STARTED
@@ -531,41 +538,11 @@ class Task(db.Model):
                     time.sleep(0.2)
 
         except Exception as e:
-            log.error('Extend task failed %s %s' % (self, repr(e)))
+            current_app.logger.error('Extend task failed %s %s' % (self, repr(e)))
             traceback.print_exc()
-            return False
+            return 0
         else:
-            return True
-
-    def check_finished(self):
-        """
-        check if all jobs in this tasks are finished
-        if finished, analyze the job
-        """
-        log.info('Check status %s' % self)
-
-        for job in self.jobs:
-            try:
-                job.check_finished()
-            except Exception as e:
-                log.error('Check job status failed %s %s' % (job, repr(e)))
-                traceback.print_exc()
-
-            if job.status == Compute.Status.DONE:
-                try:
-                    log.info('Analyze %s' % job)
-                    job.analyze()
-                except Exception as e:
-                    log.error('Analyze failed %s %s' % (job, repr(e)))
-                    traceback.print_exc()
-
-        # Set status as DONE only if all jobs are converged
-        for job in self.jobs:
-            if not job.converged:
-                break
-        else:
-            self.status = Compute.Status.DONE
-            db.session.commit()
+            return n_pbs_extend
 
     def check_finished_multiprocessing(self):
         """
@@ -574,18 +551,17 @@ class Task(db.Model):
         """
         from multiprocessing import Pool
 
-        log.info('Check status Multi %s' % self)
-        jobs_to_analyze = []
-        for job in self.jobs:
+        current_app.logger.info('Check status Multi %s' % self)
+        for job in self.jobs.filter(Job.status == Compute.Status.STARTED):
             try:
                 job.check_finished()
             except Exception as e:
-                log.error('Check job status failed %s %s' % (job, repr(e)))
+                current_app.logger.error('Check job status failed %s %s' % (job, repr(e)))
                 traceback.print_exc()
 
-            if job.status == Compute.Status.DONE:
-                log.info('Analyze %s' % job)
-                jobs_to_analyze.append(job)
+        jobs_to_analyze = self.jobs.filter(Job.status == Compute.Status.DONE).all()
+        for job in jobs_to_analyze:
+            current_app.logger.info('Analyze %s' % job)
 
         n_process = 8
         n_group = int(math.ceil(len(jobs_to_analyze) / n_process))
@@ -599,33 +575,34 @@ class Task(db.Model):
             for i, job in enumerate(job_group):
                 return_dict = return_dicts[i]
                 exception = return_dict.pop('exception')
-                if exception != None:
-                    log.error('Analyze failed %s %s' % (job, exception))
+                if exception is not None:
+                    current_app.logger.error('Analyze failed %s %s' % (job, exception))
                 for k, v in return_dict.items():
                     setattr(job, k, v)
 
         db.session.commit()
 
-        # Set status as DONE only if all jobs are converged
+        # Set status as DONE if all jobs are converged or failed
+        # Set status as ANALYZED only if all jobs are converged
+        _failed = False
         for job in self.jobs:
-            if not job.converged:
+            if job.status == Compute.Status.FAILED:
+                _failed = True
+            if not (job.converged or job.status == Compute.Status.FAILED):
                 break
         else:
-            self.status = Compute.Status.DONE
+            self.status = Compute.Status.DONE if _failed else Compute.Status.ANALYZED
             db.session.commit()
 
     def reset(self):
         for job in self.jobs:
-            if job.pbs_job_id != None and not job.pbs_job_done:
-                try:
-                    jobmanager.kill_job(job.pbs_job.name)
-                except Exception as e:
-                    log.warning('Kill job %s Cannot kill PBS job: %s' % (job, repr(e)))
+            if job.pbs_job_id is not None and job.is_running():
+                job.pbs_job.kill()
             db.session.delete(job)
         try:
             shutil.rmtree(self.dir)
         except:
-            log.warning('Reset task %s Cannot remove folder: %s' % (self, self.dir))
+            current_app.logger.warning('Reset task %s Cannot remove folder: %s' % (self, self.dir))
 
         self.n_mol_list = None
         self.cycle = 0
@@ -636,13 +613,14 @@ class Task(db.Model):
         db.session.commit()
 
     def remove(self):
+        current_app.logger.info('Remove task %s' % self)
         self.reset()
         db.session.delete(self)
         db.session.commit()
 
     def post_process(self, force=False):
         if not force:
-            if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.DONE):
+            if not (self.stage == Compute.Stage.RUNNING and self.status == Compute.Status.ANALYZED):
                 return
 
         T_list = []
@@ -658,7 +636,7 @@ class Task(db.Model):
         sim = init_simulation(self.procedure)
         post_result, post_info = sim.post_process(T_list=T_list, P_list=P_list, result_list=result_list)
 
-        if post_result != None:
+        if post_result is not None:
             self.post_result = json.dumps(post_result)
             db.session.commit()
 
@@ -697,6 +675,11 @@ class Job(db.Model):
         return os.path.join(self.task.dir, dir_name)
 
     @property
+    def remote_dir(self) -> str:
+        dir_name = '%i-%i' % (self.t or 0, self.p or 0)
+        return os.path.join(self.task.remote_dir, dir_name)
+
+    @property
     def prior_job(self):
         prior_task = self.task.prior_task
         if prior_task is None:
@@ -709,20 +692,29 @@ class Job(db.Model):
         ).first()
 
     @property
-    def pbs_job_done(self) -> bool:
-        if self.pbs_job_id is None:
-            return False
-        elif not self.pbs_job.submitted:
-            return False
-        else:
-            return not jobmanager.is_running(self.pbs_job.name)
-
-    @property
     def need_extend(self) -> bool:
         return self.status == Compute.Status.ANALYZED and not self.converged
 
+    def is_running(self) -> bool:
+        '''
+        If the pbs job missing, return False
+        If the pbs job has finished, return False
+        Otherwise, return True
+        :return:
+        '''
+        if self.pbs_job_id is None:
+            return True
+        # Sometimes the pbs_job is missing. I don't know why. Treat it as finished
+        elif self.pbs_job is None:
+            current_app.logger.warning('%s PbsJob missing' % self)
+            return False
+        elif not self.pbs_job.submitted:
+            return True
+        else:
+            return self.pbs_job.is_running()
+
     def get_result(self):
-        if self.result == None:
+        if self.result is None:
             return None
         else:
             return json.loads(self.result)
@@ -733,20 +725,20 @@ class Job(db.Model):
             prior_job_dir = None
         else:
             if not prior_job.converged:
-                log.warning('Prepare job %s Prior job not converged' % repr(self))
+                current_app.logger.warning('Prepare job %s Prior job not converged' % repr(self))
                 prior_job_dir = None
             else:
                 prior_job_dir = prior_job.dir
 
         cd_or_create_and_cd(self.dir)
-        simulation = init_simulation(self.task.procedure)
-        commands = simulation.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name,
-                                      prior_job_dir=prior_job_dir, drde=True)  # Temperature dependent parameters
+        sim = init_simulation(self.task.procedure)
+        commands = sim.prepare(model_dir='../build', T=self.t, P=self.p, jobname=self.name,
+                               prior_job_dir=prior_job_dir, drde=True)  # Temperature dependent parameters
 
         # all jobs under one task share same commands, save this for GMX -multidir simulation
         return commands
 
-    def run(self):
+    def run(self) -> bool:
         try:
             os.chdir(self.dir)
         except:
@@ -755,7 +747,7 @@ class Job(db.Model):
         # instead of run directly, we add a record to pbs_job
         pbs_job = PbsJob()
         pbs_job.name = self.name
-        pbs_job.sh_file = os.path.join(self.dir, jobmanager.sh)
+        pbs_job.sh_file = os.path.join(self.dir, current_app.jobmanager.sh)
         db.session.add(pbs_job)
         db.session.flush()
 
@@ -763,16 +755,76 @@ class Job(db.Model):
         self.status = Compute.Status.STARTED
         db.session.commit()
 
+        # TODO Be careful. Upload files to remote server. May failed
+        if current_app.jobmanager.is_remote:
+            if not current_app.jobmanager.upload(remote_dir=self.remote_dir):
+                current_app.logger.warning('Failed upload %s' % self)
+                return False
+
         # submit job, record if success or failed
-        pbs_job.submit()
+        pbs_job.submit(remote_dir=self.remote_dir, local_dir=self.dir)
+        return pbs_job.submitted
+
+    def _rerun(self):
+        if self.task.procedure != 'npt':
+            raise ('Invalid')
+
+        self.task.status = 1
+        self.status = 1
+        self.cycle = 0
+        self.converged = False
+        self.result = None
+        db.session.commit()
+
+        cd_or_create_and_cd(self.dir)
+
+        commands = []
+
+        T = self.t
+        P = self.p
+        dt = 0.002
+        top = 'topol.top'
+        nst_run = int(5E5)
+        nst_edr = 100
+        nst_trr = int(5E4)
+        nst_xtc = 1000
+        jobname = self.name
+
+        sim = init_simulation(self.task.procedure)
+
+        nprocs = sim.jobmanager.nprocs
+        # NPT production with Langevin thermostat and Parrinello-Rahman barostat
+        sim.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-npt.mdp', T=T, P=P,
+                                          dt=dt, nsteps=nst_run, nstenergy=nst_edr, nstxout=nst_trr, nstvout=nst_trr,
+                                          nstxtcout=nst_xtc, restart=True)
+        cmd = sim.gmx.grompp(mdp='grompp-npt.mdp', gro='npt.gro', top=top, tpr_out='npt.tpr',
+                             cpt='npt.cpt', get_cmd=True)
+        commands.append(cmd)
+        cmd = sim.gmx.mdrun(name='npt', nprocs=nprocs, get_cmd=True)
+        commands.append(cmd)
+
+        # Rerun enthalpy of vaporization
+        commands.append('export GMX_MAXCONSTRWARN=-1')
+
+        top_hvap = 'topol-hvap.top'
+        sim.gmx.prepare_mdp_from_template('t_npt.mdp', mdp_out='grompp-hvap.mdp', nstxtcout=0, restart=True)
+        cmd = sim.gmx.grompp(mdp='grompp-hvap.mdp', gro='npt.gro', top=top_hvap, tpr_out='hvap.tpr', get_cmd=True)
+        commands.append(cmd)
+        # Use OpenMP instead of MPI when rerun hvap
+        cmd = sim.gmx.mdrun(name='hvap', nprocs=nprocs, n_omp=nprocs, rerun='npt.xtc', get_cmd=True)
+        commands.append(cmd)
+
+        sim.jobmanager.generate_sh(os.getcwd(), commands, name=jobname or self.procedure)
+
+        self.run()
 
     def extend(self):
         if not self.need_extend:
-            log.warning('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
+            current_app.logger.warning('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
             return
 
         if self.cycle >= Config.EXTEND_CYCLE_LIMIT:
-            log.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
+            current_app.logger.warning('Will not extend %s EXTEND_CYCLE_LIMIT reached' % self)
             return
 
         os.chdir(self.dir)
@@ -782,10 +834,10 @@ class Job(db.Model):
 
         # instead of run directly, we add a record to pbs_job
 
-        simulation = init_simulation(self.task.procedure, extend=True)
-        simulation.extend(jobname=pbs_name, sh=sh)
+        sim = init_simulation(self.task.procedure, extend=True)
+        sim.extend(jobname=pbs_name, sh=sh)
 
-        pbs_job = PbsJob()
+        pbs_job = PbsJob(extend=True)
         pbs_job.name = pbs_name
         pbs_job.sh_file = sh
         db.session.add(pbs_job)
@@ -802,43 +854,50 @@ class Job(db.Model):
     def check_finished(self) -> bool:
         if self.status in (Compute.Status.DONE, Compute.Status.FAILED, Compute.Status.ANALYZED):
             return True
-        if not self.pbs_job_done:
+        if self.is_running():
             return False
 
         os.chdir(self.dir)
 
-        simulation = init_simulation(self.task.procedure)
-        if simulation.check_finished():
+        # TODO Be careful. Download job result from remote server. Not for extending
+        # TODO If the download failed, treat it as not finished
+        # TODO Currently disabled. Because all files were downloaded manually
+        # if self.cycle == 0 and current_app.jobmanager.is_remote:
+        #     if not current_app.jobmanager.download(remote_dir=self.remote_dir):
+        #         return False
+
+        sim = init_simulation(self.task.procedure)
+        if sim.check_finished():
             self.status = Compute.Status.DONE
         else:
             self.status = Compute.Status.FAILED
-            log.error('Job failed %s' % self)
+            current_app.logger.error('Job failed %s' % self)
         db.session.commit()
         return True
 
     def analyze(self, rerun=False, **kwargs):
         if self.status == Compute.Status.ANALYZED and not rerun:
-            log.warning('Will not analyze %s Already analyzed' % self)
+            current_app.logger.warning('Will not analyze %s Already analyzed' % self)
             return
         if self.status == Compute.Status.STARTED:
-            log.warning('Will not analyze %s Job is still running' % self)
+            current_app.logger.warning('Will not analyze %s Job is still running' % self)
             return
         if self.status == Compute.Status.FAILED:
-            log.warning('Will not analyze %s Job failed' % self)
+            current_app.logger.warning('Will not analyze %s Job failed' % self)
             return
 
         os.chdir(self.dir)
 
-        simulation = init_simulation(self.task.procedure)
+        sim = init_simulation(self.task.procedure)
         try:
-            result = simulation.analyze(**kwargs)
+            result = sim.analyze(**kwargs)
         except:
             # One kine of fail -- simulation fail
             self.status = Compute.Status.FAILED
             db.session.commit()
             raise
 
-        if result == None:
+        if result is None:
             self.status = Compute.Status.ANALYZED
             self.converged = False
         elif result.get('failed') == True:
@@ -850,7 +909,7 @@ class Job(db.Model):
             self.converged = True
             self.result = json.dumps(result)
             # Clean intermediate files if converged
-            simulation.clean()
+            sim.clean()
 
         db.session.commit()
 
@@ -861,15 +920,15 @@ class Job(db.Model):
         _result = self.result
 
         os.chdir(job_dir)
-        simulation = init_simulation(job_procedure)
+        sim = init_simulation(job_procedure)
         try:
-            result = simulation.analyze(**kwargs)
+            result = sim.analyze(**kwargs)
         except Exception as e:
             # One kine of fail -- simulation fail
             _status = Compute.Status.FAILED
             _exception = repr(e)
         else:
-            if result == None:
+            if result is None:
                 _status = Compute.Status.ANALYZED
                 _converged = False
             elif result.get('failed') == True:
@@ -881,7 +940,7 @@ class Job(db.Model):
                 _converged = True
                 _result = json.dumps(result)
                 # Clean intermediate files if converged
-                simulation.clean()
+                sim.clean()
 
         return {'exception': _exception,
                 'status'   : _status,
@@ -890,25 +949,13 @@ class Job(db.Model):
                 }
 
     def remove(self):
-        if self.pbs_job_id != None and not self.pbs_job_done:
-            try:
-                jobmanager.kill_job(self.pbs_job.name)
-            except Exception as e:
-                log.warning('Kill job %s Cannot kill PBS job: %s' % (self, repr(e)))
+        if self.pbs_job_id is not None and self.is_running():
+            self.pbs_job.kill()
 
         try:
             shutil.rmtree(self.dir)
         except:
-            log.warning('Remove job %s Cannot remove folder: %s' % (self, self.dir))
+            current_app.logger.warning('Remove job %s Cannot remove folder: %s' % (self, self.dir))
 
         db.session.delete(self)
         db.session.commit()
-
-    def remove_trj(self):
-        os.chdir(self.dir)
-        for f in os.listdir(os.getcwd()):
-            if f.endswith('.trr') or f.endswith('.xtc') or f.startswith('.#'):
-                try:
-                    os.remove(f)
-                except:
-                    pass

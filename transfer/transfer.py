@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 
+'''
+./transfer.py dump config compute_id [compute_id ...]
+./transfer.py load config remark
+'''
+
 import sys
+import pathlib
+import tarfile
+import pandas as pd
 
 sys.path.append('..')
+from app import create_app
 from app.models import *
 from sqlalchemy import func
 
-import pandas as pd
-import tarfile
-import pathlib
+app = create_app(sys.argv[1])
+app.app_context().push()
 
 
 def dump_tasks(task_ids):
@@ -63,20 +71,24 @@ def load_tasks(compute_id, task_offset):
     df = pd.read_csv('tasks.csv')
     df.procedure += '-import'
     df.compute_id = compute_id
-    df.id += (task_offset - df.id.min() + 1)
+    df.id += (task_offset + 1 - df.id.min())
 
-    # df.to_sql('task', db.engine, if_exists='append')
+    df.to_sql('task', db.engine, if_exists='append', index=False)
     df.to_csv('tasks-load.csv', index=False)
+
+    print(df.shape[0], 'tasks imported')
 
 
 def load_jobs(pbs_job_id, task_offset, job_offset):
     df = pd.read_csv('jobs.csv')
     df.pbs_job_id = pbs_job_id
-    df.task_id += (task_offset - df.task_id.min() + 1)
+    df.task_id += (task_offset + 1 - df.task_id.min())
     df.id += (job_offset - df.id.min() + 1)
 
-    # df.to_sql('job', db.engine, if_exists='append')
+    df.to_sql('job', db.engine, if_exists='append', index=False)
     df.to_csv('jobs-load.csv', index=False)
+
+    print(df.shape[0], 'jobs imported')
 
 
 def untar_tasks():
@@ -88,9 +100,9 @@ def untar_tasks():
 
 
 if __name__ == '__main__':
-    cmd = sys.argv[1]
+    cmd = sys.argv[2]
     if cmd == 'dump':
-        compute_ids = map(int, sys.argv[2:])
+        compute_ids = map(int, sys.argv[3:])
         tasks = Task.query.filter(Task.compute_id.in_(compute_ids))
         task_ids = [task.id for task in tasks]
         dump_tasks(task_ids)
@@ -102,11 +114,11 @@ if __name__ == '__main__':
         print(task_offset, job_offset)
 
     elif cmd == 'load':
-        remark = sys.argv[2]
+        remark = sys.argv[3]
         compute_id = create_compute(remark)
         pbs_id = create_pbs()
-        task_offset = db.session.query(func.max(Task.id)).scalar()
-        job_offset = db.session.query(func.max(Job.id)).scalar()
+        task_offset = db.session.query(func.max(Task.id)).scalar() or 0
+        job_offset = db.session.query(func.max(Job.id)).scalar() or 0
         load_tasks(compute_id, task_offset)
         load_jobs(pbs_id, task_offset, job_offset)
         # untar_tasks()

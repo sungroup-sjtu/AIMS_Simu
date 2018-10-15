@@ -1,60 +1,76 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-import sys, time
+import os, sys, time
+from sqlalchemy import func
 
 sys.path.append('..')
+from app import create_app
 from app.models import Task, Compute, PbsJob
-from app import log
+
+app = create_app(sys.argv[1])
+app.app_context().push()
+
+CWD = os.getcwd()
 
 
-def process_pbs_job():
-    for pbs_job in PbsJob.query.filter(PbsJob.submitted == False):
+def detect_exit():
+    os.chdir(CWD)
+    if os.path.exists('EXIT-' + sys.argv[1]):
+        print('EXIT file detected')
+        os.remove('EXIT-' + sys.argv[1])
+        sys.exit()
+
+
+def process_pbs_job(n_pbs=20):
+    for pbs_job in PbsJob.query.filter(PbsJob.submitted == False).limit(n_pbs):
+        detect_exit()
         pbs_job.submit()
 
 
-def process_task_build(procedure=None, n_task=20):
+def process_task_build(n_task=20, random=False):
     tasks = Task.query.filter(Task.stage == Compute.Stage.SUBMITTED).filter(Task.status == Compute.Status.DONE)
-    if procedure != None:
-        tasks = tasks.filter(Task.procedure == procedure)
+    if random:
+        tasks = tasks.order_by(func.random())
     for task in tasks.limit(n_task):
+        detect_exit()
         task.build()
-        # task.run()
+        if task.stage == Compute.Stage.BUILDING and task.status == Compute.Status.DONE:
+            task.run()
 
 
-def process_task_run(procedure=None, n_task=20):
+def process_task_run(n_task=20, random=False):
     tasks = Task.query.filter(Task.stage == Compute.Stage.BUILDING).filter(Task.status == Compute.Status.DONE)
-    if procedure != None:
-        tasks = tasks.filter(Task.procedure == procedure)
+    if random:
+        tasks = tasks.order_by(func.random())
     for task in tasks.limit(n_task):
+        detect_exit()
         if task.run() == -1:
             break
 
 
-def process_task_check(procedure=None, n_task=20):
+def process_task_check(n_task=20):
     tasks = Task.query.filter(Task.stage == Compute.Stage.RUNNING).filter(Task.status == Compute.Status.STARTED)
-    if procedure != None:
-        tasks = tasks.filter(Task.procedure == procedure)
     for task in tasks.limit(n_task):
-        # task.check_finished()
+        detect_exit()
         task.check_finished_multiprocessing()
 
 
-def process_task_extend(procedure=None):
-    tasks = Task.query
-    if procedure != None:
-        tasks = tasks.filter(Task.procedure == procedure)
+def process_task_extend():
+    tasks = Task.query.filter(Task.stage == Compute.Stage.RUNNING).filter(Task.status == Compute.Status.STARTED)
     for task in tasks:
-        if task.ready_to_extend:
-            task.extend()
+        detect_exit()
+        if task.extend() == -1:
+            break
 
 
 if __name__ == '__main__':
     while True:
-        process_pbs_job()
-        process_task_extend(procedure='nvt-slab')
-        process_task_run(procedure='nvt-slab', n_task=20)
-        process_task_build(procedure='nvt-slab', n_task=20)
-        process_task_check(procedure='nvt-slab', n_task=1000)
-        log.info('Sleep 1800 seconds ...')
-        time.sleep(1800)
+        # process_pbs_job(n_pbs=50)
+        process_task_extend()
+        # process_task_run(n_task=20, random=True)
+        # process_task_build(n_task=20, random=True)
+        process_task_check(n_task=500)
+
+        app.logger.info('Sleep 3600 seconds ...')
+        time.sleep(3600)

@@ -1,27 +1,42 @@
+import os
 import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
-from config import Config
+from config import configs
 
-app = Flask(__name__)
-app.config.from_object(Config)
-app.jinja_env.auto_reload = True
+db = SQLAlchemy()
 
-db = SQLAlchemy(app)
 
-log = logging.getLogger('app')
-log.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s    %(levelname)-10s %(message)s')
-fh = logging.FileHandler(Config.LOG)
-ch = logging.StreamHandler()
-fh.setFormatter(formatter)
-ch.setFormatter(formatter)
-log.addHandler(fh)
-log.addHandler(ch)
+def create_app(config_name):
+    app = Flask(__name__)
+    conf = configs[config_name]
+    app.config.from_object(conf)
+    conf.init_app(app)
 
-from .main import main as main_blueprint
-from .api import api as api_blueprint
+    db.init_app(app)
 
-app.register_blueprint(main_blueprint)
-app.register_blueprint(api_blueprint, url_prefix='/api')
+    from .main import main
+    from .api import api
+
+    app.register_blueprint(main)
+    app.register_blueprint(api, url_prefix='/api')
+    app.jinja_env.auto_reload = True
+
+    ### Default app.logger works wired. Replace it with a new logger
+    logger = logging.getLogger(config_name)
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s    %(levelname)-10s %(message)s')
+    fh = logging.FileHandler(conf.LOG)
+    ch = logging.StreamHandler()
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+    app.logger = logger
+
+    if not os.path.exists(conf.DB):
+        with app.app_context():
+            db.create_all()
+
+    return app
