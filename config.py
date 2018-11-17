@@ -51,7 +51,7 @@ class Config:
 
 
 class SunRunConfig:
-    PBS_NJOB_LIMIT = 24
+    PBS_NJOB_LIMIT = 48
     PBS_MANAGER = 'slurm'
     # PBS_ARGS = ('cpu', 64, 0, 32)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
@@ -63,21 +63,21 @@ class SunRunConfig:
     # GMX_BIN = 'gmx_fast'
     GMX_MDRUN = None
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 4
+    GMX_MULTI_NJOB = 8
     GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
 
 
 class SunExtendConfig:
-    EXTEND_PBS_NJOB_LIMIT = 24
+    EXTEND_PBS_NJOB_LIMIT = 48
     EXTEND_PBS_MANAGER = 'slurm'
-    EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
+    # EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
     # EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
-    # EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
+    EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
     EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
     EXTEND_PBS_TIME_LIMIT = 10  # hour
 
-    EXTEND_GMX_BIN = 'gmx_gpu'
-    # EXTEND_GMX_BIN = 'gmx_fast'
+    # EXTEND_GMX_BIN = 'gmx_gpu'
+    EXTEND_GMX_BIN = 'gmx_fast'
     EXTEND_GMX_MDRUN = None
     EXTEND_GMX_MULTI = False
     EXTEND_GMX_MULTI_NJOB = 2
@@ -94,7 +94,7 @@ export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so; export I_MPI_FABRICS=shm:dapl
     PBS_MANAGER = 'remote_slurm'
     PBS_ARGS = ('cpu', 16, 0, 16,)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_KWARGS = {
-        'host'      : '202.120.58.230',
+        'host'      : os.getenv('PI_HOST'),
         'username'  : 'nishsun-1',
         'remote_dir': '/lustre/home/acct-nishsun/nishsun-1/workspace/_REMOTE_SLURM_/',
         'env_cmd'   : _env_cmd
