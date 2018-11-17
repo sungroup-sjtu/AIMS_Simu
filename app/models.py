@@ -55,6 +55,9 @@ def wrapper_cls_func(cls_func_args_kwargs):
 
 
 class PbsJob(db.Model):
+    '''
+    A PbsJob record corresponds to a PBS Job submitted to queue system like Slurm and Torque
+    '''
     __tablename__ = 'pbs_job'
     id = NotNullColumn(Integer, primary_key=True)
     name = NotNullColumn(String(200))
@@ -86,6 +89,11 @@ class PbsJob(db.Model):
 
 
 class Compute(db.Model):
+    '''
+    A Compute record corresponds to a high throughput computation submitted
+    It contains a lot of molecules and physical states
+    A Compute record can produce a lot of Task records
+    '''
     __tablename__ = 'compute'
     id = NotNullColumn(Integer, primary_key=True)
     web_id = NotNullColumn(Integer)
@@ -217,6 +225,10 @@ class Compute(db.Model):
 
 
 class Task(db.Model):
+    '''
+    A Task record corresponds to one molecules and a series of physical states
+    A Task record can produce a lots of Job records
+    '''
     __tablename__ = 'task'
     id = NotNullColumn(Integer, primary_key=True)
     compute_id = NotNullColumn(Integer, ForeignKey(Compute.id))
@@ -324,6 +336,9 @@ class Task(db.Model):
             db.session.commit()
 
     def _rebuild(self):
+        '''
+        For debug
+        '''
         cd_or_create_and_cd(self.dir)
         cd_or_create_and_cd('build')
 
@@ -653,6 +668,9 @@ class Task(db.Model):
 
 
 class Job(db.Model):
+    '''
+    A Job record corresponds to one molecule and one physical state (T and P)
+    '''
     __tablename__ = 'job'
     id = NotNullColumn(Integer, primary_key=True)
     task_id = NotNullColumn(Integer, ForeignKey(Task.id))
@@ -769,6 +787,10 @@ class Job(db.Model):
         return pbs_job.submitted
 
     def _rerun(self):
+        '''
+        For debug
+        '''
+
         if self.task.procedure != 'npt':
             raise ('Invalid')
 
