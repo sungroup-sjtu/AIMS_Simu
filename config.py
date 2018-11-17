@@ -51,34 +51,35 @@ class Config:
 
 
 class SunRunConfig:
-    PBS_NJOB_LIMIT = 48
+    PBS_NJOB_LIMIT = 24
     PBS_MANAGER = 'slurm'
     # PBS_ARGS = ('cpu', 64, 0, 32)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
     # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
-    PBS_TIME_LIMIT = 1.0  # hour
+    PBS_TIME_LIMIT = 10  # hour
 
     GMX_BIN = 'gmx_gpu'
     # GMX_BIN = 'gmx_fast'
     GMX_MDRUN = None
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 8
+    GMX_MULTI_NJOB = 4
     GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
 
 
 class SunExtendConfig:
-    EXTEND_PBS_NJOB_LIMIT = 48
+    EXTEND_PBS_NJOB_LIMIT = 24
     EXTEND_PBS_MANAGER = 'slurm'
-    # EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
-    EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
+    EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
+    # EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
     # EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
     EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
+    EXTEND_PBS_TIME_LIMIT = 10  # hour
 
     EXTEND_GMX_BIN = 'gmx_gpu'
     # EXTEND_GMX_BIN = 'gmx_fast'
     EXTEND_GMX_MDRUN = None
-    EXTEND_GMX_MULTI = True
+    EXTEND_GMX_MULTI = False
     EXTEND_GMX_MULTI_NJOB = 2
 
 
@@ -114,7 +115,7 @@ class NptConfig(Config, SunRunConfig, SunExtendConfig):
     ALLOWED_PROCEDURES = ['npt']
 
 
-class NvtSlabConfig(Config, PiRunConfig, SunExtendConfig):
+class NvtSlabConfig(Config, SunRunConfig, SunExtendConfig):
     DB = 'database/msd.nvt-slab.db'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
     LOG = os.path.join(CWD, '_log.nvt-slab.txt')

@@ -5,4 +5,5 @@ openbabel
 numpy
 pandas
 scipy
+physical_validation # for analyze npt ensemble
 mdtraj # for analyze nvt_slab trajectory

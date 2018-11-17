@@ -560,6 +560,9 @@ class Task(db.Model):
                 traceback.print_exc()
 
         jobs_to_analyze = self.jobs.filter(Job.status == Compute.Status.DONE).all()
+        if len(jobs_to_analyze) == 0:
+            return
+
         for job in jobs_to_analyze:
             current_app.logger.info('Analyze %s' % job)
 
@@ -634,7 +637,8 @@ class Task(db.Model):
             result_list.append(json.loads(job.result))
 
         sim = init_simulation(self.procedure)
-        post_result, post_info = sim.post_process(T_list=T_list, P_list=P_list, result_list=result_list)
+        post_result, post_info = sim.post_process(T_list=T_list, P_list=P_list, result_list=result_list,
+                                                  n_mol_list=json.loads(self.n_mol_list))
 
         if post_result is not None:
             self.post_result = json.dumps(post_result)
@@ -644,8 +648,7 @@ class Task(db.Model):
 
     def get_post_data(self, T=298, P=1):
         sim = init_simulation(self.procedure)
-        post_data = sim.get_post_data(post_result=json.loads(self.post_result), T=T, P=P,
-                                      smiles_list=json.loads(self.smiles_list), n_mol_list=json.loads(self.n_mol_list))
+        post_data = sim.get_post_data(post_result=self.get_post_result(), T=T, P=P, smiles_list=self.get_smiles_list())
         return post_data
 
 
