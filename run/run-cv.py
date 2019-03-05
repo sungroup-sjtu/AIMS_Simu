@@ -122,6 +122,6 @@ if __name__ == '__main__':
                 print(mol, 'Some temperatures are failed')
             else:
                 coef, score = polyfit(T_list, Cv_list, 4)
-                print(mol, *coef)
+                print(mol, *coef, score)
 
             os.chdir(CWD)

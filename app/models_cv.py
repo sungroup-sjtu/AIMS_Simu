@@ -27,6 +27,7 @@ class Cv(db.Model):
         with open(log) as f:
             lines = f.read().splitlines()
 
+        cv_list = []
         for line in lines:
             if line == '' or line.startswith('#'):
                 continue
@@ -35,11 +36,17 @@ class Cv(db.Model):
 
             words = line.strip().split()
             name = words[1]
-            smiles = words[2]
-            smiles = smiles.replace('>', '')
+            smiles = words[2].replace('>', '')
             coef = list(map(float, words[3:8]))
+            score = float(words[8])
+
+            if score < 0.999:
+                print(name, smiles, 'Score < 0.999')
+                continue
 
             cv = Cv(name=name, smiles=smiles, post_result=json.dumps(coef))
-            db.session.add(cv)
+            cv_list.append(cv)
 
+        print('%i rows inserted' % len(cv_list))
+        db.session.add_all(cv_list)
         db.session.commit()
