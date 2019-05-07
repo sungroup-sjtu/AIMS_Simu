@@ -43,12 +43,13 @@ def get_pngs_from_data(k_data_exp_sim_list):
         u_list = []
         for ref, sim, u in data_exp_sim_list:
             dev = (sim / ref - 1) * 100
-            if abs(dev) < 50:  # incorrect expt. data
-                dev_list.append(dev)
-                absdev_list.append(abs(dev))
-                ref_list.append(ref)
-                sim_list.append(sim)
-                u_list.append(u / ref * 100)
+            if abs(dev) > 50:  # incorrect expt. data
+                continue
+            dev_list.append(dev)
+            absdev_list.append(abs(dev))
+            ref_list.append(ref)
+            sim_list.append(sim)
+            u_list.append(u / ref * 100)
 
         p = BytesIO()
         fig = pylab.figure(figsize=(13, 4))
@@ -107,30 +108,29 @@ def show_stat_pvt():
     statAction.update_mol_task_list(smiles_list)
     print(len(statAction.nist_list))
 
-    dens_Tm25_nist_list = statAction.get_density_nist(_T='Tm25')
+    # dens_Tm25_nist_list = statAction.get_density_nist(_T='Tm25')
     dens_Tvap_nist_list = statAction.get_density_nist(_T='Tvap')
-    dens_Tcx8_nist_list = statAction.get_density_nist(_T='Tcx8')
-    hvap_Tm25_list = statAction.get_hvap_nist(_T='Tm25')
-    hvap_Tvap_list = statAction.get_hvap_nist(_T='Tvap')
-    hvap_Tcx8_list = statAction.get_hvap_nist(_T='Tcx8')
-    cp_Tm25_nist_list = statAction.get_cp_nist(_T='Tm25')
+    # dens_Tc85_nist_list = statAction.get_density_nist(_T='Tc85')
+    # cp_Tm25_nist_list = statAction.get_cp_nist(_T='Tm25')
     cp_Tvap_nist_list = statAction.get_cp_nist(_T='Tvap')
-    cp_Tcx8_nist_list = statAction.get_cp_nist(_T='Tcx8')
+    # cp_Tc85_nist_list = statAction.get_cp_nist(_T='Tc85')
+    # hvap_Tm25_list = statAction.get_hvap_nist(_T='Tm25')
+    hvap_Tvap_list = statAction.get_hvap_nist(_T='Tvap')
+    # hvap_Tc85_list = statAction.get_hvap_nist(_T='Tc85')
     # sound_Tm25_nist_list = statAction.get_sound_nist(T='Tm25')
     # sound_Tvap_nist_list = statAction.get_sound_nist(T='Tvap')
     # sound_Tcx8_nist_list = statAction.get_sound_nist(T='Tcx8')
 
     k_data_exp_sim_list = [
-        ('density @ Tm+', dens_Tm25_nist_list),
+        # ('density @ Tm+', dens_Tm25_nist_list),
         ('density @ Tvap', dens_Tvap_nist_list),
-        ('density @ T0.8*', dens_Tcx8_nist_list),
-        ('Hvap @ Tm+', hvap_Tm25_list),
-        ('Hvap @ Tvap', hvap_Tvap_list),
-        ('Hvap @ T0.8*', hvap_Tcx8_list),
-        ('Cp @ Tm+', cp_Tm25_nist_list),
+        # ('density @ T0.85*', dens_Tc85_nist_list),
+        # ('Cp @ Tm+', cp_Tm25_nist_list),
         ('Cp @ Tvap', cp_Tvap_nist_list),
-        ('Cp @ T0.8*', cp_Tcx8_nist_list),
-        # sound_Tm25_nist_list, sound_Tvap_nist_list, sound_Tcx8_nist_list,
+        # ('Cp @ T0.85*', cp_Tc85_nist_list),
+        # ('Hvap @ Tm+', hvap_Tm25_list),
+        ('Hvap @ Tvap', hvap_Tvap_list),
+        # ('Hvap @ T0.85*', hvap_Tc85_list),
     ]
     pngs = get_pngs_from_data(k_data_exp_sim_list)
 
@@ -155,16 +155,16 @@ def show_stat_vle():
     dc_nist_list = statAction.get_dc_nist()
     # dgas_Tcx8_nist_list = statAction.get_dgas_nist(_T='Tcx8')
     # st_Tm25_nist_list = statAction.get_st_nist(_T='Tm25')
-    # st_Tvap_nist_list = statAction.get_st_nist(_T='Tvap')
+    st_Tvap_nist_list = statAction.get_st_nist(_T='Tvap')
     # st_Tcx8_nist_list = statAction.get_st_nist(_T='Tcx8')
 
     k_data_exp_sim_list = [
         ('critical temperatrue', tc_nist_list),
         ('critical density', dc_nist_list),
-        # ('density of vapor @ T0.8*', dgas_Tcx8_nist_list),
+        # ('density of vapor @ T0.85*', dgas_Tcx8_nist_list),
         # ('surface tension @ Tm+', st_Tm25_nist_list),
-        # ('surface tension @ Tvap', st_Tvap_nist_list),
-        # ('surface tension @ T0.8*', st_Tcx8_nist_list),
+        ('surface tension @ Tvap', st_Tvap_nist_list),
+        # ('surface tension @ T0.85*', st_Tcx8_nist_list),
     ]
     pngs = get_pngs_from_data(k_data_exp_sim_list)
 
@@ -206,11 +206,11 @@ def show_vle():
         dg = action.dg_list[-1]
         dg_u = action.dg_u_list[-1]
         dgs = action.dgs_good_list[-1]
-        if dl != None and dls != None:
+        if dl is not None and dls is not None:
             dl_absdev_list.append(abs(dls - dl))
             dl_dev_list.append(abs(dls - dl) / dl * 100)
             dl_u_list.append(dl_u / dl * 100)
-        if dg != None and dgs != None:
+        if dg is not None and dgs is not None:
             dg_absdev_list.append(abs(dgs - dg))
             dg_dev_list.append(abs(dgs - dg) / dg * 100)
             dg_u_list.append(dg_u / dg * 100)
