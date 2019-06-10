@@ -59,9 +59,9 @@ class SunRunConfig:
     PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.5'}
     PBS_TIME_LIMIT = 10  # hour
 
-    GMX_BIN = 'gmx_gpu'
-    # GMX_BIN = 'gmx_fast'
-    GMX_MDRUN = None
+    GMX_BIN = 'gmx_serial'
+    GMX_MDRUN= 'gmx_gpu mdrun'
+    # GMX_MDRUN= 'gmx_fast mdrun'
     GMX_MULTI = True
     GMX_MULTI_NJOB = 8
     GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
@@ -76,9 +76,9 @@ class SunExtendConfig:
     EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.5'}
     EXTEND_PBS_TIME_LIMIT = 10  # hour
 
-    # EXTEND_GMX_BIN = 'gmx_gpu'
-    EXTEND_GMX_BIN = 'gmx_fast'
-    EXTEND_GMX_MDRUN = None
+    EXTEND_GMX_BIN = 'gmx_serial'
+    # EXTEND_GMX_MDRUN = 'gmx_gpu mdrun'
+    EXTEND_GMX_MDRUN = 'gmx_fast mdrun'
     EXTEND_GMX_MULTI = False
     EXTEND_GMX_MULTI_NJOB = 2
 
