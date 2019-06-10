@@ -13,7 +13,7 @@ def check():
     compute_id = request.form['compute_id']
     user_id = request.form['user_id']
     compute = Compute.query.filter(and_(Compute.id == compute_id, Compute.web_user_id == user_id)).first()
-    if compute == None:
+    if compute is None:
         return json.dumps({'success': False,
                            'reason': 'Not found'})
 

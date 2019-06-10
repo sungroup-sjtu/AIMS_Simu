@@ -68,11 +68,11 @@ def process_task_extend():
 
 if __name__ == '__main__':
     while True:
-        # process_pbs_job(n_pbs=50)
+        process_pbs_job(n_pbs=50)
         process_task_run(n_task=20, random=True)
-        # process_task_build(n_task=20, random=True)
+        process_task_build(n_task=20, random=True)
         process_task_check(n_task=500)
         process_task_extend()
 
-        app.logger.info('Sleep 3600 seconds ...')
-        time.sleep(3600)
+        app.logger.info('Sleep 1800 seconds ...')
+        time.sleep(1800)

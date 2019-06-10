@@ -6,26 +6,50 @@ Usage: submit.py procedure mols.txt 'remark for this computation'
 '''
 
 import sys
-import requests
+import json
 
-json_dict = {
-    'id'     : 1,
-    'user_id': 1,
-    'detail' : {
-        'procedures'  : [sys.argv[1]],
-        'combinations': [],
-        'p'           : [1, 1000]  # bar. This option is useless
-    }
-}
+sys.path.append('..')
+
+from app import create_app
+from app.api.actions import ComputeAction
+
+procedure = sys.argv[1]
+app = create_app(procedure)
+app.app_context().push()
+app.test_request_context().push()
+
+
+def submit(json_dict):
+    computeAction = ComputeAction()
+    try:
+        compute_id = computeAction.init_from_json_dict(json_dict)
+    except Exception as e:
+        return json.dumps({'success': False,
+                           'reason' : str(e)
+                           })
+    else:
+        return json.dumps({'success'   : True,
+                           'compute_id': compute_id,
+                           })
+
 
 if len(sys.argv) != 4:
     print(__doc__)
     sys.exit()
 
+json_dict = {
+    'id'     : 1,
+    'user_id': 1,
+    'detail' : {
+        'procedures'  : [procedure],
+        'combinations': [],
+        'p'           : [1, 1000]  # bar. This option is useless
+    },
+    'remark' : sys.argv[3]
+}
+
 with open(sys.argv[2]) as f:
     lines = f.read().splitlines()
-
-json_dict['remark'] = sys.argv[3]
 
 for line in lines:
     line.strip()
@@ -68,6 +92,7 @@ for line in lines:
                                                 't'     : [t_min, t_max],
                                                 })
 
-print(json_dict)
-r = requests.post('http://localhost:5050/api/submit', json=json_dict)
-print(r.text)
+if __name__ == '__main__':
+    print(json_dict)
+    r = submit(json_dict)
+    print(r)

@@ -6,7 +6,7 @@ from ..models import *
 class ComputeAction():
     def init_from_json_dict(self, json_dict) -> int:
         compute = Compute()
-        compute.web_ip = request.remote_addr
+        compute.web_ip = request.remote_addr or '127.0.0.1'
         try:
             compute.web_id = json_dict['id']
             compute.web_user_id = json_dict['user_id']
