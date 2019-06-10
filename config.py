@@ -56,7 +56,7 @@ class SunRunConfig:
     # PBS_ARGS = ('cpu', 64, 0, 32)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
     # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
-    PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
+    PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.5'}
     PBS_TIME_LIMIT = 10  # hour
 
     GMX_BIN = 'gmx_gpu'
@@ -73,7 +73,7 @@ class SunExtendConfig:
     # EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
     # EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
     EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
-    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load gcc openmpi gromacs/2016.5'}
+    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.5'}
     EXTEND_PBS_TIME_LIMIT = 10  # hour
 
     # EXTEND_GMX_BIN = 'gmx_gpu'
