@@ -56,15 +56,15 @@ class SunRunConfig:
     # PBS_ARGS = ('cpu', 64, 0, 32)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
     # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
-    PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.5'}
+    PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2018.6'}
     PBS_TIME_LIMIT = 10  # hour
 
     GMX_BIN = 'gmx_serial'
     GMX_MDRUN= 'gmx_gpu mdrun'
     # GMX_MDRUN= 'gmx_fast mdrun'
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 8
-    GMX_MULTI_NOMP = None  # Use only one node. Automatically determine the best number of threads.
+    GMX_MULTI_NJOB = 8 # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
+    GMX_MULTI_NOMP = None  # Set the OpenMP threads. When set to None, use only one node and the best number of threads is automatically determined
 
 
 class SunExtendConfig:
@@ -73,13 +73,13 @@ class SunExtendConfig:
     # EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
     # EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
     EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
-    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.5'}
+    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2018.6'}
     EXTEND_PBS_TIME_LIMIT = 10  # hour
 
     EXTEND_GMX_BIN = 'gmx_serial'
     # EXTEND_GMX_MDRUN = 'gmx_gpu mdrun'
     EXTEND_GMX_MDRUN = 'gmx_fast mdrun'
-    EXTEND_GMX_MULTI = False
+    EXTEND_GMX_MULTI = False # Do not user -multidir function for extend in case of weird bugs
     EXTEND_GMX_MULTI_NJOB = 2
 
 
@@ -91,7 +91,7 @@ export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so; export I_MPI_FABRICS=shm:dapl
 '''
 
     PBS_NJOB_LIMIT = 180
-    PBS_MANAGER = 'remote_slurm'
+    PBS_MANAGER = 'remote_slurm' # Use slurm on remote hpc. Do not use it unless you know exactly the mechanism
     PBS_ARGS = ('cpu', 16, 0, 16,)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_KWARGS = {
         'host'      : os.getenv('PI_HOST'),
