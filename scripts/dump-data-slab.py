@@ -9,7 +9,6 @@ sys.path.append('../../ms-tools')
 from app import create_app
 from app.models import Task
 from mstools.formula import Formula
-from mstools.utils import is_alkane
 
 app = create_app('nvt-slab')
 app.app_context().push()
@@ -26,7 +25,7 @@ dc_list = []
 
 
 def get_slab_result(limit=None):
-    tasks = Task.query
+    tasks = Task.query.filter(Task.remark == None)
     if limit is not None:
         tasks = tasks.limit(limit)
     for i, task in enumerate(tasks):
@@ -44,14 +43,10 @@ def get_slab_result(limit=None):
         category = 'All'
         if set(f.atomdict.keys()) == {'C', 'H'}:
             category = 'CH'
-        if is_alkane(py_mol):
-            category = 'Ane'
 
-        ### For ML, Only select molecules with n_heavy >= 4 and n_C >= 2
+        ### For ML, Only select molecules with n_heavy >= 4
         ml = True
         if py_mol.OBMol.NumHvyAtoms() < 4:
-            ml = False
-        elif f.atomdict.get('C') < 2:
             ml = False
 
         post_data = task.get_post_data(0)
@@ -96,41 +91,27 @@ def write_data(n_mol_per_file=int(1e9)):
 
 def write_ml_data():
     f_ml_All = open('result-ML-All-slab.txt', 'w')
-    f_ml_Ane = open('result-ML-Ane-slab.txt', 'w')
     f_ml_CH = open('result-ML-CH-slab.txt', 'w')
     f_ml_critical_All = open('result-ML-All-critical.txt', 'w')
-    f_ml_critical_Ane = open('result-ML-Ane-critical.txt', 'w')
     f_ml_critical_CH = open('result-ML-CH-critical.txt', 'w')
     print('SMILES T dliq dgas st', file=f_ml_All)
-    print('SMILES T dliq dgas st', file=f_ml_Ane)
     print('SMILES T dliq dgas st', file=f_ml_CH)
     print('SMILES tc dc', file=f_ml_critical_All)
-    print('SMILES tc dc', file=f_ml_critical_Ane)
     print('SMILES tc dc', file=f_ml_critical_CH)
 
     smiles_last_All = ''
-    smiles_last_Ane = ''
     smiles_last_CH = ''
     for i, smiles in enumerate(smiles_list):
         if not ml_list[i]:
             continue
 
         print('%s %i %.3e %.3e %.3e' % (smiles, t_list[i], dl_list[i][0], dg_list[i][0], st_list[i][0]), file=f_ml_All)
-
         if smiles != smiles_last_All:
             print('%s %.3e %.3e' % (smiles, tc_list[i], dc_list[i]), file=f_ml_critical_All)
             smiles_last_All = smiles
 
-        if category_list[i] == 'Ane':
-            print('%s %i %.3e %.3e %.3e' % (smiles, t_list[i], dl_list[i][0], dg_list[i][0], st_list[i][0]), file=f_ml_Ane)
-
-            if smiles != smiles_last_Ane:
-                print('%s %.3e %.3e' % (smiles, tc_list[i], dc_list[i]), file=f_ml_critical_Ane)
-                smiles_last_Ane = smiles
-
-        if category_list[i] in ['Ane', 'CH']:
+        if category_list[i] == 'CH':
             print('%s %i %.3e %.3e %.3e' % (smiles, t_list[i], dl_list[i][0], dg_list[i][0], st_list[i][0]), file=f_ml_CH)
-
             if smiles != smiles_last_CH:
                 print('%s %.3e %.3e' % (smiles, tc_list[i], dc_list[i]), file=f_ml_critical_CH)
                 smiles_last_CH = smiles
