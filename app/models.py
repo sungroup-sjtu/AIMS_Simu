@@ -420,10 +420,11 @@ class Task(db.Model):
                 multi_dirs = [job.dir for job in self.jobs]
                 multi_cmds = json.loads(self.commands)
 
-                commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                               n_parallel=current_app.config['GMX_MULTI_NJOB'],
-                                                               n_gpu=current_app.jobmanager.ngpu,
-                                                               n_omp=current_app.config['GMX_MULTI_NOMP'])
+                sim = init_simulation(self.procedure)
+                commands_list = sim.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                   n_parallel=current_app.config['GMX_MULTI_NJOB'],
+                                                                   n_gpu=current_app.jobmanager.ngpu,
+                                                                   n_omp=current_app.config['GMX_MULTI_NOMP'])
 
                 for i, commands in enumerate(commands_list):
                     # instead of run directly, we add a record to pbs_job
@@ -521,10 +522,10 @@ class Task(db.Model):
                     multi_cmds = sim.extend(jobname='%s-%i' % (job.name, job.cycle + 1),
                                             sh='_job.extend-%i.sh' % (job.cycle + 1))
 
-                commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                               n_parallel=current_app.config['EXTEND_GMX_MULTI_NJOB'],
-                                                               n_gpu=current_app.jm_extend.ngpu,
-                                                               n_procs=current_app.jm_extend.nprocs)
+                commands_list = sim.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                   n_parallel=current_app.config['EXTEND_GMX_MULTI_NJOB'],
+                                                                   n_gpu=current_app.jm_extend.ngpu,
+                                                                   n_procs=current_app.jm_extend.nprocs)
 
                 os.chdir(self.dir)
                 for i, commands in enumerate(commands_list):

@@ -51,35 +51,44 @@ class Config:
 
 
 class SunRunConfig:
+    '''
+    This config determines the PBS and GROMACS information for running simulation. Should be very careful
+    GMX_BIN is running on the main node. The environment variables are configured by .bashrc or .zshrc or whatever
+    GMX_MDRUN is running on the compute node. The environment variables are configured by PBS_KWARGS['env_cmd']
+    Make sure that the version of GMX_BIN and GMX_MDRUN are the same
+    '''
     PBS_NJOB_LIMIT = 48
     PBS_MANAGER = 'slurm'
     # PBS_ARGS = ('cpu', 64, 0, 32)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
     # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
-    PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2018.6'}
-    PBS_TIME_LIMIT = 10  # hour
+    PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.6'}
+    PBS_TIME_LIMIT = 1  # hour
 
-    GMX_BIN = 'gmx_serial'
-    GMX_MDRUN= 'gmx_gpu mdrun'
+    GMX_BIN = '/share/apps/gromacs/2016.6/bin/gmx_serial'
+    GMX_MDRUN = 'gmx_gpu mdrun'
     # GMX_MDRUN= 'gmx_fast mdrun'
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 8 # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
+    GMX_MULTI_NJOB = 8  # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
     GMX_MULTI_NOMP = None  # Set the OpenMP threads. When set to None, use only one node and the best number of threads is automatically determined
 
 
 class SunExtendConfig:
+    '''
+    This config determines the PBS and GROMACS information for extending simulation
+    '''
     EXTEND_PBS_NJOB_LIMIT = 48
     EXTEND_PBS_MANAGER = 'slurm'
     # EXTEND_PBS_ARGS = ('cpu', 64, 0, 32)
     # EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
     EXTEND_PBS_ARGS = ('fast', 24, 0, 12)
-    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2018.6'}
-    EXTEND_PBS_TIME_LIMIT = 10  # hour
+    EXTEND_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.6'}
+    EXTEND_PBS_TIME_LIMIT = 1  # hour
 
-    EXTEND_GMX_BIN = 'gmx_serial'
+    EXTEND_GMX_BIN = '/share/apps/gromacs/2016.6/bin/gmx_serial'
     # EXTEND_GMX_MDRUN = 'gmx_gpu mdrun'
     EXTEND_GMX_MDRUN = 'gmx_fast mdrun'
-    EXTEND_GMX_MULTI = False # Do not user -multidir function for extend in case of weird bugs
+    EXTEND_GMX_MULTI = False  # Do not user -multidir function for extend in case of weird bugs
     EXTEND_GMX_MULTI_NJOB = 2
 
 
