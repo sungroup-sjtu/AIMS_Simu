@@ -1,5 +1,5 @@
 # Molecule Simulation Database -- Server
-This project is performs high-throughput force field simulation and data processing  
+This project performs high-throughput force field simulation and data processing  
 This project depends on `AIMS_Tools`  
 Two main scripts accomplish the jobs **submit.py** and **monitor.py**.
 
@@ -32,6 +32,17 @@ Two main scripts accomplish the jobs **submit.py** and **monitor.py**.
     ./submit.py npt mols/example.txt 'test computation'
     ./monitor.py npt 
     ```
+## QM calculation
+QM calculation for heat capacity is performed by `run-cv.py` script
+
+1. Prepare QM files. This will check database to remove duplicated molecules from `example.txt` and process the molecule name. A file named `_cv_prepared.txt` will be generated and used for following steps  
+  `./run-cv.py prepare mols/example.txt`  
+2. Generate Gauss input files and submit to PBS job manager  
+  `./run-cv.py cv _cv_prepared.txt`  
+3. Analyze Gauss results. The results will be saved in a file named `_cv.log`  
+  `./run-cv.py get-cv _cv_prepared.txt`
+4. Save results into database  
+  `./run-cv.py save-db`
 
 For more information, see our publication: "Predicting 
 Thermodynamic Properties of Alkanes by High-throughput 
