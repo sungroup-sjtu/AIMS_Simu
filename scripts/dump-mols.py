@@ -12,7 +12,6 @@ sys.path.append('..')
 from app import create_app, db
 from app.models import Task
 from app.models_nist import NistMolecule
-from app.models_yaws import YawsMolecule
 
 smiles_list = set()
 npt = create_app('npt')
@@ -34,21 +33,11 @@ with slab.app_context():
 with npt.app_context():
     nist_smiles_iupac = dict(db.session.query(NistMolecule.smiles, NistMolecule.name).all())
     nist_smiles_cas = dict(db.session.query(NistMolecule.smiles, NistMolecule.cas).all())
-    yaws_smiles_iupac = dict(db.session.query(YawsMolecule.smiles, YawsMolecule.iupac).all())
-    yaws_smiles_cas = dict(db.session.query(YawsMolecule.smiles, YawsMolecule.cas).all())
 
 print('smiles', 'iupac', 'cas', 'source', sep='\t')
 for smiles in smiles_list:
     iupac = nist_smiles_iupac.get(smiles, None)
     cas = nist_smiles_cas.get(smiles, None)
-    source = 'NIST'
-
-    if iupac is None:
-        iupac = yaws_smiles_iupac.get(smiles, None)
-        cas = yaws_smiles_cas.get(smiles, None)
-        source = 'Yaws'
-
-        if iupac is None:
-            source = None
+    source = None if iupac is None else 'NIST'
 
     print(smiles, iupac or 'unknown', cas or 'unknown', source or 'unknown', sep='\t')

@@ -7,7 +7,6 @@ CWD = os.path.dirname(os.path.abspath(__file__))
 class Config:
     SQLALCHEMY_BINDS = {
         'cv'  : 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/cv.sqlite'),
-        'yaws': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/yaws.sqlite'),
         'nist': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/nist.sqlite'),
     }
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
