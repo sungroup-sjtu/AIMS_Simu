@@ -341,7 +341,7 @@ class StatAction():
             #         NistHasData.has_exp == True).count() == 0:
             #     continue
 
-            spline = nist.splines.join(NistProperty).filter(NistProperty.name == 'density-gl').first()
+            spline = nist.splines.filter(NistSpline.property_id == prop_dgas.id).first()
             if spline is None:
                 continue
             value, uncertainty = spline.get_data(T)
@@ -349,7 +349,11 @@ class StatAction():
                 continue
 
             slab = self.slab_list[i]
-            dgas_sim = slab.get_post_data(T)['density_gas']
+            try:
+                # if T is larger than predicted Tc, dgas will not exist
+                dgas_sim = slab.get_post_data(T)['dgas']
+            except:
+                continue
 
             dgas_list.append([nist.smiles, value / 1000, uncertainty / 1000, dgas_sim])
 
@@ -357,7 +361,7 @@ class StatAction():
         return dgas_list
 
 
-def get_png_from_data(name, data_exp_sim_list):
+def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
     exp_list = []
     sim_list = []
     dev_list = []
@@ -369,7 +373,7 @@ def get_png_from_data(name, data_exp_sim_list):
             continue
         dev = (sim / ref - 1) * 100
         bad_list.append([smiles, '%.3g' % ref, '%.3g' % sim, round(dev, 1)])
-        if abs(dev) > 50:  # incorrect expt. data
+        if threthold > 0 and abs(dev) > threthold * 100:  # incorrect expt. data
             continue
         dev_list.append(dev)
         absdev_list.append(abs(dev))

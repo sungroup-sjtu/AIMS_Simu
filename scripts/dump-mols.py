@@ -2,7 +2,7 @@
 
 '''
 Dump molecules from NPT simulations
-The IUPAC names are obtained from NIST database, or YAWS if not exist.
+The IUPAC names are obtained from NIST database, or None if not exist.
 '''
 
 import sys
