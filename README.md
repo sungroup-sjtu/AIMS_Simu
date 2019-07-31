@@ -1,5 +1,5 @@
 # Molecule Simulation Database -- Server
-This project is performs high-throughput force field simulation and data processing  
+This project performs high-throughput force field simulation and data processing  
 This project depends on `AIMS_Tools`  
 Two main scripts accomplish the jobs **submit.py** and **monitor.py**.
 
@@ -47,8 +47,33 @@ of molecules in /mols/<fname> and then:
     ```
 5. The results are saved in the WORK_DIR
 
+## QM calculation
+QM calculation for heat capacity is performed by `run-cv.py` script
+
+1. Prepare QM files. This will check database to remove duplicated molecules from `example.txt` and process the molecule name. A file named `_cv_prepared.txt` will be generated and used for following steps  
+  `./run-cv.py prepare mols/example.txt`  
+2. Generate Gauss input files and submit to PBS job manager  
+  `./run-cv.py cv _cv_prepared.txt`  
+3. Analyze Gauss results. The results will be saved in a file named `_cv.log`  
+  `./run-cv.py get-cv _cv_prepared.txt`
+4. Save results into database  
+  `./run-cv.py save-db`
 
 For more information, see our publication: "Predicting 
 Thermodynamic Properties of Alkanes by High-throughput 
 Force Field Simulation and Machine Learning", 
 https://doi.org/10.1021/acs.jcim.8b00407
+
+## Scripts for data post-processing and analyzing
+Several scripts are provided for post-processing and analysing the simulation data. They are located at `scripts` and `scripts-post`
+1. Fitting the simulation data at different temperature and pressure. So that properties and derivatives at arbitrary T or P can be obtained. Normally this should be prior to any other analyzing  
+  `./scripts-post/post-process.py [npt, nvt-slab]`
+2. Dump the simulation data from sqlite database to `csv` file, which can be uploaded into `AIMS_Web` database  
+  `./scripts/dummp-data-npt.py`  
+  `./scripts/dummp-data-nvt-slab.py`
+2. Compare with NIST Experimental data  
+   * Make sure that `nist.sqlite` exists in `database` folder  
+   * Prepare a file which lists the SMILES of molecules you want to compare. An example is given as `smiles-nist.txt`
+   * Run following script to compare simulation and expt data and plot the results  
+     `./scripts-post/compare-nist.py [npt, nvt-slab] smiles-nist.txt`
+  

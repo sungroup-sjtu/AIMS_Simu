@@ -14,6 +14,7 @@ sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.simulation.gauss import Cv as GaussCv
 from mstools.jobmanager import Slurm
 from mstools.utils import cd_or_create_and_cd
+from mstools.analyzer.fitting import polyfit
 
 # QUEUE = ('cpu', 8, 0, 8)
 # GAUSS_BIN = '/share/apps/g16/g16'
@@ -70,14 +71,16 @@ if __name__ == '__main__':
     CWD = os.getcwd()
     cmd = sys.argv[1]
 
-    if cmd == 'print':
+    if cmd == 'prepare':
+        fout = open('_cv_prepared.txt', 'w')
         n = 0
         mols = get_mols()
         for mol in mols:
             if Cv.query.filter(Cv.smiles == mol.smiles).count() > 0:
                 continue
             n += 1
-            print(n, mol.formula, mol.name + '_' + random_string(4), mol.smiles, sep='\t')
+            print(n, mol.formula, mol.name + '_' + random_string(4), mol.smiles, sep='\t', file=fout)
+        fout.close()
 
     if cmd == 'cv':
         mols = get_mols()
@@ -96,21 +99,20 @@ if __name__ == '__main__':
         os.chdir(CWD)
 
     if cmd == 'get-cv':
+        fout = open('_cv.log', 'w')
         mols = get_mols()
-        from mstools.analyzer.fitting import polyfit
-
         for mol in mols:
             try:
                 os.chdir(os.path.join(Config.WORK_DIR, 'Cv', mol.name))
             except:
-                print(mol, 'Error: Dir not exist')
+                print(mol, 'Error: Dir not exist', file=fout)
                 continue
 
             gauss.logs = ['conf-%i.log' % i for i in range(n_conformer)]
             try:
                 result = gauss.analyze()
             except Exception as e:
-                print(mol, str(e))
+                print(mol, str(e), file=fout)
                 continue
 
             T_list = []
@@ -119,9 +121,13 @@ if __name__ == '__main__':
                 T_list.append(T)
                 Cv_list.append(val_stderr[0])
             if T_list != [100, 200, 300, 400, 500, 600, 700]:
-                print(mol, 'Some temperatures are failed')
+                print(mol, 'Some temperatures are failed', file=fout)
             else:
                 coef, score = polyfit(T_list, Cv_list, 4)
-                print(mol, *coef, score)
+                print(mol, *coef, score, file=fout)
 
             os.chdir(CWD)
+        fout.close()
+
+    if cmd == 'save-db':
+        Cv.load_from_log('_cv.log')
