@@ -87,7 +87,6 @@ class PbsJob(db.Model):
     def is_running(self):
         return self.jm.is_running(self.name)
 
-
 class Compute(db.Model):
     '''
     A Compute record corresponds to a high throughput computation submitted

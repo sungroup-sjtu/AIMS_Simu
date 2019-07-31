@@ -64,6 +64,7 @@ class SunRunConfig:
     # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.6'}
     PBS_TIME_LIMIT = 1  # hour
+    PBS_SUBMIT_CMD = 'sbatch --reservation=ml'
 
     GMX_BIN = '/share/apps/gromacs/2016.6/bin/gmx_serial'
     GMX_MDRUN = 'gmx_gpu mdrun'

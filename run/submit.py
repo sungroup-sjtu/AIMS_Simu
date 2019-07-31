@@ -13,12 +13,13 @@ sys.path.append('..')
 from app import create_app
 from app.api.actions import ComputeAction
 
+# Read in procedure and binds to an app
 procedure = sys.argv[1]
 app = create_app(procedure)
 app.app_context().push()
 app.test_request_context().push()
 
-
+# main function
 def submit(json_dict):
     computeAction = ComputeAction()
     try:
@@ -31,7 +32,6 @@ def submit(json_dict):
         return json.dumps({'success'   : True,
                            'compute_id': compute_id,
                            })
-
 
 if len(sys.argv) != 4:
     print(__doc__)
@@ -48,6 +48,7 @@ json_dict = {
     'remark' : sys.argv[3]
 }
 
+# Read in the list of molecules to be calculated and validate the list
 with open(sys.argv[2]) as f:
     lines = f.read().splitlines()
 
