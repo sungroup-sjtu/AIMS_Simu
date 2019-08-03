@@ -15,7 +15,7 @@ def main():
     tasks = Task.query
     n_total = tasks.count()
     for i, task in enumerate(tasks):
-        print(f'{i} / {n_total}', task.post_result(force=True))
+        print(f'{i} / {n_total}', task.post_process(force=True))
 
 
 if __name__ == '__main__':
