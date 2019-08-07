@@ -25,6 +25,14 @@ class Config:
     def init_app(cls, app):
         sys.path.append(Config.MS_TOOLS_DIR)
         from mstools.jobmanager import Slurm, Torque, RemoteSlurm
+        from mstools.wrapper.gmx import GMX
+        from mstools.wrapper.dff import DFF
+        from mstools.wrapper.packmol import Packmol
+
+        app.gmx = GMX(gmx_bin=cls.GMX_BIN, gmx_mdrun=cls.GMX_MDRUN)
+        app.gmx_extend = GMX(gmx_bin=cls.EXTEND_GMX_BIN, gmx_mdrun=cls.EXTEND_GMX_MDRUN)
+        app.dff = DFF(dff_root=cls.DFF_ROOT, default_table=cls.DFF_TABLE)
+        app.packmol = Packmol(cls.PACKMOL_BIN)
 
         _pbs_dict = {'slurm': Slurm, 'remote_slurm': RemoteSlurm, 'torque': Torque}
 
@@ -63,7 +71,7 @@ class SunRunConfig:
     # PBS_ARGS = ('fast', 24, 0, 12)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2016.6'}
     PBS_TIME_LIMIT = 1  # hour
-    PBS_SUBMIT_CMD = 'sbatch --reservation=ml'
+    # PBS_SUBMIT_CMD = 'sbatch --reservation=ml'
 
     GMX_BIN = '/share/apps/gromacs/2016.6/bin/gmx_serial'
     GMX_MDRUN = 'gmx_gpu mdrun'

@@ -10,7 +10,6 @@ from app import create_app
 from app.models import Task
 from app.models_cv import Cv
 from mstools.formula import Formula
-from mstools.utils import is_alkane
 
 app = create_app('npt')
 app.app_context().push()
@@ -30,7 +29,7 @@ expa_list = []
 
 def get_npt_result(limit=None):
     print('\nGet NPT results...\n')
-    tasks = Task.query
+    tasks = Task.query.filter(Task.remark == None)
     if limit is not None:
         tasks = tasks.limit(limit)
     for i, task in enumerate(tasks):
@@ -43,19 +42,15 @@ def get_npt_result(limit=None):
         smiles = task.get_smiles_list()[0]
         py_mol = task.get_mol_list()[0]
         f = Formula(py_mol.formula)
-        n_C = f.atomdict['C']
+        n_CON = f.atomdict.get('C', 0) + f.atomdict.get('O', 0) + f.atomdict.get('N', 0)
 
         category = 'All'
         if set(f.atomdict.keys()) == {'C', 'H'}:
             category = 'CH'
-        if is_alkane(py_mol):
-            category = 'Ane'
 
-        ### For ML, Only select molecules with n_heavy >= 4 and n_C >= 2
+        ### For ML, Only select molecules with n_heavy >= 4
         ml = True
         if py_mol.OBMol.NumHvyAtoms() < 4:
-            ml = False
-        elif f.atomdict.get('C') < 2:
             ml = False
 
         cv = Cv.query.filter(Cv.smiles == smiles).first()
@@ -79,14 +74,14 @@ def get_npt_result(limit=None):
             p_list.append(p)
             den_list.append(raw_density)
             ei_list.append(raw_einter)
-            # Hvap = RT - Ei - n_C/15 * RT
-            hvap_list.append([(1 - n_C / 15) * 8.314 * t / 1000 - raw_einter[0], raw_einter[1]])
+            ### Hvap = RT - Ei - n_CON/15 * RT
+            hvap_list.append([(1 - n_CON / 15) * 8.314 * t / 1000 - raw_einter[0], raw_einter[1]])
             comp_list.append(raw_compress)
             expa_list.append(expansion)
 
-            if cv is None:
+            if None in [cv, cp_inter, cp_pv]:
                 ### Be careful, cv data not found
-                cp = math.inf
+                cp = None
             else:
                 cv_intra = cv.get_post_data(t)
                 cp = cv_intra + cp_inter + cp_pv
@@ -108,73 +103,45 @@ def write_data(n_mol_per_file=int(1e9)):
         print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'density-l', *den_list[i]), file=f_All)
         print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'einter-l', *ei_list[i]), file=f_All)
         print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'compressibility-l', *comp_list[i]), file=f_All)
-        print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'expansion-l', expa_list[i], math.nan), file=f_All)
-
-        if cp_list[i] != math.inf:
+        if expa_list[i] is not None:
+            print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'expansion-l', expa_list[i], math.nan), file=f_All)
+        if cp_list[i] is not None:
             print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'cp-l', cp_list[i], math.nan), file=f_All)
-
-        if p_list[i] == 1:
-            print('%s,%i,%f,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], math.nan, 'hvap-lg', *hvap_list[i]), file=f_All)
 
 
 def write_ml_data():
     f_ml_All = open('result-ML-All-npt.txt', 'w')
-    f_ml_Ane = open('result-ML-Ane-npt.txt', 'w')
     f_ml_CH = open('result-ML-CH-npt.txt', 'w')
-    f_ml_hvap_All = open('result-ML-All-hvap.txt', 'w')
-    f_ml_hvap_Ane = open('result-ML-Ane-hvap.txt', 'w')
-    f_ml_hvap_CH = open('result-ML-CH-hvap.txt', 'w')
     f_ml_cp_All = open('result-ML-All-cp.txt', 'w')
-    f_ml_cp_Ane = open('result-ML-Ane-cp.txt', 'w')
     f_ml_cp_CH = open('result-ML-CH-cp.txt', 'w')
-    print('SMILES T P density einter compress expansion', file=f_ml_All)
-    print('SMILES T P density einter compress expansion', file=f_ml_Ane)
-    print('SMILES T P density einter compress expansion', file=f_ml_CH)
-    print('SMILES T hvap', file=f_ml_hvap_All)
-    print('SMILES T hvap', file=f_ml_hvap_Ane)
-    print('SMILES T hvap', file=f_ml_hvap_CH)
+    f_ml_expan_All = open('result-ML-All-expan.txt', 'w')
+    f_ml_expan_CH = open('result-ML-CH-expan.txt', 'w')
+    print('SMILES T P density einter compress', file=f_ml_All)
+    print('SMILES T P density einter compress', file=f_ml_CH)
     print('SMILES T P cp', file=f_ml_cp_All)
-    print('SMILES T P cp', file=f_ml_cp_Ane)
     print('SMILES T P cp', file=f_ml_cp_CH)
+    print('SMILES T P expan', file=f_ml_expan_All)
+    print('SMILES T P expan', file=f_ml_expan_CH)
 
     for i, smiles in enumerate(smiles_list):
         if not ml_list[i]:
             continue
 
-        print('%s %i %i %.3e %.3e %.3e %.3e' % (
-            smiles, t_list[i], p_list[i],
-            den_list[i][0], ei_list[i][0], comp_list[i][0], expa_list[i]), file=f_ml_All)
-
-        if cp_list[i] != math.inf:
+        print('%s %i %i %.3e %.3e %.3e' % (smiles, t_list[i], p_list[i], den_list[i][0], ei_list[i][0], comp_list[i][0]), file=f_ml_All)
+        if expa_list[i] is not None:
+            print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], expa_list[i]), file=f_ml_expan_All)
+        if cp_list[i] is not None:
             print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], cp_list[i]), file=f_ml_cp_All)
 
-        if p_list[i] == 1:
-            print('%s %i %.3e' % (smiles, t_list[i], hvap_list[i][0]), file=f_ml_hvap_All)
-
-        if category_list[i] == 'Ane':
-            print('%s %i %i %.3e %.3e %.3e %.3e' % (
-                smiles, t_list[i], p_list[i],
-                den_list[i][0], ei_list[i][0], comp_list[i][0], expa_list[i]), file=f_ml_Ane)
-
-            if cp_list[i] != math.inf:
-                print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], cp_list[i]), file=f_ml_cp_Ane)
-
-            if p_list[i] == 1:
-                print('%s %i %.3e' % (smiles, t_list[i], hvap_list[i][0]), file=f_ml_hvap_Ane)
-
-        if category_list[i] in ['Ane', 'CH']:
-            print('%s %i %i %.3e %.3e %.3e %.3e' % (
-                smiles, t_list[i], p_list[i],
-                den_list[i][0], ei_list[i][0], comp_list[i][0], expa_list[i]), file=f_ml_CH)
-
-            if cp_list[i] != math.inf:
+        if category_list[i] == 'CH':
+            print('%s %i %i %.3e %.3e %.3e' % (smiles, t_list[i], p_list[i], den_list[i][0], ei_list[i][0], comp_list[i][0]), file=f_ml_CH)
+            if expa_list[i] is not None:
+                print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], expa_list[i]), file=f_ml_expan_CH)
+            if cp_list[i] is not None:
                 print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], cp_list[i]), file=f_ml_cp_CH)
-
-            if p_list[i] == 1:
-                print('%s %i %.3e' % (smiles, t_list[i], hvap_list[i][0]), file=f_ml_hvap_CH)
 
 
 if __name__ == '__main__':
-    get_npt_result(limit=None)
+    get_npt_result(limit=100)
     write_data(n_mol_per_file=1000)
     write_ml_data()

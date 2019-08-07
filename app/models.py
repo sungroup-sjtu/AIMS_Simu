@@ -24,17 +24,14 @@ NotNullColumn = partial(Column, nullable=False)
 
 def init_simulation(procedure, extend=False):
     from mstools.simulation import gmx as simulationEngine
-    kwargs = {'packmol_bin': Config.PACKMOL_BIN,
-              'dff_root'   : Config.DFF_ROOT,
-              'dff_table'  : Config.DFF_TABLE,
-              'gmx_bin'    : current_app.config['GMX_BIN'],
-              'gmx_mdrun'  : current_app.config['GMX_MDRUN'],
-              'jobmanager' : current_app.jobmanager
+    kwargs = {'packmol'   : current_app.packmol,
+              'dff'       : current_app.dff,
+              'gmx'       : current_app.gmx,
+              'jobmanager': current_app.jobmanager
               }
     if extend:
         kwargs.update({
-            'gmx_bin'   : current_app.config['EXTEND_GMX_BIN'],
-            'gmx_mdrun' : current_app.config['EXTEND_GMX_MDRUN'],
+            'gmx'       : current_app.gmx_extend,
             'jobmanager': current_app.jm_extend
         })
 

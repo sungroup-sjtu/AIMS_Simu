@@ -6,6 +6,7 @@ The IUPAC names are obtained from NIST database, or None if not exist.
 '''
 
 import sys
+import csv
 
 sys.path.append('..')
 
@@ -16,7 +17,8 @@ from app.models_nist import NistMolecule
 smiles_list = set()
 npt = create_app('npt')
 with npt.app_context():
-    for task in db.session.query(Task):
+    tasks = Task.query.filter(Task.remark == None)
+    for task in tasks:
         post_result = task.get_post_result()
         if post_result is None or post_result['density-poly4'][-1] < 0.999:
             continue
@@ -24,7 +26,8 @@ with npt.app_context():
 
 slab = create_app('nvt-slab')
 with slab.app_context():
-    for task in db.session.query(Task):
+    tasks = Task.query.filter(Task.remark == None)
+    for task in tasks:
         post_result = task.get_post_result()
         if post_result is None:
             continue
@@ -34,10 +37,13 @@ with npt.app_context():
     nist_smiles_iupac = dict(db.session.query(NistMolecule.smiles, NistMolecule.name).all())
     nist_smiles_cas = dict(db.session.query(NistMolecule.smiles, NistMolecule.cas).all())
 
-print('smiles', 'iupac', 'cas', 'source', sep='\t')
+fout = open('mols.csv', 'w')
+fcsv = csv.writer(fout, quoting=csv.QUOTE_ALL)
+
+fcsv.writerow(['smiles', 'iupac', 'cas', 'source', 'category'])
 for smiles in smiles_list:
     iupac = nist_smiles_iupac.get(smiles, None)
     cas = nist_smiles_cas.get(smiles, None)
     source = None if iupac is None else 'NIST'
 
-    print(smiles, iupac or 'unknown', cas or 'unknown', source or 'unknown', sep='\t')
+    fcsv.writerow([smiles, iupac or 'unknown', cas or 'unknown', source or 'unknown', sys.argv[1]])

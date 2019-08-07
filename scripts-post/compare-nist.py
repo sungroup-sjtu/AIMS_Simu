@@ -137,9 +137,9 @@ class StatAction():
 
             task = self.task_list[i]
             post_data = task.get_post_data(T, P)
-            if post_data.get('error') is not None:
-                continue
             dens_sim = post_data['density']
+            if dens_sim is None:
+                continue
 
             dens_list.append([nist.smiles, value / 1000, uncertainty / 1000, dens_sim])
 
@@ -170,10 +170,10 @@ class StatAction():
 
             task = self.task_list[i]
             post_data = task.get_post_data(T, P)
-            if post_data.get('error') is not None:
-                continue
             cp_inter = post_data['cp_inter']
             cp_pv = post_data['cp_pv']
+            if cp_inter is None or cp_pv is None:
+                continue
             cp_sim = cp_inter + cp_pv + cv.get_post_data(T)
 
             cp_list.append([nist.smiles, value, uncertainty, cp_sim])
@@ -201,9 +201,9 @@ class StatAction():
 
             task = self.task_list[i]
             post_data = task.get_post_data(T, P)
-            if post_data.get('error') is not None:
-                continue
             hvap_sim = post_data['hvap']
+            if hvap_sim is None:
+                continue
 
             ### Correction for hvap
             hvap_sim = hvap_sim - nist.n_nothx / 15 * (8.314 * T) / 1000
@@ -239,12 +239,13 @@ class StatAction():
             post_data = task.get_post_data(T, P)
             cp_inter = post_data['cp_inter']
             cp_pv = post_data['cp_pv']
-            cp_sim = cp_inter + cp_pv + cv.get_post_data(T)
-
             dens = post_data['density']  # g/mL
             expan = post_data['expansion']  # /K
             compr = post_data['compress']  # /bar
+            if None in [cp_inter, cp_pv, dens, expan, compr]:
+                continue
 
+            cp_sim = cp_inter + cp_pv + cv.get_post_data(T)
             cv_sim = cp_sim - T * nist.weight / dens * expan ** 2 / compr * 0.1  # J/mol.K
             sound_sim = (cp_sim / cv_sim / compr / dens) ** 0.5 * 10  # m/s
 
@@ -426,38 +427,38 @@ def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
     return p, bad_list
 
 
+def write_plot(name, data):
+    png, bad_list = get_png_from_data(name, data)
+    name = name.replace(' ', '_')
+    with open(f'_{name}.png', 'wb') as f:
+        f.write(png.getvalue())
+    with open(f'_{name}.txt', 'w') as f:
+        for item in bad_list:
+            f.write('\t'.join(map(str, item)) + '\n')
+
+
 def compare_npt():
     with open(sys.argv[2]) as f:
         smiles_list = f.read().splitlines()
 
     action = StatAction()
     action.TP_list = {
-        # 'Tm25': [],
+        'Tm25': [],
         'Tvap': [],
-        # 'Tc85': [],
+        'Tc85': [],
     }
     action.update_mol_task_list(smiles_list)
     print(len(action.nist_list))
 
-    k_data_exp_sim_list = [
-        # ('density @ Tm+', action.get_density_nist(_T='Tm25')),
-        ('density @ Tvap', action.get_density_nist(_T='Tvap')),
-        # ('density @ T0.85*', action.get_density_nist(_T='Tc85'),
-        # ('Cp @ Tm+', action.get_cp_nist(_T='Tm25')),
-        ('Cp @ Tvap', action.get_cp_nist(_T='Tvap')),
-        # ('Cp @ T0.85*', action.get_cp_nist(_T='Tc85')),
-        # ('Hvap @ Tm+', action.get_hvap_nist(_T='Tm25')),
-        ('Hvap @ Tvap', action.get_hvap_nist(_T='Tvap')),
-        # ('Hvap @ T0.85*', action.get_hvap_nist(_T='Tc85')),
-    ]
-    for k, v in k_data_exp_sim_list:
-        png, bad_list = get_png_from_data(k, v)
-        name = k.replace(' ', '_')
-        with open(f'_{name}.png', 'wb') as f:
-            f.write(png.getvalue())
-        with open(f'_{name}.txt', 'w') as f:
-            for item in bad_list:
-                f.write('\t'.join(map(str, item)) + '\n')
+    write_plot('density @ Tm+', action.get_density_nist(_T='Tm25'))
+    write_plot('density @ Tvap', action.get_density_nist(_T='Tvap'))
+    write_plot('density @ T0.85*', action.get_density_nist(_T='Tc85'))
+    write_plot('Cp @ Tm+', action.get_cp_nist(_T='Tm25'))
+    write_plot('Cp @ Tvap', action.get_cp_nist(_T='Tvap'))
+    write_plot('Cp @ T0.85*', action.get_cp_nist(_T='Tc85'))
+    write_plot('Hvap @ Tm+', action.get_hvap_nist(_T='Tm25'))
+    write_plot('Hvap @ Tvap', action.get_hvap_nist(_T='Tvap'))
+    write_plot('Hvap @ T0.85*', action.get_hvap_nist(_T='Tc85'))
 
 
 def compare_slab():
@@ -473,19 +474,9 @@ def compare_slab():
     action.update_mol_slab_list(smiles_list)
     print(len(action.nist_list))
 
-    k_data_exp_sim_list = [
-        ('surface tension @ Tvap', action.get_st_nist(_T='Tvap')),
-        ('critical temperature', action.get_tc_nist()),
-        ('critical density', action.get_dc_nist()),
-    ]
-    for k, v in k_data_exp_sim_list:
-        png, bad_list = get_png_from_data(k, v)
-        name = k.replace(' ', '_')
-        with open(f'_{name}.png', 'wb') as f:
-            f.write(png.getvalue())
-        with open(f'_{name}.txt', 'w') as f:
-            for item in bad_list:
-                f.write('\t'.join(map(str, item)) + '\n')
+    write_plot('surface tension @ Tvap', action.get_st_nist(_T='Tvap'))
+    write_plot('critical temperature', action.get_tc_nist())
+    write_plot('critical density', action.get_dc_nist())
 
 
 if __name__ == '__main__':

@@ -66,12 +66,17 @@ https://doi.org/10.1021/acs.jcim.8b00407
 
 ## Scripts for data post-processing and analyzing
 Several scripts are provided for post-processing and analysing the simulation data. They are located at `scripts` and `scripts-post`
-1. Fitting the simulation data at different temperature and pressure. So that properties and derivatives at arbitrary T or P can be obtained. Normally this should be prior to any other analyzing  
-  `./scripts-post/post-process.py [npt, nvt-slab]`
-2. Dump the simulation data from sqlite database to `csv` file, which can be uploaded into `AIMS_Web` database  
+1. Fitting the simulation data at different temperature and pressure. So that properties and derivatives at arbitrary T or P can be obtained.  
+   **This should be performed prior to any other analyzing**  
+  `./scripts/post-process.py [npt, nvt-slab]`
+2. Remark molecules containing specific groups (e.g. halide, cyclo-ester) as `bad` molecules, which will not be dumped in following steps  
+  `./scripts/remark.py [npt, nvt-slab]`
+3. Dump the molecules from sqlite database to `mols.csv` file. The category should be specified, which is necessary for uploading to `AIMS_Web` database  
+  `./scripts/dummp-mols.py [small molecule, ionic liquid, ...]`  
+4. Dump the simulation data from sqlite database to `csv` file, which can be uploaded into `AIMS_Web` database  
   `./scripts/dummp-data-npt.py`  
   `./scripts/dummp-data-nvt-slab.py`
-2. Compare with NIST Experimental data  
+5. Compare with NIST Experimental data  
    * Make sure that `nist.sqlite` exists in `database` folder  
    * Prepare a file which lists the SMILES of molecules you want to compare. An example is given as `smiles-nist.txt`
    * Run following script to compare simulation and expt data and plot the results  
