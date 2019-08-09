@@ -12,6 +12,7 @@ app = create_app(sys.argv[1])
 app.app_context().push()
 
 smarts_bad = {
+    # Not covered by TEAM FF
     'radicalC'                     : '[#6;v0,v1,v2,v3]',
     '*=*=*'                        : '*=*=*',
     '*#*~*#*'                      : '*#*~*#*',
@@ -31,13 +32,15 @@ smarts_bad = {
     'triazine(zole)'               : '[$(nnn),$(nnan),$(nanan)]',
     '[R3]'                         : '[R3]',
     '[r3,r4;R2]'                   : '[r3,r4;R2]',
-    '[r3,r4,r5;#6X3]'              : '[r3,r4,r5;#6X3]',
-    '[r3,r4,r5]~[!#6]'             : '[r3,r4,r5]~[!#6]',
+    '[r3,r4;#6X3]'                 : '[r3,r4;#6X3]',
+    '[r3,r4]~[!#6]'                : '[r3,r4]~[!#6]',
     'nitrate'                      : 'O[NX3](~[OX1])~[OX1]',
     'amide'                        : 'O=C[NX3]',
     'acyl-halide'                  : 'O=C[F,Cl,Br]',
     'polybenzene'                  : 'c1ccc2c(c1)cccc2',
-    # move from good to bad
+    # Covered by TEAM FF but the results are not good
+    '[r5;#6X3]'                    : '[r5;#6X3]',
+    '[r5]~[!#6]'                   : '[r5]~[!#6]',
     'cyclo-ester'                  : '[C;R](=O)O',
     'C=C~[O,N;H0]'                 : 'C=C~[O,N;H0]',
     'C=C-X'                        : 'C=C[F,Cl,Br]',

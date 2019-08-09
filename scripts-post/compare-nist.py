@@ -105,8 +105,11 @@ class StatAction():
         return T
 
     def get_P_nist(self, nist: NistMolecule, T):
-        if nist is None:
+        if nist is None or nist.tb is None:
             return None
+
+        if T < nist.tb + 1:
+            return 1 # bar
 
         spline_pvap = nist.splines.filter(NistSpline.property_id == prop_pvap.id).first()
         if spline_pvap is None:

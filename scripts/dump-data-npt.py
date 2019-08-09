@@ -10,6 +10,7 @@ from app import create_app
 from app.models import Task
 from app.models_cv import Cv
 from mstools.formula import Formula
+from mstools.utils import is_alkane
 
 app = create_app('npt')
 app.app_context().push()
@@ -47,6 +48,8 @@ def get_npt_result(limit=None):
         category = 'All'
         if set(f.atomdict.keys()) == {'C', 'H'}:
             category = 'CH'
+            if is_alkane(py_mol):
+                category = 'Ane'
 
         ### For ML, Only select molecules with n_heavy >= 4
         ml = True
@@ -103,6 +106,10 @@ def write_data(n_mol_per_file=int(1e9)):
         print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'density-l', *den_list[i]), file=f_All)
         print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'einter-l', *ei_list[i]), file=f_All)
         print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'compressibility-l', *comp_list[i]), file=f_All)
+        ### Hvap only for alkane
+        if category_list[i] == 'Ane' and p_list[i] == 1 and hvap_list[i] is not None:
+            print('%s,%i,%f,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], math.nan, 'hvap-lg', *hvap_list[i]), file=f_All)
+        ### expan and Cp are derivatives
         if expa_list[i] is not None:
             print('%s,%i,%i,%s,%.3e,%.1e,TEAM_MGI' % (smiles, t_list[i], p_list[i], 'expansion-l', expa_list[i], math.nan), file=f_All)
         if cp_list[i] is not None:
@@ -112,12 +119,14 @@ def write_data(n_mol_per_file=int(1e9)):
 def write_ml_data():
     f_ml_All = open('result-ML-All-npt.txt', 'w')
     f_ml_CH = open('result-ML-CH-npt.txt', 'w')
+    f_ml_hvap_Ane = open('result-ML-Ane-hvap.txt', 'w')
     f_ml_cp_All = open('result-ML-All-cp.txt', 'w')
     f_ml_cp_CH = open('result-ML-CH-cp.txt', 'w')
     f_ml_expan_All = open('result-ML-All-expan.txt', 'w')
     f_ml_expan_CH = open('result-ML-CH-expan.txt', 'w')
     print('SMILES T P density einter compress', file=f_ml_All)
     print('SMILES T P density einter compress', file=f_ml_CH)
+    print('SMILES T P hvap', file=f_ml_hvap_Ane)
     print('SMILES T P cp', file=f_ml_cp_All)
     print('SMILES T P cp', file=f_ml_cp_CH)
     print('SMILES T P expan', file=f_ml_expan_All)
@@ -133,7 +142,11 @@ def write_ml_data():
         if cp_list[i] is not None:
             print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], cp_list[i]), file=f_ml_cp_All)
 
-        if category_list[i] == 'CH':
+        if category_list[i] == 'Ane':
+            if p_list[i] == 1 and hvap_list[i] is not None:
+                print('%s %i %.3e' % (smiles, t_list[i], hvap_list[i][0]), file=f_ml_hvap_Ane)
+
+        if category_list[i] in ['CH', 'Ane']:
             print('%s %i %i %.3e %.3e %.3e' % (smiles, t_list[i], p_list[i], den_list[i][0], ei_list[i][0], comp_list[i][0]), file=f_ml_CH)
             if expa_list[i] is not None:
                 print('%s %i %i %.3e' % (smiles, t_list[i], p_list[i], expa_list[i]), file=f_ml_expan_CH)
@@ -142,6 +155,6 @@ def write_ml_data():
 
 
 if __name__ == '__main__':
-    get_npt_result(limit=100)
+    get_npt_result(limit=None)
     write_data(n_mol_per_file=1000)
     write_ml_data()
