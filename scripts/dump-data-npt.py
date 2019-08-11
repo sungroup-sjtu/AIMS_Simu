@@ -126,7 +126,7 @@ def write_ml_data():
     f_ml_expan_CH = open('result-ML-CH-expan.txt', 'w')
     print('SMILES T P density einter compress', file=f_ml_All)
     print('SMILES T P density einter compress', file=f_ml_CH)
-    print('SMILES T P hvap', file=f_ml_hvap_Ane)
+    print('SMILES T hvap', file=f_ml_hvap_Ane)
     print('SMILES T P cp', file=f_ml_cp_All)
     print('SMILES T P cp', file=f_ml_cp_CH)
     print('SMILES T P expan', file=f_ml_expan_All)
