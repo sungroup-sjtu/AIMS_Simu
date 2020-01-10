@@ -7,7 +7,7 @@ def task_selection(task, select=True, rule='not select'):
     # specific_list: molecule must contain at least one atom types in specific list.
     # addition_list：all the atom types in molecule must in (basic_list + specific_list + addition_list).
     # set addition_list = None to ignore this criterion
-    # rule='alkane'
+    # rule = 'ionic liquid'
     if rule == 'not select' or not select:
         return True
     elif rule == 'alkane':
@@ -130,6 +130,12 @@ def task_selection(task, select=True, rule='not select'):
         reject_list = []
         addition_list = None
         ring = None
+    elif rule == 'ionic liquid':
+        basic_list = []
+        specific_list = []
+        reject_list = ['br0-', 'i_0-']
+        addition_list = None
+        ring = None
     else:
         basic_list = []
         specific_list = []
@@ -144,17 +150,17 @@ def task_selection(task, select=True, rule='not select'):
         if reject_atom in atom_type_list:
             return False
     if addition_list is not None:
-        for rule in atom_type_list:
-            if rule not in basic_list and rule not in specific_list and rule not in addition_list:
+        for atom_type in atom_type_list:
+            if atom_type not in basic_list and atom_type not in specific_list and atom_type not in addition_list:
                 return False
-    for rule in basic_list:
-        if rule not in atom_type_list:
+    for atom_type in basic_list:
+        if atom_type not in atom_type_list:
             return False
-    for rule in specific_list:
-        if rule in atom_type_list:
+    for atom_type in specific_list:
+        if atom_type in atom_type_list:
             break
     else:
-        if specific_list != []:
+        if specific_list:
             return False
     smiles_list = json.loads(task.smiles_list)
     if ring is not None:

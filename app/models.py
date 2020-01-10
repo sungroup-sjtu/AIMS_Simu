@@ -134,7 +134,7 @@ class Compute(db.Model):
     def __repr__(self):
         return '<Compute: %i: %s>' % (self.id, self.remark)
 
-    def create_tasks(self, alter_task=False, unambiguity=True):
+    def create_tasks(self, alter_task=False, unambiguity=True, create_task=True):
         # alter_task: alter the t_list and p_list of exist task
         # unambiguity: if the smiles is ambiguous (do not assigned stereo-conformation), do not create task
         current_app.logger.info('Create tasks from %s' % self)
@@ -174,11 +174,10 @@ class Compute(db.Model):
                 if procedure not in current_app.config['ALLOWED_PROCEDURES']:
                     raise Exception('Invalid procedure for this config')
 
-                # Ignore existed task
+                smiles_list = [get_canonical_smiles(smiles) for smiles in smiles_list]
                 tasks = Task.query.filter(Task.smiles_list == json.dumps(smiles_list)).filter(
                     Task.procedure == procedure). \
                     filter(Task.n_mol_ratio == json.dumps(n_mol_ratio))
-
                 # get t p list from prior task
                 if prior_procedure is not None:
                     prior_tasks = Task.query.filter(Task.smiles_list == json.dumps(smiles_list)).filter(
@@ -222,8 +221,9 @@ class Compute(db.Model):
                             task.stage = Compute.Stage.BUILDING
                             task.status = Compute.Status.DONE
                         db.session.commit()
+                # Ignore existed task
                 # add a new task
-                elif tasks.count() == 0:
+                elif tasks.count() == 0 and create_task:
                     task = Task()
                     if Task.query.count() != 0:
                         task.id = Task.query.order_by(Task.id)[-1].id + 1
@@ -397,7 +397,10 @@ class Task(db.Model):
         return json.loads(self.t_list)
 
     def get_p_list(self):
-        return json.loads(self.p_list)
+        if self.p_list != '[]':
+            return json.loads(self.p_list)
+        else:
+            return [None]
 
     @classmethod
     def get_task(cls, smiles, procedure='npt'):
@@ -764,7 +767,7 @@ class Task(db.Model):
 
         for t in t_list:
             for p in p_list:
-                current_app.logger.info('Post-process, t=%i,p=%i task=%s' % (t, p, self))
+                current_app.logger.info('Post-process, t=%i,p=%i task=%s' % (t, p or 0, self))
                 jobs = self.jobs.filter(Job.t == t).filter(Job.p == p).filter(Job.converged)
                 if jobs.count() == 0:
                     continue
@@ -840,7 +843,7 @@ class Task(db.Model):
 
         sim = init_simulation(self.procedure)
         post_result, post_info = sim.post_process(T_list=T_list, P_list=P_list, result_list=result_list,
-                                                      n_mol_list=json.loads(self.n_mol_list))
+                                                  n_mol_list=json.loads(self.n_mol_list))
 
         if post_result is not None:
             self.post_result = json.dumps(post_result)
@@ -860,10 +863,13 @@ class Task(db.Model):
             data_list = []
             for job in jobs:
                 tl, data = get_t_property_list(dir=job.dir, property=property, weight=weight, name=name)
+                if tl is None or data is None:
+                    continue
                 t_list.append(tl)
                 data_list.append(data)
                 if not (tl.size == data.size == t_list[0].size == data_list[0].size):
-                    raise Exception('%s error' % (job))
+                    t_list.remove(tl)
+                    data_list.remove(data)
             # calculate averaged viscosity and its std over many independent parallel simulations
             mean = np.linspace(0, 0, data_list[0].size)  # averaged value of target property
             stderr = np.linspace(0, 0, data_list[0].size)  # stderr

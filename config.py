@@ -29,7 +29,10 @@ class Config:
 
     # simulation details setting
     NATOMS = 3000 # least number of atoms build in simulation box.
-    NMOLS = 120 # least number of molecules build in simulation box.
+    if DFF_TABLE == 'IL':
+        NMOLS = 120 # least number of molecules build in simulation box.
+    else:
+        NMOLS = 60
     LJ96 = False # using LJ 9-6 non-bonded potential
     DIFF_GK = False # using green-kubo method to calculate the diffusion constant. (Expensive, not suggest)
     DEBUG = False # if true: do not delete the trajectory file in analyze process.

@@ -24,6 +24,7 @@ app = create_app(procedure)
 app.app_context().push()
 app.test_request_context().push()
 
+
 def submit(json_dict):
     computeAction = ComputeAction()
     try:
@@ -36,6 +37,7 @@ def submit(json_dict):
         return json.dumps({'success'   : True,
                            'compute_id': compute_id,
                            })
+
 
 json_dict = {
     'id': 1,

@@ -1,5 +1,6 @@
 from mstools.utils import get_T_list_from_range, random_string
 
+
 def get_t_min_max(Tvap=None, Tfus=None, Tc=None):
     if Tvap is None:
         return None, None
@@ -18,6 +19,7 @@ def get_t_min_max(Tvap=None, Tfus=None, Tc=None):
     if t_min >= t_max:
         return None, None
     return t_min, t_max
+
 
 def get_sim_t_list(Tvap=None, Tm=None, Tc=None):
     t_min, t_max = get_t_min_max(Tvap=Tvap, Tfus=Tm, Tc=Tc)

@@ -17,7 +17,8 @@ from app.models_nist import NistMolecule, NistProperty, NistSpline
 from app.models_cv import Cv
 from app.selection import task_selection
 
-class StatAction():
+
+class StatAction:
     def __init__(self):
         self.nist_list = []
         self.task_list = []
@@ -31,7 +32,8 @@ class StatAction():
 
     def update_mol_task_list(self, procedure):
         print('Get molecule list')
-        tasks = Task.query.filter(Task.procedure == procedure).filter(Task.status.in_((Compute.Status.ANALYZED, Compute.Status.DONE)))
+        tasks = Task.query.filter(Task.procedure == procedure).filter(
+            Task.status.in_((Compute.Status.ANALYZED, Compute.Status.DONE)))
         for task in tasks:
             print(task)
             if task_selection(task, select=opt.selection):
@@ -57,6 +59,7 @@ class StatAction():
                         P = self.get_P_nist(nist, T)
 
                     self.TP_list[_T].append((T, P))
+
     '''
     def update_mol_slab_list(self):
         print('Get molecule list')
@@ -116,7 +119,7 @@ class StatAction():
             return None
 
         if T < nist.tb + 1:
-            return 1 # bar
+            return 1  # bar
 
         spline_pvap = nist.splines.filter(NistSpline.property_id == prop_pvap.id).first()
         if spline_pvap is None:
@@ -213,10 +216,10 @@ class StatAction():
             for t in t_list:
                 v, u = spline.get_data(t)
                 p = self.get_P_nist(nist, t)
-                if p==None:
+                if p == None:
                     continue
                 p_d = task.get_post_data(t, p)
-                if p_d.get('liquid enthalpy')==None:
+                if p_d.get('liquid enthalpy') == None:
                     continue
                 hl_exp_list.append(v)
                 hl_sim_list.append(p_d.get('liquid enthalpy') + cv.get_post_enthalpy(T))
@@ -224,7 +227,7 @@ class StatAction():
             # hl_list.append([nist.smiles, value, uncertainty, hl_sim + shift])
             shift1 = hl_exp_list[0]
             shift2 = hl_sim_list[0]
-            hl_list.append([nist.smiles, value-shift1, uncertainty, hl_sim - shift2])
+            hl_list.append([nist.smiles, value - shift1, uncertainty, hl_sim - shift2])
             '''
             f = open(str(i),'w')
             for j, t in enumerate(t_list):
@@ -233,7 +236,7 @@ class StatAction():
             '''
         print('')
         return hl_list
-    
+
     def get_sound_nist(self, _T=298):
         print('Get cSound from nist')
         sound_list = []
@@ -383,7 +386,7 @@ class StatAction():
         return dgas_list
 
 
-def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
+def get_png_from_data(name, data_exp_sim_list, threthold=0.5, error_range=30):
     exp_list = []
     sim_list = []
     dev_list = []
@@ -415,7 +418,7 @@ def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
     sp1.plot(exp_list, sim_list, '.', alpha=0.7)
 
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    if len(exp_list)!=0:
+    if len(exp_list) != 0:
         text = '%s\n%i molecules\nMDEV = %.1f %%\nMUD = %.1f %%' \
                % (name, len(exp_list), np.mean(dev_list), np.mean(absdev_list))
     else:
@@ -423,7 +426,7 @@ def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
                % (name, len(exp_list))
     sp1.text(0.05, 0.95, text, transform=sp1.transAxes, va='top', bbox=props)
 
-    y, _ = np.histogram(absdev_list, bins=30, range=[0, 30])
+    y, _ = np.histogram(absdev_list, bins=error_range, range=[0, error_range])
     x = (_[1:] + _[:-1]) / 2
     sp2 = fig.add_subplot(132)
     sp2.set_xlabel('Unsigned deviation (%)')
@@ -432,13 +435,13 @@ def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
 
     if len(exp_list) != 0:
         text = 'Unsigned deviation to expt. data\n%s\n%i molecules\nMUD = %.1f %%' \
-           % (name, len(exp_list), np.mean(absdev_list))
+               % (name, len(exp_list), np.mean(absdev_list))
     else:
         text = 'Unsigned deviation to expt. data\n%s\n%i molecules\nMUD = None %%' \
                % (name, len(exp_list))
     sp2.text(0.95, 0.95, text, transform=sp2.transAxes, va='top', ha='right', bbox=props)
 
-    y, _ = np.histogram(u_list, bins=30, range=[0, 30])
+    y, _ = np.histogram(u_list, bins=error_range, range=[0, error_range])
     x = (_[1:] + _[:-1]) / 2
     sp3 = fig.add_subplot(133)
     sp3.set_xlabel('Uncertainty (%)')
@@ -447,7 +450,7 @@ def get_png_from_data(name, data_exp_sim_list, threthold=0.5):
 
     if len(exp_list) != 0:
         text = 'Uncertainty of expt. data\n%s\n%i molecules\nMean uncertainty = %.1f %%' \
-           % (name, len(exp_list), np.mean(u_list))
+               % (name, len(exp_list), np.mean(u_list))
     else:
         text = 'Uncertainty of expt. data\n%s\n%i molecules\nMean uncertainty = None %%' \
                % (name, len(exp_list))
@@ -471,7 +474,6 @@ def write_plot(name, data):
 
 
 def compare_npt():
-
     action = StatAction()
     action.TP_list = {
         'Tm25': [],
@@ -496,7 +498,6 @@ def compare_npt():
 
 
 def compare_slab():
-
     action = StatAction()
     action.TP_list = {
         # 'Tm25': [],
@@ -514,6 +515,7 @@ def compare_slab():
 
 if __name__ == '__main__':
     import argparse
+
     parser = argparse.ArgumentParser(description='This is a code to compare simulation results with experimental \
         results. For one property, a png file will generated show the detailed comparison between \
         simulation and experiment')

@@ -5,58 +5,66 @@ import sys
 
 sys.path.append('..')
 from app import create_app
+from app.models import *
 from app.models_nist import *
 from app.models_ilthermo import Property, Ion, Molecule, Spline, Data
+from app.models_cv import Cv
 from sqlalchemy import or_, and_
 from app.selection import *
 
 import argparse
 
 parser = argparse.ArgumentParser(description='This is a code to generate input txt from experimental data')
-parser.add_argument('-t', '--type', type=str, help='The type of the output(SIMU, ML)')
-parser.add_argument('-e', '--exp', type=str, help='The type of the experimental database(ILTHERMO, NIST)')
-parser.add_argument('-s', '--smiles', type=str,
-                    help='The smiles list(exp, CH). CH means you need CH-Tvap.txt and CH-Tc.txt files in current folder')
+parser.add_argument('-t', '--type', type=str, help='The type of the output(FromEXP, FromTXT)')
+parser.add_argument('-e', '--expdb', type=str, help='The type of the experimental database(ILTHERMO, NIST)')
+parser.add_argument('-s', '--smiles', type=str, help='The smiles list(exp, CH). CH means you need CH-Tvap.txt and '
+                                                     'CH-Tc.txt files in current folder')
 parser.add_argument('--temperature', type=int, help='Only consider the experimental data contain specific temperat',
                     default=None)
+parser.add_argument('--tc', type=str, help='The txt file for smiles and Tc', default=None)
+parser.add_argument('--tvap', type=str, help='The txt file for smiles and Tvap', default=None)
 opt = parser.parse_args()
 app = create_app('npt')
 app.app_context().push()
+
+
+def has_exp_data(_Data, _mol, _property, temperature=None, pressure=1, least_data_points=5):
+    datas = Data.query.filter(_Data.molecule == _mol).filter(_Data.property == _property).filter(
+        or_(_Data.p == None, and_(_Data.p > 98 * pressure, _Data.p < 102 * pressure))).order_by(_Data.t)
+    if datas.count() >= least_data_points:
+        if temperature is None or datas[0].t < temperature < datas[-1].t:
+            return True
+    return False
+
+
 # get input of ionic liquids with experimental data, used in force field validation
-if opt.type == 'SIMU' and opt.exp == 'ILTHERMO' and opt.smiles == 'exp':
-    def has_exp_data(mol, property, temperature=None, pressure=1):
-        datas = Data.query.filter(Data.molecule == mol).filter(Data.property == property).filter(
-            or_(Data.p == None, and_(Data.p > 98 * pressure, Data.p < 102 * pressure))).order_by(Data.t)
-        if datas.count() > 0:
-            if temperature is None or datas[0].t < temperature < datas[-1].t:
-                return True
-        return False
-
-
-    def write_txt(property, txt):
-        f = open(txt, 'w')
-        mols = Molecule.query
-        if property == prop_cp:
+if opt.type == 'FromEXP' and opt.expdb == 'ILTHERMO':
+    def write_txt(_property, txt):
+        file = open(txt, 'w')
+        molecules = Molecule.query
+        if _property == prop_cp:
             cation_list = []
             anion_list = []
-        for mol in mols:
+        for mol in molecules:
             if mol.cation.force_field_support != 1 or mol.anion.force_field_support != 1:
                 continue
-            if has_exp_data(mol, property, temperature=opt.temperature):
-                f.write('%i.%i %s.%s 1.1\n' % (mol.cation_id, mol.anion_id, mol.cation.smiles, mol.anion.smiles))
-                if property == prop_cp:
+            if has_exp_data(Data, mol, _property, temperature=opt.temperature):
+                file.write('%i.%i %s.%s 1.1\n' % (mol.cation_id, mol.anion_id, mol.cation.smiles, mol.anion.smiles))
+                if _property == prop_cp:
                     if mol.cation not in cation_list:
                         cation_list.append(mol.cation)
                     if mol.anion not in anion_list:
                         anion_list.append(mol.anion)
-        f.close()
-        if property == prop_cp:
-            f = open('cp_qm.txt', 'w')
+        file.close()
+        if _property == prop_cp:
+            file = open('cp_qm.txt', 'w')
             for cation in cation_list:
-                f.write('%i %s 1\n' % (cation.id, cation.smiles))
+                if Cv.query.filter(Cv.smiles == cation.smiles).first() is None:
+                    file.write('%i %s 1\n' % (cation.id, cation.smiles))
             for anion in anion_list:
-                f.write('%i %s 1\n' % (anion.id, anion.smiles))
-            f.close()
+                if Cv.query.filter(Cv.smiles == anion.smiles).first() is None:
+                    file.write('%i %s 1\n' % (anion.id, anion.smiles))
+            file.close()
 
     prop_density = Property.query.filter(Property.name == 'Density').first()
     prop_cp = Property.query.filter(Property.name == 'Heat capacity at constant pressure').first()
@@ -69,16 +77,7 @@ if opt.type == 'SIMU' and opt.exp == 'ILTHERMO' and opt.smiles == 'exp':
     write_txt(prop_vis, 'vis.txt')
     write_txt(prop_diff, 'diff.txt')
 # get input of organic liquids with experimental data, used in force field validation
-elif opt.type == 'SIMU' and opt.exp == 'NIST' and opt.smiles == 'exp':
-    def has_exp_data(mol, property, temperature=None, pressure=1):
-        datas = NistData.query.filter(NistData.molecule == mol).filter(NistData.property == property).filter(
-            or_(NistData.p == None, and_(NistData.p > 98 * pressure, NistData.p < 102 * pressure))).order_by(NistData.t)
-        if datas.count() > 0:
-            if temperature is None or datas[0].t < temperature < datas[-1].t:
-                return True
-        return False
-
-
+elif opt.type == 'FromEXP' and opt.expdb == 'NIST' and opt.smiles == 'exp':
     def write_txt(property, txt):
         f = open(txt, 'w')
         mols = NistMolecule.query.filter(NistMolecule.n_heavy < 21)
@@ -90,7 +89,7 @@ elif opt.type == 'SIMU' and opt.exp == 'NIST' and opt.smiles == 'exp':
                 continue
             if not IsCH(mol.smiles):
                 continue
-            if has_exp_data(mol, property, temperature=opt.temperature):
+            if has_exp_data(NistData, mol, property, temperature=opt.temperature):
                 T_list = mol.get_sim_t_list()
                 if T_list is None:
                     continue
@@ -104,25 +103,40 @@ elif opt.type == 'SIMU' and opt.exp == 'NIST' and opt.smiles == 'exp':
     write_txt(prop_vis, 'vis.txt')
 # get input of organic liquids, you need to prepare name-Tvap.txt and name-Tc.txt files.
 # The Tvap and Tc can be get from machine learning, using AIMS_ML
-elif opt.type == 'SIMU' and opt.exp == 'NIST' and opt.smiles != 'exp':
+elif opt.type == 'FromTXT' and opt.tc is not None and opt.tvap is not None:
     import pandas as pd
-    tc_f = '%s-Tc.txt' % opt.smiles
+    tc_f = '%s' % opt.tc
     info = pd.read_csv(tc_f, sep='\s+', header=0)
     smiles_list = info['SMILES'].to_list()
     Tc_list = info['Result'].to_list()
     # print(smiles_list, Tc_list)
-    tvap_f = '%s-Tvap.txt' % opt.smiles
+    tvap_f = '%s' % opt.tvap
     info = pd.read_csv(tvap_f, sep='\s+', header=0)
     if not smiles_list == info['SMILES'].to_list():
         raise Exception('SMILES in %s and %s must be the same' % (tc_f, tvap_f))
     Tvap_list = info['Result'].to_list()
+    smiles_list = [get_canonical_smiles(smiles) for smiles in smiles_list]
 
     f = open('input.txt', 'w')
+    f_qm = open('qm.txt', 'w')
     for i, smiles in enumerate(smiles_list):
-        mol = Molecule.query.filter(Molecule.smiles == smiles).first()
+        mol = NistMolecule.query.filter(Molecule.smiles == smiles).first()
         if mol is None:
             T_list = get_sim_t_list(Tvap=Tvap_list[i], Tm=None, Tc=Tc_list[i])
         else:
             T_list = get_sim_t_list(Tvap=mol.Tvap or Tvap_list[i], Tm=mol.Tfus, Tc=mol.Tc or Tc_list[i])
         P_list = [1, 50, 100, 250, 500, 750, 1000]
-        f.write('%s\t%s\t1\t%s\t%s\n' % (random_string(), smiles, ','.join(list(map(str, T_list))), ','.join(list(map(str, P_list)))))
+        rs = random_string()
+        f.write('%s\t%s\t1\t%s\t%s\n' % (rs, smiles, ','.join(list(map(str, T_list))), ','.join(list(map(str, P_list)))))
+        if Cv.query.filter(Cv.smiles == smiles).first() is None:
+            f_qm.write('%s\t%s\t\n' % (rs, smiles))
+# get input of dft calculation
+elif opt.type == 'FromSIM':
+    f_qm = open('qm.txt', 'w')
+    tasks = Task.query.filter(Task.procedure == 'npt').filter(Task.status != -1)
+    for task in tasks:
+        smiles_list = json.loads(task.smiles_list)
+        for smiles in smiles_list:
+            if Cv.query.filter(Cv.smiles == smiles).first() is None:
+                rs = random_string()
+                f_qm.write('%s\t%s\t\n' % (rs, smiles))

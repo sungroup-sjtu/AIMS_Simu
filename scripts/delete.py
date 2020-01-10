@@ -10,7 +10,8 @@ import argparse
 parser = argparse.ArgumentParser(description='This is a code to delete all the information related to a specific compute')
 parser.add_argument('-p', '--procedure', type=str, help='procedure of the compute: npt(ppm), or nvt-slab')
 parser.add_argument('-i', '--id', type=int, help='The specific compute id to delete', default=0)
-parser.add_argument('-it', '--idtask', type=int, help='The specific task id to delete', default=0)
+parser.add_argument('-ti', '--taskid', type=int, help='The specific task id to delete', default=0)
+parser.add_argument('--unstarted', type=bool, help='delete all unstarted tasks', default=False)
 parser.add_argument('--unfinished', type=bool, help='delete all unfinished tasks', default=False)
 opt = parser.parse_args()
 
@@ -27,9 +28,14 @@ if opt.id != 0:
         else:
             raise Exception('Compute %i is not a %s (procedure) compute' % (opt.id, procedure))
     db.session.delete(compute)
-elif opt.idtask != 0:
+elif opt.taskid != 0:
     task = Task.query.filter(Task.id == opt.idtask).first()
     task.remove()
+elif opt.unstarted:
+    tasks = Task.query.filter(Task.procedure == procedure)
+    for task in tasks:
+        if task.stage != Compute.Stage.RUNNING:
+            task.remove()
 elif opt.unfinished:
     tasks = Task.query.filter(Task.procedure == procedure)
     for task in tasks:

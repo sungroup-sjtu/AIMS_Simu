@@ -20,7 +20,7 @@ tasks = Task.query.filter(Task.procedure == procedure)
 print('Total task = %i' % (tasks.count()))
 count = 1
 for task in tasks:
-    sys.stdout.write('\rpresent task = %i\n' % (count))
+    sys.stdout.write('\rpresent task = %i\n' % count)
     count += 1
     task.post_process(overwrite=opt.overwrite)
     task.get_LJ_atom_type()

@@ -30,7 +30,7 @@ app = create_app('npt')
 app.app_context().push()
 
 
-class Mol():
+class Mol:
     def __init__(self, name, smiles, formula=None):
         self.name = name
         self.smiles = smiles

@@ -7,6 +7,8 @@ from sqlalchemy import func, or_
 sys.path.append('..')
 from app import create_app
 from app.models import *
+
+
 # necessary functions
 def detect_exit():
     os.chdir(CWD)
@@ -14,10 +16,14 @@ def detect_exit():
         print('EXIT file detected')
         os.remove('EXIT-' + procedure)
         sys.exit()
+
+
 def process_pbs_job(n_pbs=20):
     for pbs_job in PbsJob.query.filter(PbsJob.submitted == False).limit(n_pbs):
         detect_exit()
         pbs_job.submit()
+
+
 def process_task_build(n_task=20, random=False):
     tasks = Task.query.filter(Task.stage == Compute.Stage.SUBMITTED).filter(Task.status == Compute.Status.DONE).filter(
         Task.procedure == procedure)
@@ -28,6 +34,8 @@ def process_task_build(n_task=20, random=False):
         task.build()
         if task.stage == Compute.Stage.BUILDING and task.status == Compute.Status.DONE:
             task.run()
+
+
 def process_task_run(n_task=20, random=False):
     tasks = Task.query.filter(Task.stage == Compute.Stage.BUILDING).filter(Task.status == Compute.Status.DONE).filter(
         Task.procedure == procedure)
@@ -37,6 +45,8 @@ def process_task_run(n_task=20, random=False):
         detect_exit()
         if task.run() == -1:
             break
+
+
 def process_task_check(n_task=20):
     app.jobmanager.update_stored_jobs()
     app.jm_extend.update_stored_jobs()
@@ -45,6 +55,8 @@ def process_task_check(n_task=20):
     for task in tasks:
         detect_exit()
         task.check_finished_multiprocessing()
+
+
 def process_extend(n_job=None):
     jobs_extend_tmp = Job.query.filter(Job.status == Compute.Status.ANALYZED).filter(Job.converged == False) \
         .filter(Job.cycle < Config.EXTEND_CYCLE_LIMIT)
@@ -182,6 +194,8 @@ def process_extend(n_job=None):
         return 0
     else:
         return n_pbs_extend
+
+
 def process_post_process():
     current_app.logger.info('Post process finished tasks')
     tasks = Task.query.filter(Task.procedure == procedure).filter(Task.post_result == None)
@@ -193,12 +207,15 @@ def process_post_process():
         task.post_process(overwrite=False)
         task.get_LJ_atom_type()
 
+
 def config_check():
     if Config.LJ96:
         if current_app.config['PBS_ARGS'][0] == 'gtx' or current_app.config['EXTEND_PBS_ARGS'][0] == 'gtx':
             print('GPU cannot use for LJ96 job')
             return False
     return True
+
+
 # in ppm simulation, in a task, if the viscosity of highest temperature
 def extend_unfinished_jobs():
     current_app.logger.info('Continue abnormally terminated ppm jobs')
@@ -206,6 +223,8 @@ def extend_unfinished_jobs():
     for task in tasks:
         for job in task.jobs:
             job.continue_terminated_job()
+
+
 def process_task_bug_fix():
     # In npt simulation. sometimes the simulation will ended abnormally due to unstable initial structure,
     # this problem may be fixed by rebuild the system using large system
@@ -235,6 +254,8 @@ def process_task_bug_fix():
     # '(sqlite3.DatabaseError) database disk image is malformed'
     # so far cannot fix it directly, using following function to reanalyze the result
     '''
+
+
 # this function is used, when you increase the REPEAT_NUMBER in config.py, to generate more repeated jobs with
 # different random seed
 def check_tasks_jobs():
@@ -244,6 +265,7 @@ def check_tasks_jobs():
 
 
 import argparse
+
 parser = argparse.ArgumentParser(description='This is a code to monitor the high-throughput simulation')
 parser.add_argument('-p', '--procedure', type=str, help='procedure of the compute: npt(ppm), or nvt-slab')
 opt = parser.parse_args()
@@ -273,4 +295,3 @@ while True:
 
     app.logger.info('Sleep 1800 seconds ...')
     time.sleep(1800)
-

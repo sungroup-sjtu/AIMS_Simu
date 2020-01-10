@@ -16,6 +16,7 @@ from app.models_cv import Cv
 from app.selection import task_selection
 from mstools.smiles.smiles import *
 
+
 class StatAction():
     def __init__(self):
         self.mol_list = []
@@ -103,6 +104,8 @@ class StatAction():
             # get experimental value
             for spline in splines:
                 v, u = spline.get_data(T)
+                if u < 0:
+                    continue
                 if property in [prop_vis, prop_diff, prop_econ] and VTF:
                     v = spline.get_VTF_data(T)
                 if v is None:
@@ -115,8 +118,7 @@ class StatAction():
                     v *= 1000
                     u *= 1000
                 elif property == prop_diff:
-                    v *= 1e-5
-                    u *= 1e-5
+                    value_sim *= 1e5
                 relative_error = (value_sim - v) / v
                 if relative_error < re_min:
                     re_min = relative_error
@@ -126,7 +128,8 @@ class StatAction():
             value_list.append([mol.smiles(), value, uncertainty, value_sim])
         return value_list
 
-def get_png_from_data(name, data_exp_sim_list, threthold=100):
+
+def get_png_from_data(name, data_exp_sim_list, threthold=100, error_range=30):
     exp_list = []
     sim_list = []
     dev_list = []
@@ -166,7 +169,7 @@ def get_png_from_data(name, data_exp_sim_list, threthold=100):
                % (name, len(exp_list))
     sp1.text(0.05, 0.95, text, transform=sp1.transAxes, va='top', bbox=props)
 
-    y, _ = np.histogram(absdev_list, bins=30, range=[0, 30])
+    y, _ = np.histogram(absdev_list, bins=error_range, range=[0, error_range])
     x = (_[1:] + _[:-1]) / 2
     sp2 = fig.add_subplot(132)
     sp2.set_xlabel('Unsigned deviation (%)')
@@ -181,7 +184,7 @@ def get_png_from_data(name, data_exp_sim_list, threthold=100):
                % (name, len(exp_list))
     sp2.text(0.95, 0.95, text, transform=sp2.transAxes, va='top', ha='right', bbox=props)
 
-    y, _ = np.histogram(u_list, bins=30, range=[0, 30])
+    y, _ = np.histogram(u_list, bins=error_range, range=[0, error_range])
     x = (_[1:] + _[:-1]) / 2
     sp3 = fig.add_subplot(133)
     sp3.set_xlabel('Uncertainty (%)')
@@ -202,6 +205,7 @@ def get_png_from_data(name, data_exp_sim_list, threthold=100):
 
     return p, bad_list
 
+
 def write_plot(name, data):
     png, bad_list = get_png_from_data(name, data)
     name = name.replace(' ', '_')
@@ -210,6 +214,7 @@ def write_plot(name, data):
     with open(f'_{name}.txt', 'w') as f:
         for item in bad_list:
             f.write('\t'.join(map(str, item)) + '\n')
+
 
 def compare_npt():
     action = StatAction()
@@ -232,6 +237,7 @@ def compare_npt():
     write_plot('cp-T=400', action.get_property(property=prop_cp, property_name='cp', T=400))
     write_plot('cp-T=450', action.get_property(property=prop_cp, property_name='cp', T=450))
 
+
 def compare_ppm():
     action = StatAction()
     action.update_mol_task_list('ppm')
@@ -244,6 +250,7 @@ def compare_ppm():
     write_plot('vis_ppm-T=350', action.get_property(property=prop_vis, property_name='viscosity', T=350))
     write_plot('vis_ppm-T=400', action.get_property(property=prop_vis, property_name='viscosity', T=400))
     write_plot('vis_ppm-T=450', action.get_property(property=prop_vis, property_name='viscosity', T=450))
+
 
 def compare_nvt_multi():
     action = StatAction()
