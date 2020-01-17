@@ -1078,22 +1078,24 @@ class Job(db.Model):
 
             # Using Temperature dependent parameters or not
             if Config.DFF_TABLE == 'IL':
-                drde = False
+                T_basic = 350
+                drde = True
             elif Config.DFF_TABLE == 'MGI':
+                T_basic = 298
                 drde = True
             else:
                 return
             # prepare
             if self.task.procedure in ['npt', 'npt-2', 'npt-3']:
                 commands = sim.prepare(model_dir='../../build', T=self.t, P=self.p, jobname=self.name,
-                                       drde=drde)
+                                       drde=drde, T_basic=T_basic)
             elif self.task.procedure == 'npt-v-rescale':
                 commands = sim.prepare(model_dir='../../build', T=self.t, P=self.p, jobname=self.name,
                                        dt=0.001, nst_trr=50, tcoupl='v-rescale', drde=drde,
                                        acf=True, mstools_dir=Config.MS_TOOLS_DIR)
             elif self.task.procedure == 'npt-multi':
-                commands = sim.prepare(model_dir='../../build', T=self.t, P=self.p, jobname=self.name,
-                                       dt=0.001, nst_edr=5, tcoupl='v-rescale', drde=drde, random_seed=self.repeat_id, nst_trr=50,
+                commands = sim.prepare(model_dir='../../build', T=self.t, P=self.p, jobname=self.name, dt=0.001,
+                                       nst_trr=50, nst_edr=5, tcoupl='v-rescale', drde=drde, random_seed=self.repeat_id,
                                        acf=True, diff_gk=Config.DIFF_GK, mstools_dir=Config.MS_TOOLS_DIR)
             elif self.task.procedure in ['nvt-multi', 'nvt-multi-2', 'nvt-multi-3']:
                 commands = sim.prepare(prior_job_dir=prior_job_dir, T=self.t, jobname=self.name, gro='npt.gro',
