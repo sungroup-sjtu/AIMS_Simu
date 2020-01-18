@@ -183,10 +183,8 @@ def process_extend(n_job=None):
                         time.sleep(0.2)
         else:
             for job in jobs_extend:
-                job.extend()
+                job.extend(hipri=current_app.config.get('HIPRI'))
                 time.sleep(0.2)
-
-
 
     except Exception as e:
         current_app.logger.error('Extend jobs failed %s ' % (repr(e)))

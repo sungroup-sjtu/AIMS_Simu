@@ -113,6 +113,7 @@ class SunRunConfig:
 class SunExtendConfig:
     EXTEND_PBS_NJOB_LIMIT = 200
     EXTEND_PBS_MANAGER = 'slurm'
+    HIPRI = False
     # Use GPU
     EXTEND_PBS_ARGS = ('gtx', 32, 2, 16)
     EXTEND_GMX_MDRUN = 'gmx_gpu mdrun'
