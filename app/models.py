@@ -74,7 +74,7 @@ class PbsJob(db.Model):
     '''
     __tablename__ = 'pbs_job'
     id = NotNullColumn(Integer, primary_key=True)
-    name = NotNullColumn(String(200), unique=True)
+    name = NotNullColumn(String(200))
     sh_file = NotNullColumn(Text)
     extend = NotNullColumn(Boolean, default=False)
     submitted = NotNullColumn(Boolean, default=False)
