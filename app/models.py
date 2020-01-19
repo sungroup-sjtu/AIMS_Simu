@@ -1214,7 +1214,7 @@ class Job(db.Model):
 
         self.run()
 
-    def extend(self):
+    def extend(self, hipri=False):
         if not self.need_extend:
             current_app.logger.warning('Will not extend %s Status: %s' % (self, Compute.Status.text[self.status]))
             return
@@ -1235,7 +1235,7 @@ class Job(db.Model):
             sim.gmx._LJ96 = True
         info = json.loads(self.result)
         if set(info.get('continue')) != [False]:
-            sim.extend(jobname=pbs_name, sh=sh, info=info, dt=sim.dt)
+            sim.extend(jobname=pbs_name, sh=sh, info=info, dt=sim.dt, hipri=hipri)
 
         pbs_job = PbsJob(extend=True)
         pbs_job.name = pbs_name
