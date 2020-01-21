@@ -17,7 +17,7 @@ from app.selection import task_selection
 from mstools.smiles.smiles import *
 
 
-class StatAction():
+class StatAction:
     def __init__(self):
         self.mol_list = []
         self.task_list = []
@@ -104,12 +104,12 @@ class StatAction():
             # get experimental value
             for spline in splines:
                 v, u = spline.get_data(T)
+                if v is None or u is None:
+                    continue
                 if u < 0:
                     continue
                 if property in [prop_vis, prop_diff, prop_econ] and VTF:
                     v = spline.get_VTF_data(T)
-                if v is None:
-                    continue
                 # unit transform
                 if property == prop_density:
                     v /= 1000
