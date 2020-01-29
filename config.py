@@ -3,17 +3,17 @@ import sys
 
 CWD = os.path.dirname(os.path.abspath(__file__))
 
+
 class Config:
     SQLALCHEMY_BINDS = {
-        'cv'  : 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/cv.sqlite'),
+        'cv': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/cv.sqlite'),
         'yaws': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/yaws.sqlite'),
         'nist': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/nist.sqlite'),
         'ilthermo': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/ilthermo.sqlite'),
     }
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
     SQLALCHEMY_TRACK_MODIFICATIONS = True
-    
-    
+
     MS_TOOLS_DIR = os.path.join(CWD, '..', 'AIMS_Tools')
     WORK_DIR = os.path.join(CWD, 'SimulationData')
     RUN_DIR = os.path.join(CWD, 'run')
@@ -28,17 +28,16 @@ class Config:
     PPF = PPF_FILE if os.path.exists(PPF_FILE) else None
 
     # simulation details setting
-    NATOMS = 3000 # least number of atoms build in simulation box.
+    NATOMS = 3000  # least number of atoms build in simulation box.
     if DFF_TABLE == 'IL':
-        NMOLS = 120 # least number of molecules build in simulation box.
+        NMOLS = 120  # least number of molecules build in simulation box.
     else:
         NMOLS = 60
-    LJ96 = False # using LJ 9-6 non-bonded potential
-    DIFF_GK = False # using green-kubo method to calculate the diffusion constant. (Expensive, not suggest)
-    DEBUG = False # if true: do not delete the trajectory file in analyze process.
+    LJ96 = False  # using LJ 9-6 non-bonded potential
+    DIFF_GK = False  # using green-kubo method to calculate the diffusion constant. (Expensive, not suggest)
+    DEBUG = False  # if true: do not delete the trajectory file in analyze process.
 
     EXTEND_CYCLE_LIMIT = 20
-
 
     @classmethod
     def init_app(cls, app):
@@ -75,7 +74,6 @@ class Config:
         if jm_bugfix.is_remote:
             raise Exception('Remote jobmanager is not compatible with bugfix')
 
-
         app.jobmanager = jobmanager
         app.jm_extend = jm_extend
         app.jm_bugfix = jm_bugfix
@@ -86,9 +84,9 @@ class SunRunConfig:
     PBS_MANAGER = 'slurm'
     # Use GPU 
     PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu(hyperthreading), gpu, cpu_request
-    GMX_MDRUN= 'gmx_gpu mdrun'
+    GMX_MDRUN = 'gmx_gpu mdrun'
     GMX_MULTI = True
-    GMX_MULTI_NJOB = 8 # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
+    GMX_MULTI_NJOB = 8  # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
     GMX_MULTI_NOMP = None  # Set the OpenMP threads. When set to None, use only one node and the best number of threads is automatically determined
 
     # Use CPU
@@ -108,7 +106,7 @@ class SunRunConfig:
     PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2018.6'}
     PBS_TIME_LIMIT = 240  # hour
     GMX_BIN = '/share/apps/gromacs/2018.6/bin/gmx_serial'
-    
+
 
 class SunExtendConfig:
     EXTEND_PBS_NJOB_LIMIT = 200
@@ -153,7 +151,7 @@ class SunBugFixConfig:
     # Use FAST
     BUGFIX_PBS_ARGS = ('fast', 12, 0, 12)
     BUGFIX_GMX_MDRUN = 'gmx_fast mdrun'
-    BUGFIX_GMX_MULTI = False #
+    BUGFIX_GMX_MULTI = False  #
 
     BUGFIX_PBS_KWARGS = {'env_cmd': 'module purge; module load icc gromacs/2018.6'}
     BUGFIX_PBS_TIME_LIMIT = 240  # hour
@@ -169,13 +167,13 @@ export I_MPI_PMI_LIBRARY=/usr/lib64/libpmi.so; export I_MPI_FABRICS=shm:dapl
 '''
 
     PBS_NJOB_LIMIT = 180
-    PBS_MANAGER = 'remote_slurm' # Use slurm on remote hpc. Do not use it unless you know exactly the mechanism
+    PBS_MANAGER = 'remote_slurm'  # Use slurm on remote hpc. Do not use it unless you know exactly the mechanism
     PBS_ARGS = ('cpu', 16, 0, 16,)  # partition, cpu(hyperthreading), gpu, cpu_request
     PBS_KWARGS = {
-        'host'      : os.getenv('PI_HOST'),
-        'username'  : 'nishsun-1',
+        'host': os.getenv('PI_HOST'),
+        'username': 'nishsun-1',
         'remote_dir': '/lustre/home/acct-nishsun/nishsun-1/workspace/_REMOTE_SLURM_/',
-        'env_cmd'   : _env_cmd
+        'env_cmd': _env_cmd
     }
     # PBS_SUBMIT_CMD = 'sbatch --reservation=cpu_nishsun'
 
@@ -193,6 +191,7 @@ class NptConfig(Config, SunRunConfig, SunExtendConfig, SunBugFixConfig):
     ALLOWED_PROCEDURES = ['npt', 'ppm', 'npt-v-rescale', 'npt-2', 'npt-3']
     REPEAT_NUMBER = 1
 
+
 class NptMultiConfig(Config, SunRunConfig, SunExtendConfig, SunBugFixConfig):
     DB = 'database/msd.npt.db'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
@@ -200,12 +199,14 @@ class NptMultiConfig(Config, SunRunConfig, SunExtendConfig, SunBugFixConfig):
     ALLOWED_PROCEDURES = ['npt-multi']
     REPEAT_NUMBER = 80
 
+
 class NvtMultiConfig(Config, SunRunConfig, SunExtendConfig, SunBugFixConfig):
     DB = 'database/msd.npt.db'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, DB)
     LOG = os.path.join(CWD, '_log.nvt_multi.txt')
     ALLOWED_PROCEDURES = ['nvt-multi', 'nvt-multi-2', 'nvt-multi-3']
     REPEAT_NUMBER = 80
+
 
 class NvtSlabConfig(Config, SunRunConfig, SunExtendConfig, SunBugFixConfig):
     DB = 'database/msd.nvt-slab.db'
