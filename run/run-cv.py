@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-import sys
+import sys, os
 import pybel
 
 sys.path.append('..')
@@ -30,7 +30,7 @@ app = create_app('npt')
 app.app_context().push()
 
 
-class Mol():
+class Mol:
     def __init__(self, name, smiles, formula=None):
         self.name = name
         self.smiles = smiles
@@ -55,8 +55,8 @@ def get_mols():
             continue
 
         words = line.strip().split()
-        name = words[2]  # str, could be 'None'
-        smiles = words[3]
+        name = words[0]  # str, could be 'None'
+        smiles = words[1]
 
         mol = Mol(name, smiles)
         mol.T_list = [100, 200, 300, 400, 500, 600, 700]
@@ -76,10 +76,10 @@ if __name__ == '__main__':
         n = 0
         mols = get_mols()
         for mol in mols:
-            if Cv.query.filter(Cv.smiles == mol.smiles).count() > 0:
-                continue
+            # if Cv.query.filter(Cv.smiles == mol.smiles).count() > 0:
+                # continue
             n += 1
-            print(n, mol.formula, mol.name + '_' + random_string(4), mol.smiles, sep='\t', file=fout)
+            print(mol.name + '_' + random_string(4), mol.smiles, n, mol.formula, sep='\t', file=fout)
         fout.close()
 
     if cmd == 'cv':
@@ -87,6 +87,8 @@ if __name__ == '__main__':
         cd_or_create_and_cd(os.path.join(Config.WORK_DIR, 'Cv'))
         for mol in mols:
             print(mol)
+            if Cv.query.filter(Cv.smiles == mol.smiles).count() != 0:
+                continue
             try:
                 shutil.rmtree(mol.name)
             except:
@@ -100,8 +102,15 @@ if __name__ == '__main__':
 
     if cmd == 'get-cv':
         fout = open('_cv.log', 'w')
+        fout2 = open('_enthalpy.log', 'w')
         mols = get_mols()
+        print('Total mol = %i' % (len(mols)))
+        count = 1
         for mol in mols:
+            sys.stdout.write('\rpresent mol = %i' % (count))
+            count += 1
+            if Cv.query.filter(Cv.smiles == mol.smiles).count() != 0:
+                continue
             try:
                 os.chdir(os.path.join(Config.WORK_DIR, 'Cv', mol.name))
             except:
@@ -113,21 +122,27 @@ if __name__ == '__main__':
                 result = gauss.analyze()
             except Exception as e:
                 print(mol, str(e), file=fout)
+                print(mol, str(e), file=fout2)
                 continue
 
             T_list = []
             Cv_list = []
+            enthalpy_list = []
             for T, val_stderr in result['Cv-corrected'].items():
                 T_list.append(T)
                 Cv_list.append(val_stderr[0])
+                enthalpy_list.append(result['enthalpy'][T][0])
             if T_list != [100, 200, 300, 400, 500, 600, 700]:
                 print(mol, 'Some temperatures are failed', file=fout)
+                print(mol, 'Some temperatures are failed', file=fout2)
             else:
                 coef, score = polyfit(T_list, Cv_list, 4)
                 print(mol, *coef, score, file=fout)
+                coef, score = polyfit(T_list, enthalpy_list, 2)
+                print(mol, *coef, score, file=fout2)
 
             os.chdir(CWD)
         fout.close()
 
     if cmd == 'save-db':
-        Cv.load_from_log('_cv.log')
+        Cv.load_from_log('_cv.log', '_enthalpy.log')

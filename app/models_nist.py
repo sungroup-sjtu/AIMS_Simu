@@ -1,6 +1,9 @@
 from scipy import interpolate
-import json
+import json, sys
+from config import Config
+sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.formula import Formula
+from .function import *
 from . import db
 from sqlalchemy import Column, Integer, Float, Text, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
@@ -108,6 +111,28 @@ class NistMolecule(db.Model):
             return None
         else:
             return self.tc * 0.8
+
+    def get_t_min_max(self):
+        if self.Tvap is None:
+            return None, None
+
+        if self.Tfus is None:
+            t_min = int(round(self.Tvap * 0.4 + 100))
+        else:
+            t_min = int(round(self.Tfus + 25))
+
+        if self.Tc is None:
+            t_max = int(round(self.Tvap * 1.2))
+        else:
+            t_max = int(round(self.Tc * 0.85))
+        t_max = min(t_max, 650)
+
+        if t_min >= t_max:
+            return None, None
+        return t_min, t_max
+
+    def get_sim_t_list(self):
+        return get_sim_t_list(Tvap=self.Tvap, Tm=self.Tfus, Tc=self.Tc)
 
     @property
     def groups_str(self):

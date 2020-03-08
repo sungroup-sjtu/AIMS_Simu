@@ -6,46 +6,63 @@ Two main scripts accomplish the jobs **submit.py** and **monitor.py**.
 ## To setup on a Linux server
 
 1. Clone AIMS_Simu and AIMS_Tools:  
-    `$git clone https://github.com/sungroup-sjtu/AIMS_Simu'
-
+    It is suggested to put them in same folder.
+    ```
+    git clone https://github.com/sungroup-sjtu/AIMS_Simu  
+    git clone https://github.com/sungroup-sjtu/AIMS_Tools
+    ```
 2. Modify `config.py`  
-  a) Set paths of MS_TOOLS, WORK_DIR, PACKMOL, DFF and DFF database.  
-  b) Select the job queue (fast, gtx, cpu on Cluster 86)  
-  c) Set GROMACS executable  
+    a) Set paths of MS_TOOLS, WORK_DIR, PACKMOL, DFF and DFF database.  
+    b) Select the job queue (fast, gtx, cpu on Cluster 86)  
+    c) Set GROMACS executable  
 
     For example:
     ```
-    MS_TOOLS_DIR = os.path.join(CWD, '../AIMS_Tools')
-    WORK_DIR = '/share/md1400/_MSDServer/'
-    PACKMOL_BIN = '/share/apps/tools/packmol'
-    DFF_ROOT = '/home/gongzheng/apps/DFF/Developing'
-    DFF_TABLE = 'MGI'
-    ...
-    PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu, gpu, cpu_request
-    ...
-    GMX_BIN = '/share/apps/gromacs/2016.6/bin/gmx_serial'
-    GMX_MDRUN = 'gmx_gpu mdrun'
-    # GMX_MDRUN= 'gmx_fast mdrun'
-    GMX_MULTI = True
-    GMX_MULTI_NJOB = 8  # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
-    GMX_MULTI_NOMP = None  # Set the OpenMP threads. When set to None, use only one node and the best number of threads is automatically determined
-
+    force field setting(no default setting):
+        DFF_TABLE = 'MGI' # 'IL'
+    paths setting:
+        MS_TOOLS_DIR = os.path.join(CWD, '..', 'AIMS_Tools') # AIMS_Simu and AIMS_Tools in same folder
+        WORK_DIR = os.path.join(CWD, 'SimulationData') # all simulation data is saved in a new folder AIMS_Simu/SimulationData
+        PACKMOL_BIN = '/share/apps/tools/packmol'
+        DFF_ROOT = '/share/workspace/xiangyan/src/DFF/Developing' # simulation paramters come from this folder
+    PBS settings:
+        ...
+        PBS_ARGS = ('gtx', 32, 2, 16)  # partition, cpu, gpu, cpu_request
+        ...
+        GMX_BIN = '/share/apps/gromacs/2018.6/bin/gmx_serial'
+        GMX_MDRUN = 'gmx_gpu mdrun'
+        # GMX_MDRUN= 'gmx_fast mdrun'
+        GMX_MULTI = True
+        GMX_MULTI_NJOB = 8  # Use -multidir function of GROMACS. For Npt simulation, set it to 8. For NvtSlab simulation, 4 is better
+        GMX_MULTI_NOMP = None  # Set the OpenMP threads. When set to None, use only one node and the best number of threads is automatically determined
+    simulation details settings (default setting is OK):
+        NATOMS = 3000 # least number of atoms build in simulation box.
+        NMOLS = 120 # least number of molecules build in simulation box.
+        LJ96 = False # using LJ 9-6 non-bonded potential
+        DIFF_GK = False # using green-kubo method to calculate the diffusion constant. (Expensive, not suggest)
+        DEBUG = False # if true: do not delete the trajectory file in analyze process.
+        class NvtMultiConfig(Config, SunRunConfig, SunExtendConfig, SunBugFixConfig):
+            REPEAT_NUMBER = 80 # set the number of parallel simulation for nvt-multi
     ```
 
-3. To set up a high-throughput multi-task computation. Prepare a list 
-of molecules in /mols/<fname> and then:  
-    `run/submit.py [npt,nvt-slab] mols/example.txt 'comments'`
+3. To set up a high-throughput computation. Prepare a list of molecules in /mols/<fname> and then:  
+    the example.txt contains 5 columns: name SMILES molecular_ratio t_list p_list  
+    more than 5 points for t_list and p_list is needed, otherwise some analysis and dumps scripts will not work.  
+    `run/submit.py -p [npt,nvt-slab] -i mols/example.txt -r 'comments' -tp assigned`
     
 4. To run the calculations:   
-    `run/monitor.py [npt, nvt-slab]`
-
-    For example:
+    `run/monitor.py -p [npt, nvt-slab]`
+    
+    Available procedures: npt, nvt-slab, ppm(npt), nvt-multi(npt).  
+    ppm(npt) means npt is prerequisite of ppm.  
+    Example for npt procedure:
     ```
     cd run
-    ./submit.py npt mols/example.txt 'testing'
-    ./monitor.py npt 
+    ./submit.py -p npt -i mols/example.txt -r testing -tp assigned
+    ./monitor.py -p npt 
     ```
-5. The results are saved in the WORK_DIR
+
+5. The results are saved in the WORK_DIR. In default, WORK_DIR=AIMS_Simu/SimulationData.
 
 ## QM calculation
 QM calculation for heat capacity is performed by `run-cv.py` script
@@ -68,7 +85,7 @@ https://doi.org/10.1021/acs.jcim.8b00407
 Several scripts are provided for post-processing and analysing the simulation data. They are located at `scripts` and `scripts-post`
 1. Fitting the simulation data at different temperature and pressure. So that properties and derivatives at arbitrary T or P can be obtained.  
    **This should be performed prior to any other analyzing**  
-  `./scripts/post-process.py [npt, nvt-slab]`
+  `./scripts/post-process.py -p [npt, nvt-slab] -o True`
 2. Remark molecules containing specific groups (e.g. halide, cyclo-ester) as `bad` molecules, which will not be dumped in following steps  
   `./scripts/remark.py [npt, nvt-slab]`
 3. Dump the molecules from sqlite database to `mols.csv` file. The category should be specified, which is necessary for uploading to `AIMS_Web` database  
@@ -76,9 +93,21 @@ Several scripts are provided for post-processing and analysing the simulation da
 4. Dump the simulation data from sqlite database to `csv` file, which can be uploaded into `AIMS_Web` database  
   `./scripts/dummp-data-npt.py`  
   `./scripts/dummp-data-nvt-slab.py`
-5. Compare with NIST Experimental data  
+5. You select specific class of molecules in following analysis based on force field atom type, by modify the app/selection.py.
+6. Compare with NIST Experimental data  
    * Make sure that `nist.sqlite` exists in `database` folder  
-   * Prepare a file which lists the SMILES of molecules you want to compare. An example is given as `smiles-nist.txt`
    * Run following script to compare simulation and expt data and plot the results  
-     `./scripts-post/compare-nist.py [npt, nvt-slab] smiles-nist.txt`
-  
+        ```
+        cd scrips-post
+        python3 compare_detail.py -p npt -t nist --selection False
+        python3 compare-nist.py -p npt --selection False
+        ```
+7. Compare with ILTHERMO Experimental data 
+   * Make sure that `ilthermo.sqlite` exists in `database` folder  
+   * Run following script to compare simulation and expt data and plot the results  
+        ```
+        cd scrips-post
+        python3 compare_detail.py -p npt -t ilthermo --selection False
+        python3 compare-nist-il.py -p npt --selection False
+        ```
+

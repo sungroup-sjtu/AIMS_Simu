@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-'''
-Usage: submit.py procedure mols.txt 'remark for this computation'
-'''
-
 import sys
 import json
 
 sys.path.append('..')
-
 from app import create_app
 from app.api.actions import ComputeAction
+from mstools.utils import *
+
+import argparse
+parser = argparse.ArgumentParser(description='This is a code to generate a Compute and corresponding Tasks in high-throughput simulation')
+parser.add_argument('-i', '--input', type=str, help='Input txt file: name smiles mol_ratio')
+parser.add_argument('-p', '--procedure', type=str, help='Procedure line: npt, nvt-slab, ppm')
+parser.add_argument('-r', '--remark', type=str, help='remark of this compute')
+parser.add_argument('-tp', '--temppresstyle', type=str, help='The way to define t_list and p_list')
+parser.add_argument('-a', '--altertask', type=bool, help='Alter t_list and p_list of exist task', default=False)
+opt = parser.parse_args()
 
 # Read in procedure and binds to an app
-procedure = sys.argv[1]
+procedure = opt.procedure
 app = create_app(procedure)
 app.app_context().push()
 app.test_request_context().push()
@@ -23,7 +28,7 @@ app.test_request_context().push()
 def submit(json_dict):
     computeAction = ComputeAction()
     try:
-        compute_id = computeAction.init_from_json_dict(json_dict)
+        compute_id = computeAction.init_from_json_dict(json_dict) # set smiles_repeat True to
     except Exception as e:
         return json.dumps({'success': False,
                            'reason' : str(e)
@@ -33,23 +38,20 @@ def submit(json_dict):
                            'compute_id': compute_id,
                            })
 
-if len(sys.argv) != 4:
-    print(__doc__)
-    sys.exit()
 
 json_dict = {
-    'id'     : 1,
+    'id': 1,
     'user_id': 1,
-    'detail' : {
-        'procedures'  : [procedure],
+    'detail': {
+        'procedures': [procedure],
         'combinations': [],
-        'p'           : [1, 1000]  # bar. This option is useless
     },
-    'remark' : sys.argv[3]
+    'remark': opt.remark,
+    'alter_task': opt.altertask
 }
 
 # Read in the list of molecules to be calculated and validate the list
-with open(sys.argv[2]) as f:
+with open(opt.input) as f:
     lines = f.read().splitlines()
 
 for line in lines:
@@ -57,40 +59,62 @@ for line in lines:
     if line == '' or line.startswith('#'):
         continue
     words = line.split()
-    name = words[2]
-    smiles = words[3]
-    t_fus = words[4]
-    t_vap = words[5]
-    t_c = words[6]
+    name = words[0].split('.')
+    smiles = words[1].split('.')
+    n_mol_ratio = list(map(int, words[2].split('.')))
+    if opt.temppresstyle == 'XY':
+        t_min = 300
+        t_max = 450
+        T_list = get_T_list_from_range(t_min, t_max, 4)
+        P_list = [1]
+        json_dict['detail']['combinations'].append({'smiles': smiles,
+                                                    'names': name,
+                                                    'n_mol_ratio': n_mol_ratio,
+                                                    't_list': T_list,
+                                                    'p_list': P_list,
+                                                    })
+    elif opt.temppresstyle == 'fixed':
+        T_list = [37.78, 60.0, 98.89]
+        for i in range(len(T_list)):
+            T_list[i] += 273.15
+        P_list = [1, 200, 600, 1800, 3000, 6000, 7000, 8000]
+        json_dict['detail']['combinations'].append({'smiles': smiles,
+                                                    'names': name,
+                                                    'n_mol_ratio': n_mol_ratio,
+                                                    't_list': T_list,
+                                                    'p_list': P_list,
+                                                    })
+    elif opt.temppresstyle == 'assigned':
+        T_list = list(map(int, words[3].split(',')))
 
-    if t_vap == 'None':
-        print('!ERROR: Tvap is None: %s' % line)
-        continue
-    t_vap = float(t_vap)
+        if words[4] == 'None':
+            P_list = []
+        else:
+            P = words[4].split(',')
+            P_list = [int(p) for p in P]
 
-    if t_fus == 'None':
-        print('!WARNING: Tfus is None: %s' % line)
-        t_min = int(round(t_vap * 0.4 + 100))
-    else:
-        t_fus = float(t_fus)
-        t_min = int(round(t_fus + 25))
+        json_dict['detail']['combinations'].append({'smiles': smiles,
+                                                'names': name,
+                                                'n_mol_ratio': n_mol_ratio,
+                                                't_list': T_list,
+                                                'p_list': P_list,
+                                                })
+    elif opt.temppresstyle == 'nvt-slab':
+        T_list = list(map(int, words[3].split(',')))
+        P_list = []
 
-    if t_c == 'None':
-        print('!WARNING: Tc is None: %s' % line)
-        t_max = int(round(t_vap * 1.2))
-    else:
-        t_c = float(t_c)
-        t_max = int(round(t_c * 0.85))
-
-    t_max = min(t_max, 650)
-
-    if t_min >= t_max:
-        print('!ERROR: t_min > t_max: %s' % line)
-        continue
-
-    json_dict['detail']['combinations'].append({'smiles': [smiles],
-                                                'names' : [name],
-                                                't'     : [t_min, t_max],
+        json_dict['detail']['combinations'].append({'smiles': smiles,
+                                                'names': name,
+                                                'n_mol_ratio': n_mol_ratio,
+                                                't_list': T_list,
+                                                'p_list': P_list,
+                                                })
+    elif opt.temppresstyle == 'prior':
+        json_dict['detail']['combinations'].append({'smiles': smiles,
+                                                'names': name,
+                                                'n_mol_ratio': n_mol_ratio,
+                                                't_list': [],
+                                                'p_list': [],
                                                 })
 
 if __name__ == '__main__':

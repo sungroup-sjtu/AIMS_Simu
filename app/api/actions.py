@@ -19,7 +19,7 @@ class ComputeAction():
         db.session.commit()
 
         try:
-            compute.create_tasks()
+            compute.create_tasks(alter_task=json_dict['alter_task'])
         except Exception:
             db.session.delete(compute)
             db.session.commit()

@@ -20,7 +20,7 @@ with npt.app_context():
     tasks = Task.query.filter(Task.remark == None)
     for task in tasks:
         post_result = task.get_post_result()
-        if post_result is None or post_result['density-poly4'][-1] < 0.999:
+        if post_result is None or post_result.get('density-poly4') is None or post_result['density-poly4'][-1] < 0.999:
             continue
         smiles_list.add(task.get_smiles_list()[0])
 
