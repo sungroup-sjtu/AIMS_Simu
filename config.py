@@ -7,7 +7,6 @@ CWD = os.path.dirname(os.path.abspath(__file__))
 class Config:
     SQLALCHEMY_BINDS = {
         'cv': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/cv.sqlite'),
-        'yaws': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/yaws.sqlite'),
         'nist': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/nist.sqlite'),
         'ilthermo': 'sqlite:///%s?check_same_thread=False' % os.path.join(CWD, 'database/ilthermo.sqlite'),
     }
@@ -43,6 +42,14 @@ class Config:
     def init_app(cls, app):
         sys.path.append(Config.MS_TOOLS_DIR)
         from mstools.jobmanager import Slurm, Torque, RemoteSlurm
+        from mstools.wrapper.gmx import GMX
+        from mstools.wrapper.dff import DFF
+        from mstools.wrapper.packmol import Packmol
+
+        app.gmx = GMX(gmx_bin=cls.GMX_BIN, gmx_mdrun=cls.GMX_MDRUN)
+        app.gmx_extend = GMX(gmx_bin=cls.EXTEND_GMX_BIN, gmx_mdrun=cls.EXTEND_GMX_MDRUN)
+        app.dff = DFF(dff_root=cls.DFF_ROOT, default_table=cls.DFF_TABLE)
+        app.packmol = Packmol(cls.PACKMOL_BIN)
 
         _pbs_dict = {'slurm': Slurm, 'remote_slurm': RemoteSlurm, 'torque': Torque}
         # run
@@ -80,6 +87,12 @@ class Config:
 
 
 class SunRunConfig:
+    '''
+    This config determines the PBS and GROMACS information for running simulation. Should be very careful
+    GMX_BIN is running on the main node. The environment variables are configured by .bashrc or .zshrc or whatever
+    GMX_MDRUN is running on the compute node. The environment variables are configured by PBS_KWARGS['env_cmd']
+    Make sure that the version of GMX_BIN and GMX_MDRUN are the same
+    '''
     PBS_NJOB_LIMIT = 100
     PBS_MANAGER = 'slurm'
     # Use GPU 
@@ -109,6 +122,9 @@ class SunRunConfig:
 
 
 class SunExtendConfig:
+    '''
+    This config determines the PBS and GROMACS information for extending simulation
+    '''
     EXTEND_PBS_NJOB_LIMIT = 200
     EXTEND_PBS_MANAGER = 'slurm'
     HIPRI = False

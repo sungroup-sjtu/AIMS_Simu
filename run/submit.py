@@ -18,13 +18,13 @@ parser.add_argument('-tp', '--temppresstyle', type=str, help='The way to define 
 parser.add_argument('-a', '--altertask', type=bool, help='Alter t_list and p_list of exist task', default=False)
 opt = parser.parse_args()
 
-
+# Read in procedure and binds to an app
 procedure = opt.procedure
 app = create_app(procedure)
 app.app_context().push()
 app.test_request_context().push()
 
-
+# main function
 def submit(json_dict):
     computeAction = ComputeAction()
     try:
@@ -50,6 +50,7 @@ json_dict = {
     'alter_task': opt.altertask
 }
 
+# Read in the list of molecules to be calculated and validate the list
 with open(opt.input) as f:
     lines = f.read().splitlines()
 

@@ -27,17 +27,14 @@ NotNullColumn = partial(Column, nullable=False)
 
 def init_simulation(procedure, extend=False, bugfix=False):
     from mstools.simulation import gmx as simulationEngine
-    kwargs = {'packmol_bin': Config.PACKMOL_BIN,
-              'dff_root'   : Config.DFF_ROOT,
-              'dff_table'  : Config.DFF_TABLE,
-              'gmx_bin'    : current_app.config['GMX_BIN'],
-              'gmx_mdrun'  : current_app.config['GMX_MDRUN'],
-              'jobmanager' : current_app.jobmanager
+    kwargs = {'packmol'   : current_app.packmol,
+              'dff'       : current_app.dff,
+              'gmx'       : current_app.gmx,
+              'jobmanager': current_app.jobmanager
               }
     if extend:
         kwargs.update({
-            'gmx_bin'   : current_app.config['EXTEND_GMX_BIN'],
-            'gmx_mdrun' : current_app.config['EXTEND_GMX_MDRUN'],
+            'gmx'       : current_app.gmx_extend,
             'jobmanager': current_app.jm_extend
         })
     if bugfix:
@@ -112,7 +109,6 @@ class PbsJob(db.Model):
         :return:
         '''
         return self.jm.is_running(self.name)
-
 
 class Compute(db.Model):
     '''
@@ -594,6 +590,7 @@ class Task(db.Model):
                 # Generate sh for multi simulation based on self.commands
                 multi_dirs = [job.dir for job in jobs_to_run]
                 multi_cmds = json.loads(self.commands)
+                
                 commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
                                                                n_parallel=multi_njob,
                                                                n_gpu=current_app.jobmanager.ngpu,
