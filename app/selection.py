@@ -1,5 +1,36 @@
-import json
+import json, sys
+from config import Config
+sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.smiles.smiles import *
+
+
+class ClassificationAtomType:
+    def __init__(self, AtomicNum=[6]):
+        self.AtomicNum = AtomicNum
+
+
+class ClassificationSMILESSMARTS:
+    def __init__(self, AtomicNum=[6]):
+        self.AtomicNum = AtomicNum
+
+    def classify(self, smiles):
+        rdk_mol = Chem.MolFromSmiles(smiles)
+        py_mol = pybel.readstring('smi', smiles)
+        if not self.__AtomicNumCheck(rdk_mol, self.AtomicNum):
+            return False
+        else:
+            return True
+
+    @staticmethod
+    def __AtomicNumCheck(rdk_mol, AtomicNum):
+        for atom in rdk_mol.GetAtoms():
+            if atom.GetAtomicNum() not in AtomicNum:
+                return False
+        return True
+
+    @staticmethod
+    def __has_ring(rdk_mol):
+        return False if rdk_mol.GetRingInfo().NumRings() == 0 else True
 
 
 def task_selection(task, select=True, rule='not select'):
@@ -171,7 +202,7 @@ def task_selection(task, select=True, rule='not select'):
             return False
     return True
 
-
+'''
 def IsCH(smiles):
     rdk_mol = Chem.MolFromSmiles(smiles)
     if rdk_mol is None:
@@ -180,3 +211,4 @@ def IsCH(smiles):
         if atom.GetAtomicNum() not in [1, 6]:
             return False
     return True
+'''
