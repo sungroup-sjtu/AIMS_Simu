@@ -1,6 +1,5 @@
 import os
 import sys
-
 CWD = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -84,6 +83,11 @@ class Config:
         app.jobmanager = jobmanager
         app.jm_extend = jm_extend
         app.jm_bugfix = jm_bugfix
+
+
+class ClassificationConfig:
+    from app.selection import ClassificationSMILESSMARTS
+    classifyer = ClassificationSMILESSMARTS(AtomicNum=[1, 6, 7, 8])
 
 
 class SunRunConfig:
