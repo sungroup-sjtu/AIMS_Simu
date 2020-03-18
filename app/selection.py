@@ -10,16 +10,29 @@ class ClassificationAtomType:
 
 
 class ClassificationSMILESSMARTS:
-    def __init__(self, AtomicNum=[6]):
+    def __init__(self, AtomicNum=[6], necessary_smarts=[], reject_smarts=[]):
         self.AtomicNum = AtomicNum
+        self.necessary_smarts = necessary_smarts
+        self.reject_smarts = reject_smarts
 
     def classify(self, smiles):
         rdk_mol = Chem.MolFromSmiles(smiles)
+        if rdk_mol is None:
+            print('unreadable SMILES: ', smiles)
+            return False
         py_mol = pybel.readstring('smi', smiles)
+        # Chemical element restriction
         if not self.__AtomicNumCheck(rdk_mol, self.AtomicNum):
             return False
-        else:
-            return True
+        # necessary functional group
+        for smarts in self.necessary_smarts:
+            if len(smarts.findall(py_mol)) == 0:
+                return False
+        # Reject functional group
+        for smarts in self.reject_smarts:
+            if len(smarts.findall(py_mol)) != 0:
+                return False
+        return True
 
     @staticmethod
     def __AtomicNumCheck(rdk_mol, AtomicNum):
