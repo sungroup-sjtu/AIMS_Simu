@@ -67,7 +67,7 @@ def main():
         df_hliq = pd.DataFrame({'SMILES': [], 'T': [], 'hliq': [], 'hliq_u': []})
         molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 3)# .filter(NistMolecule.n_heavy < 21)
         for i, mol in enumerate(molecules):
-            if mol.remark in ['bad', 'mixture']:
+            if mol.remark != 'selected':
                 continue
             sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
             #if not selection(mol.smiles, type='CH'):
