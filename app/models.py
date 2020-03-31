@@ -591,11 +591,12 @@ class Task(db.Model):
                 # Generate sh for multi simulation based on self.commands
                 multi_dirs = [job.dir for job in jobs_to_run]
                 multi_cmds = json.loads(self.commands)
-                
-                commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                               n_parallel=multi_njob,
-                                                               n_gpu=current_app.jobmanager.ngpu,
-                                                               n_omp=current_app.config['GMX_MULTI_NOMP'])
+
+                sim = init_simulation(self.procedure)
+                commands_list = sim.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                   n_parallel=multi_njob,
+                                                                   n_gpu=current_app.jobmanager.ngpu,
+                                                                   n_omp=current_app.config['GMX_MULTI_NOMP'])
                 njobs_command = []
                 n = len(multi_dirs)
                 while True:
