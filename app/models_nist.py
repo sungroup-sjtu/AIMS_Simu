@@ -139,6 +139,23 @@ class NistMolecule(db.Model):
         groups = [group.name for group in self.groups]
         return ', '.join(groups)
 
+    def get_property(self, property, T):
+        spline = self.splines.join(NistProperty).filter(NistProperty == property).first()
+        if spline is None:
+            return None
+        value = spline.get_data(T)[0]
+        if property.name == 'pvap-lg':  # bar
+            return value / 100
+        elif property.name == 'density-lg':  # g/mL
+            return value / 1000
+        elif property.name in ['viscosity-lg', 'st-lg']:  # mPa.s, mN/m
+            return value * 1000
+        elif property.name in ['hvap-lg', 'cp-lg']:  # kJ/mol, J/mol.K
+            return value
+
+    def get_data(self, property):
+        return self.datas.filter(NistData.property == property)
+
     def get_pvap(self, T):
         spline = self.splines.join(NistProperty).filter(NistProperty.name == 'pvap-lg').first()
         if spline is None:

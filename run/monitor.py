@@ -136,10 +136,10 @@ def process_extend(n_job=None):
                                                        sh='_job.extend-%s-%i.sh' % (name, job.cycle + 1), name=name,
                                                        continue_n=continue_n)
 
-                    commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                                   n_parallel=multi_njob,
-                                                                   n_gpu=current_app.jm_extend.ngpu,
-                                                                   n_procs=current_app.jm_extend.nprocs)
+                    commands_list = sim.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                       n_parallel=multi_njob,
+                                                                       n_gpu=current_app.jm_extend.ngpu,
+                                                                       n_procs=current_app.jm_extend.nprocs)
                     extend_dir = os.path.join(current_app.config['WORK_DIR'], procedure, 'extend_sh')
                     if not os.path.exists(extend_dir):
                         os.mkdir(extend_dir)

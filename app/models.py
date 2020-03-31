@@ -110,6 +110,7 @@ class PbsJob(db.Model):
         '''
         return self.jm.is_running(self.name)
 
+
 class Compute(db.Model):
     '''
     A Compute record corresponds to a high throughput computation submitted
@@ -590,11 +591,12 @@ class Task(db.Model):
                 # Generate sh for multi simulation based on self.commands
                 multi_dirs = [job.dir for job in jobs_to_run]
                 multi_cmds = json.loads(self.commands)
-                
-                commands_list = GMX.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
-                                                               n_parallel=multi_njob,
-                                                               n_gpu=current_app.jobmanager.ngpu,
-                                                               n_omp=current_app.config['GMX_MULTI_NOMP'])
+
+                sim = init_simulation(self.procedure)
+                commands_list = sim.gmx.generate_gpu_multidir_cmds(multi_dirs, multi_cmds,
+                                                                   n_parallel=multi_njob,
+                                                                   n_gpu=current_app.jobmanager.ngpu,
+                                                                   n_omp=current_app.config['GMX_MULTI_NOMP'])
                 njobs_command = []
                 n = len(multi_dirs)
                 while True:
@@ -1448,7 +1450,7 @@ class Job(db.Model):
         db.session.commit()
 
 
-class ExtendJob():
+class ExtendJob:
     def __init__(self, job, continue_n):
         self.job = job
         self.continue_n = continue_n
@@ -1461,72 +1463,3 @@ class ExtendJob():
 
     def __gt__(self, other):
         return self.continue_n > other.continue_n
-
-
-'''
-import sys
-from mstools.analyzer.acf import *
-sys.path.append('../AIMS_Simu')
-info = pd.read_csv('diff-System.txt', sep='\s+', header=0)
-t_list = np.array(info['#time(ps)'])
-property_list = np.array(info[Property_dict.get('diffusion constant').get('property_unit')])
-from mstools.analyzer.plot import *
-from mstools.analyzer.fitting import ExpConstfit, ExpConstval
-n_block = len([t for t in t_list if t < 1])
-mean = property_list
-t_list_block = get_block_average(t_list, n_block=n_block)
-bounds = ([0, 0, 0], [100, 100, 100])
-c2, s2 = ExpConstfit(t_list_block[2:], get_block_average(mean * 10 ** (-math.floor(math.log10(mean.mean()))), n_block=n_block)[2:],
-                     bounds=bounds)
-c2[0] *= 10 ** (math.floor(math.log10(mean.mean())))
-c2[1] *= 10 ** (math.floor(math.log10(mean.mean())))
-plot(t_list_block[2:], get_block_average(mean, n_block=n_block)[2:], ExpConstval(t_list_block[2:], c2))
-
-import sys
-from mstools.analyzer.acf import *
-sys.path.append('../AIMS_Simu')
-info = pd.read_csv('diff-MO0.txt', sep='\s+', header=0)
-t_list = np.array(info['#time(ps)'])
-property_list = np.array(info[Property_dict.get('diffusion constant').get('property_unit')])
-from mstools.analyzer.plot import *
-from mstools.analyzer.fitting import ExpConstfit, ExpConstval
-n_block = len([t for t in t_list if t < 1])
-mean = property_list
-t_list_block = get_block_average(t_list, n_block=n_block)
-bounds = ([0, 0, 0], [100, 100, 100])
-c2, s2 = ExpConstfit(t_list_block[2:], get_block_average(mean * 10 ** (-math.floor(math.log10(mean.mean()))), n_block=n_block)[2:],
-                     bounds=bounds)
-c2[0] *= 10 ** (math.floor(math.log10(mean.mean())))
-c2[1] *= 10 ** (math.floor(math.log10(mean.mean())))
-plot(t_list_block[2:], get_block_average(mean, n_block=n_block)[2:], ExpConstval(t_list_block[2:], c2))
-
-import sys
-from mstools.analyzer.acf import *
-sys.path.append('../AIMS_Simu')
-info = pd.read_csv('diff-MO1.txt', sep='\s+', header=0)
-t_list = np.array(info['#time(ps)'])
-property_list = np.array(info[Property_dict.get('diffusion constant').get('property_unit')])
-from mstools.analyzer.plot import *
-from mstools.analyzer.fitting import ExpConstfit, ExpConstval
-n_block = len([t for t in t_list if t < 1])
-mean = property_list
-t_list_block = get_block_average(t_list, n_block=n_block)
-bounds = ([0, 0, 0], [100, 100, 100])
-c2, s2 = ExpConstfit(t_list_block[2:], get_block_average(mean * 10 ** (-math.floor(math.log10(mean.mean()))), n_block=n_block)[2:],
-                     bounds=bounds)
-c2[0] *= 10 ** (math.floor(math.log10(mean.mean())))
-c2[1] *= 10 ** (math.floor(math.log10(mean.mean())))
-plot(t_list_block[2:], get_block_average(mean, n_block=n_block)[2:], ExpConstval(t_list_block[2:], c2))
-
-import sys
-from mstools.analyzer.acf import *
-sys.path.append('../AIMS_Simu')
-info = pd.read_csv('1.txt', sep='\s+', header=0)
-t_list = np.array(info['T'])
-property_list = np.array(info['econ'])
-from mstools.analyzer.plot import *
-from mstools.analyzer.fitting import ExpConstfit, ExpConstval, VTFfit, VTFval
-c, s = VTFfit(t_list, property_list)
-plot(t_list, property_list, VTFval(t_list, c))
-'''
-
