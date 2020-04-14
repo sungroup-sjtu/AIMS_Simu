@@ -3,6 +3,7 @@
 
 import sys
 import pandas as pd
+
 sys.path.append('..')
 from app import create_app
 from app.models import *
@@ -29,6 +30,47 @@ def write_data(_smiles, _training_smiles_list, _t, _p, _property, file, file_tra
                 file_train.write('%s %i %i %.3e\n' % (smiles, _t, _p, _property))
 
 
+def get_exp_data(property, uncertainty=True, T=False):
+    df = pd.DataFrame({'inchi': [], 'SMILES': [], property: []})
+    if uncertainty:
+        df['%s_u' % property] = []
+    if T:
+        df['T'] = []
+
+    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
+    for i, mol in enumerate(molecules):
+        if mol.remark != 'selected':
+            continue
+        sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
+        if T:
+            datas_mol = mol.datas
+            datas = datas_mol.filter(
+                NistData.property == NistProperty.query.filter(NistProperty.name == property).first())
+            if datas is not None:
+                for data in datas:
+                    df.loc[df.shape[0]] = mol.inchi, mol.smiles, data.t, data.value, data.uncertainty
+        else:
+            if property == 'tb':
+                v, u = mol.tb, mol.tb_u
+            elif property == 'tt':
+                v, u = mol.tt, mol.tt_u
+            elif property == 'tc':
+                v, u = mol.tc, mol.tc_u
+            elif property == 'pc':
+                v, u = mol.pc, mol.pc_u
+            elif property == 'dc':
+                v, u = mol.dc, mol.dc_u
+            elif property == 'hfus':
+                v, u = mol.hfus, mol.hfus_u
+            else:
+                v, u = None, None
+            if v is not None:
+                if u is None:
+                    raise Exception('no uncertainty')
+                df.loc[df.shape[0]] = mol.inchi, mol.smiles, v, u
+    df.to_csv('%s.txt' % property, sep=' ', index=False)
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='This is a code to generate input txt from experimental data')
@@ -49,98 +91,9 @@ def main():
     app = create_app(args.procedure)
     app.app_context().push()
     if args.type == 'EXP' and args.database == 'NIST':
-        df_tb = pd.DataFrame({'SMILES': [], 'tb': [], 'tb_u': []})
-        df_tt = pd.DataFrame({'SMILES': [], 'tt': [], 'tt_u': []})
-        df_tc = pd.DataFrame({'SMILES': [], 'tc': [], 'tc_u': []})
-        df_pc = pd.DataFrame({'SMILES': [], 'pc': [], 'pc_u': []})
-        df_dc = pd.DataFrame({'SMILES': [], 'dc': [], 'dc_u': []})
-        df_hfus = pd.DataFrame({'SMILES': [], 'hfus': [], 'fhus_u': []})
-        df_pvap = pd.DataFrame({'SMILES': [], 'T': [], 'pvap': [], 'pvap_u': []})
-        df_dliq = pd.DataFrame({'SMILES': [], 'T': [], 'dliq': [], 'dliq_u': []})
-        df_dgas = pd.DataFrame({'SMILES': [], 'T': [], 'dgas': [], 'dgas_u': []})
-        df_hvap = pd.DataFrame({'SMILES': [], 'T': [], 'hvap': [], 'hvap_u': []})
-        df_cp = pd.DataFrame({'SMILES': [], 'T': [], 'cp': [], 'cp_u': []})
-        df_sound = pd.DataFrame({'SMILES': [], 'T': [], 'sound': [], 'sound_u': []})
-        df_vis = pd.DataFrame({'SMILES': [], 'T': [], 'vis': [], 'vis_u': []})
-        df_st = pd.DataFrame({'SMILES': [], 'T': [], 'st': [], 'st_u': []})
-        df_tctc = pd.DataFrame({'SMILES': [], 'T': [], 'tctc': [], 'tctc_u': []})
-        df_hliq = pd.DataFrame({'SMILES': [], 'T': [], 'hliq': [], 'hliq_u': []})
-        molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 3)# .filter(NistMolecule.n_heavy < 21)
-        for i, mol in enumerate(molecules):
-            if mol.remark != 'selected':
-                continue
-            sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
-            #if not selection(mol.smiles, type='CH'):
-                #continue
-            if mol.tb is not None:
-                df_tb.loc[df_tb.shape[0]] = mol.smiles, mol.tb, mol.tb_u
-            if mol.tt is not None:
-                df_tt.loc[df_tt.shape[0]] = mol.smiles, mol.tt, mol.tt_u
-            if mol.tc is not None:
-                df_tc.loc[df_tc.shape[0]] = mol.smiles, mol.tc, mol.tc_u
-            if mol.pc is not None:
-                df_pc.loc[df_pc.shape[0]] = mol.smiles, mol.pc, mol.pc_u
-            if mol.dc is not None:
-                df_dc.loc[df_dc.shape[0]] = mol.smiles, mol.dc, mol.dc_u
-            if mol.hfus is not None:
-                df_hfus.loc[df_hfus.shape[0]] = mol.smiles, mol.hfus, mol.hfus_u
-            datas_mol = mol.datas
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 1).first())
-            if datas is not None:
-                for data in datas:
-                    df_pvap.loc[df_pvap.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 2).first())
-            if datas is not None:
-                for data in datas:
-                    df_dliq.loc[df_dliq.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 3).first())
-            if datas is not None:
-                for data in datas:
-                    df_dgas.loc[df_dgas.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 4).first())
-            if datas is not None:
-                for data in datas:
-                    df_hvap.loc[df_hvap.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 5).first())
-            if datas is not None:
-                for data in datas:
-                    df_cp.loc[df_cp.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 6).first())
-            if datas is not None:
-                for data in datas:
-                    df_sound.loc[df_sound.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 7).first())
-            if datas is not None:
-                for data in datas:
-                    df_vis.loc[df_vis.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 8).first())
-            if datas is not None:
-                for data in datas:
-                    df_st.loc[df_st.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 9).first())
-            if datas is not None:
-                for data in datas:
-                    df_tctc.loc[df_tctc.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-            datas = datas_mol.filter(NistData.property == NistProperty.query.filter(NistProperty.id == 10).first())
-            if datas is not None:
-                for data in datas:
-                    df_hliq.loc[df_hliq.shape[0]] = mol.smiles, data.t, data.value, data.uncertainty
-        df_tb.to_csv('tb.txt', sep=' ', index=False)
-        df_tt.to_csv('tt.txt', sep=' ', index=False)
-        df_tc.to_csv('tc.txt', sep=' ', index=False)
-        df_pc.to_csv('pc.txt', sep=' ', index=False)
-        df_dc.to_csv('dc.txt', sep=' ', index=False)
-        df_hfus.to_csv('hfus.txt', sep=' ', index=False)
-        df_pvap.to_csv('pvap.txt', sep=' ', index=False)
-        df_dliq.to_csv('dliq.txt', sep=' ', index=False)
-        df_dgas.to_csv('dgas.txt', sep=' ', index=False)
-        df_hvap.to_csv('hvap.txt', sep=' ', index=False)
-        df_cp.to_csv('cp.txt', sep=' ', index=False)
-        df_sound.to_csv('sound.txt', sep=' ', index=False)
-        df_vis.to_csv('vis.txt', sep=' ', index=False)
-        df_st.to_csv('st.txt', sep=' ', index=False)
-        df_tctc.to_csv('tctc.txt', sep=' ', index=False)
-        df_hliq.to_csv('hliq.txt', sep=' ', index=False)
+        get_exp_data('tt')
+        get_exp_data('pc')
+        get_exp_data('tc')
     elif args.type == 'SIM' and args.errormolecules and args.training:
         info = pd.read_csv(args.training, sep='\s+', header=0)
         training_smiles_list = []
