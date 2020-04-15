@@ -5,8 +5,22 @@ from mstools.smiles.smiles import *
 
 
 class ClassificationAtomType:
-    def __init__(self, AtomicNum=[6]):
-        self.AtomicNum = AtomicNum
+    def __init__(self, AllowedAtomicNum=[6]):
+        self.AllowedAtomicNum = AllowedAtomicNum
+
+    def classify(self, inchi):
+        rdk_mol = Chem.MolFromInchi(inchi)
+        if rdk_mol is None:
+            print('unreadable inchi: ', inchi)
+            return False
+        return self.AtomicNumCheck(rdk_mol, self.AllowedAtomicNum)
+
+    @staticmethod
+    def AtomicNumCheck(rdk_mol, AllowedAtomicNum):
+        for atom in rdk_mol.GetAtoms():
+            if atom.GetAtomicNum() not in AllowedAtomicNum:
+                return False
+        return True
 
 
 class ClassificationSMILESSMARTS:
