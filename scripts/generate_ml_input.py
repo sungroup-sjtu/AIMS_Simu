@@ -32,11 +32,12 @@ def write_data(_smiles, _training_smiles_list, _t, _p, _property, file, file_tra
 
 
 def get_exp_data(property, uncertainty=True, T=False):
-    df = pd.DataFrame({'inchi': [], 'SMILES': [], property: []})
-    if uncertainty:
-        df['%s_u' % property] = []
+    df = pd.DataFrame({'inchi': [], 'SMILES': []})
     if T:
         df['T'] = []
+    df['property'] = []
+    if uncertainty:
+        df['%s_u' % property] = []
 
     molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
     for i, mol in enumerate(molecules):
