@@ -10,6 +10,7 @@ from app.models import *
 from app.models_nist import *
 from app.models_cv import Cv
 from app.selection import *
+from mstools.analyzer.fitting import VTFfit
 
 
 def write_data(_smiles, _training_smiles_list, _t, _p, _property, file, file_train, positive=False):
@@ -71,6 +72,35 @@ def get_exp_data(property, uncertainty=True, T=False):
     df.to_csv('%s.txt' % property, sep=' ', index=False)
 
 
+def get_exp_data_fitcoef(property):
+    df = pd.DataFrame({'inchi': [], 'SMILES': []})
+    if property == 'viscosity-lg':
+        df['c1'] = []
+        df['c2'] = []
+        df['c3'] = []
+        df['score'] = []
+    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16).limit(20)
+    for i, mol in enumerate(molecules):
+        if mol.remark != 'selected':
+            continue
+        sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
+        datas_mol = mol.datas
+        datas = datas_mol.filter(
+            NistData.property == NistProperty.query.filter(NistProperty.name == property).first())
+        if datas.count() < 10:
+            continue
+        t_list = []
+        data_list = []
+        if datas is not None:
+            for data in datas:
+                t_list.append(data.t)
+                data_list.append(data.value)
+        if property == 'viscosity-lg':
+            coef, score = VTFfit(t_list, data_list)
+            df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], coef[1], coef[2], score
+    df.to_csv('%s.txt' % property, sep=' ', index=False)
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='This is a code to generate input txt from experimental data')
@@ -91,9 +121,10 @@ def main():
     app = create_app(args.procedure)
     app.app_context().push()
     if args.type == 'EXP' and args.database == 'NIST':
-        get_exp_data('tt')
-        get_exp_data('pc')
-        get_exp_data('tc')
+        #get_exp_data('tt')
+        #get_exp_data('pc')
+        #get_exp_data('tc')
+        get_exp_data_fitcoef('viscosity-lg')
     elif args.type == 'SIM' and args.errormolecules and args.training:
         info = pd.read_csv(args.training, sep='\s+', header=0)
         training_smiles_list = []

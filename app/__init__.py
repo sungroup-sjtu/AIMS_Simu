@@ -23,7 +23,7 @@ def create_app(config_name):
     app.register_blueprint(api, url_prefix='/api')
     app.jinja_env.auto_reload = True
 
-    ### Default app.logger works wired. Replace it with a new logger
+    ### Default app.logger works weried. Replace it with a new logger
     logger = logging.getLogger(config_name)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s    %(levelname)-10s %(message)s')
