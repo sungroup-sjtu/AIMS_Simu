@@ -64,10 +64,23 @@ def get_exp_data(property, uncertainty=True, T=False):
                 v, u = mol.dc, mol.dc_u
             elif property == 'hfus':
                 v, u = mol.hfus, mol.hfus_u
+            elif property == 'st':
+                spline = mol.splines.filter(NistSpline.property_id == 8).first()
+                if mol.tb is not None and spline is not None:
+                    v, u = spline.get_data(T=mol.tb)
+                else:
+                    v, u = None, None
+            elif property == 'vis':
+                spline = mol.splines.filter(NistSpline.property_id == 7).first()
+                if mol.tb is not None and spline is not None:
+                    v, u = spline.get_data(T=mol.tb)
+                else:
+                    v, u = None, None
             else:
                 v, u = None, None
             if v is not None:
                 if u is None:
+                    print(v, u)
                     raise Exception('no uncertainty')
                 df.loc[df.shape[0]] = mol.inchi, mol.smiles, v, u
     df.to_csv('%s.txt' % property, sep=' ', index=False)
@@ -125,7 +138,8 @@ def main():
         #get_exp_data('tt')
         #get_exp_data('pc')
         #get_exp_data('tc')
-        get_exp_data_fitcoef('viscosity-lg')
+        #get_exp_data_fitcoef('viscosity-lg')
+        get_exp_data('st')
     elif args.type == 'SIM' and args.errormolecules and args.training:
         info = pd.read_csv(args.training, sep='\s+', header=0)
         training_smiles_list = []
