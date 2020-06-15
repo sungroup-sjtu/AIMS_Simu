@@ -17,7 +17,6 @@ classifier = ClassificationAtomType(
 for i, mol in enumerate(molecules):
     sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
     rdk_mol = Chem.MolFromInchi(mol.inchi)
-    mol.smiles = Chem.MolToSmiles(rdk_mol)
     if '.' in mol.smiles:
         mol.remark = 'mixture'
     elif rdk_mol is None:
@@ -27,4 +26,5 @@ for i, mol in enumerate(molecules):
             mol.remark = 'selected'
         else:
             mol.remark = 'non-accurate inchi'
+        mol.smiles = Chem.MolToSmiles(rdk_mol)
     db.session.commit()
