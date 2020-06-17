@@ -95,7 +95,7 @@ def get_exp_data_fitcoef(property, repeat=100):
         df['c1_u'] = []
         df['c2_u'] = []
         df['c3_u'] = []
-    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16).limit(20)
+    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
     for i, mol in enumerate(molecules):
         if mol.remark != 'selected':
             continue
@@ -160,7 +160,7 @@ def get_exp_data_fitcoef_old(property):
         df['c2'] = []
         df['c3'] = []
         df['score'] = []
-    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16).limit(20)
+    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
     for i, mol in enumerate(molecules):
         if mol.remark != 'selected':
             continue
