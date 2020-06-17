@@ -112,6 +112,8 @@ def get_exp_data_fitcoef(property, repeat=100):
             for data in datas:
                 if data.value is None or data.uncertainty is None:
                     continue
+                if data.uncertainty / data.value > 1.0:
+                    continue
                 t_list.append(data.t)
                 v_list.append(data.value)
                 u_list.append(data.uncertainty)
@@ -119,7 +121,14 @@ def get_exp_data_fitcoef(property, repeat=100):
             # print(len(v_list), len(u_list))
             coef_list = []
             j = 0
+            k = 0
             while j < repeat:
+                k += 1
+                if k == repeat * 10:
+                    break
+                if len(v_list) < 5:
+                    k = repeat * 10
+                    break
                 data = np.random.normal(
                     loc=v_list,
                     scale=u_list,
@@ -127,13 +136,54 @@ def get_exp_data_fitcoef(property, repeat=100):
                 )
                 if data.min() < 0:
                     continue
-                coef, score = VTFfit(t_list, data)
-                coef_list.append(coef)
-                j += 1
+                try:
+                    coef, score = VTFfit(t_list, data)
+                except:
+                    k = repeat * 10
+                    break
+                else:
+                    coef_list.append(coef)
+                    j += 1
+            if k == repeat * 10:
+                continue
             coef_v = np.mean(coef_list, axis=0)
             coef_u = np.std(coef_list, axis=0)
             df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef_v[0], coef_v[1], \
                                   coef_v[2], coef_u[0], coef_u[1], coef_u[2],
+    df.to_csv('%s.txt' % property, sep=' ', index=False)
+
+
+def get_exp_data_fitcoef_old(property):
+    df = pd.DataFrame({'inchi': [], 'SMILES': []})
+    if property == 'viscosity-lg':
+        df['c1'] = []
+        df['c2'] = []
+        df['c3'] = []
+        df['score'] = []
+    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16).limit(20)
+    for i, mol in enumerate(molecules):
+        if mol.remark != 'selected':
+            continue
+        sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
+        datas_mol = mol.datas
+        datas = datas_mol.filter(
+            NistData.property == NistProperty.query.filter(NistProperty.name == property).first())
+        if datas.count() < 10:
+            continue
+        t_list = []
+        v_list = []
+        u_list = []
+        if datas is not None:
+            for data in datas:
+                if data.value is None or data.uncertainty is None:
+                    continue
+                t_list.append(data.t)
+                v_list.append(data.value)
+                u_list.append(data.uncertainty)
+        if property == 'viscosity-lg':
+            coef, score = VTFfit(t_list, v_list)
+            df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], coef[1], \
+                                  coef[2], score
     df.to_csv('%s.txt' % property, sep=' ', index=False)
 
 
@@ -161,6 +211,7 @@ def main():
         #get_exp_data('pc')
         #get_exp_data('tc')
         get_exp_data_fitcoef('viscosity-lg')
+        get_exp_data_fitcoef_old('viscosity-lg')
         # get_exp_data('st')
     elif args.type == 'SIM' and args.errormolecules and args.training:
         info = pd.read_csv(args.training, sep='\s+', header=0)
