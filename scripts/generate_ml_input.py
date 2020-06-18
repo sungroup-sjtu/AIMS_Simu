@@ -181,9 +181,13 @@ def get_exp_data_fitcoef_old(property):
                 v_list.append(data.value)
                 u_list.append(data.uncertainty)
         if property == 'viscosity-lg':
-            coef, score = VTFfit(t_list, v_list)
-            df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], coef[1], \
-                                  coef[2], score
+            try:
+                coef, score = VTFfit(t_list, v_list)
+            except:
+                continue
+            else:
+                df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], coef[1], \
+                                      coef[2], score
     df.to_csv('%s.txt' % property, sep=' ', index=False)
 
 
