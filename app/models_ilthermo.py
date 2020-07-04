@@ -113,7 +113,10 @@ class Molecule(db.Model):
         return '<Molecule: %i %s>' % (self.id, self.name)
 
     def smiles(self):
-        return self.cation.smiles + '.' + self.anion.smiles
+        if self.cation.smiles is None or self.anion.smiles is None:
+            return None  # '%i.%i' % (self.cation.id, self.anion.id)
+        else:
+            return self.cation.smiles + '.' + self.anion.smiles
 
 
 class Data(db.Model):

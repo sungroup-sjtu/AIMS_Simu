@@ -9,8 +9,9 @@ from app import create_app
 from app.models import *
 from app.models_nist import *
 from app.models_cv import Cv
+from app.models_ilthermo import *
 from app.selection import *
-from mstools.analyzer.fitting import VTFfit
+from mstools.analyzer.fitting import VTFfit, fit_vle_dminus, fit_vle_dplus
 
 
 def write_data(_smiles, _training_smiles_list, _t, _p, _property, file, file_train, positive=False):
@@ -29,166 +30,6 @@ def write_data(_smiles, _training_smiles_list, _t, _p, _property, file, file_tra
             file.write('%s %i %i %.3e\n' % (smiles, _t, _p, _property))
             if _smiles in _training_smiles_list:
                 file_train.write('%s %i %i %.3e\n' % (smiles, _t, _p, _property))
-
-
-def get_exp_data(property, uncertainty=True, T=False):
-    df = pd.DataFrame({'inchi': [], 'SMILES': []})
-    if T:
-        df['T'] = []
-    df['property'] = []
-    if uncertainty:
-        df['%s_u' % property] = []
-
-    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
-    for i, mol in enumerate(molecules):
-        if mol.remark != 'selected':
-            continue
-        sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
-        if T:
-            datas_mol = mol.datas
-            datas = datas_mol.filter(
-                NistData.property == NistProperty.query.filter(NistProperty.name == property).first())
-            if datas is not None:
-                for data in datas:
-                    df.loc[df.shape[0]] = mol.inchi, mol.smiles, data.t, data.value, data.uncertainty
-        else:
-            if property == 'tb':
-                v, u = mol.tb, mol.tb_u
-            elif property == 'tt':
-                v, u = mol.tt, mol.tt_u
-            elif property == 'tc':
-                v, u = mol.tc, mol.tc_u
-            elif property == 'pc':
-                v, u = mol.pc, mol.pc_u
-            elif property == 'dc':
-                v, u = mol.dc, mol.dc_u
-            elif property == 'hfus':
-                v, u = mol.hfus, mol.hfus_u
-            elif property == 'st':
-                spline = mol.splines.filter(NistSpline.property_id == 8).first()
-                if mol.tb is not None and spline is not None:
-                    v, u = spline.get_data(T=mol.tb)
-                else:
-                    v, u = None, None
-            elif property == 'vis':
-                spline = mol.splines.filter(NistSpline.property_id == 7).first()
-                if mol.tb is not None and spline is not None:
-                    v, u = spline.get_data(T=mol.tb)
-                else:
-                    v, u = None, None
-            else:
-                v, u = None, None
-            if v is not None:
-                if u is None:
-                    print(v, u)
-                    raise Exception('no uncertainty')
-                df.loc[df.shape[0]] = mol.inchi, mol.smiles, v, u
-    df.to_csv('%s.txt' % property, sep=' ', index=False)
-
-
-def get_exp_data_fitcoef(property, repeat=100):
-    df = pd.DataFrame({'inchi': [], 'SMILES': []})
-    if property == 'viscosity-lg':
-        df['c1'] = []
-        df['c2'] = []
-        df['c3'] = []
-        df['c1_u'] = []
-        df['c2_u'] = []
-        df['c3_u'] = []
-    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
-    for i, mol in enumerate(molecules):
-        if mol.remark != 'selected':
-            continue
-        sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
-        datas_mol = mol.datas
-        datas = datas_mol.filter(
-            NistData.property == NistProperty.query.filter(NistProperty.name == property).first())
-        if datas.count() < 10:
-            continue
-        t_list = []
-        v_list = []
-        u_list = []
-        if datas is not None:
-            for data in datas:
-                if data.value is None or data.uncertainty is None:
-                    continue
-                if data.uncertainty / data.value > 1.0:
-                    continue
-                t_list.append(data.t)
-                v_list.append(data.value)
-                u_list.append(data.uncertainty)
-        if property == 'viscosity-lg':
-            # print(len(v_list), len(u_list))
-            coef_list = []
-            j = 0
-            k = 0
-            while j < repeat:
-                k += 1
-                if k == repeat * 10:
-                    break
-                if len(v_list) < 5:
-                    k = repeat * 10
-                    break
-                data = np.random.normal(
-                    loc=v_list,
-                    scale=u_list,
-                    size=len(v_list)
-                )
-                if data.min() < 0:
-                    continue
-                try:
-                    coef, score = VTFfit(t_list, data)
-                except:
-                    k = repeat * 10
-                    break
-                else:
-                    coef_list.append(coef)
-                    j += 1
-            if k == repeat * 10:
-                continue
-            coef_v = np.mean(coef_list, axis=0)
-            coef_u = np.std(coef_list, axis=0)
-            df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef_v[0], coef_v[1], \
-                                  coef_v[2], coef_u[0], coef_u[1], coef_u[2],
-    df.to_csv('%s.txt' % property, sep=' ', index=False)
-
-
-def get_exp_data_fitcoef_old(property):
-    df = pd.DataFrame({'inchi': [], 'SMILES': []})
-    if property == 'viscosity-lg':
-        df['c1'] = []
-        df['c2'] = []
-        df['c3'] = []
-        df['score'] = []
-    molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
-    for i, mol in enumerate(molecules):
-        if mol.remark != 'selected':
-            continue
-        sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (i, molecules.count(), mol.smiles))
-        datas_mol = mol.datas
-        datas = datas_mol.filter(
-            NistData.property == NistProperty.query.filter(NistProperty.name == property).first())
-        if datas.count() < 10:
-            continue
-        t_list = []
-        v_list = []
-        u_list = []
-        if datas is not None:
-            for data in datas:
-                if data.value is None or data.uncertainty is None:
-                    continue
-                t_list.append(data.t)
-                v_list.append(data.value)
-                u_list.append(data.uncertainty)
-        if property == 'viscosity-lg':
-            try:
-                coef, score = VTFfit(t_list, v_list)
-            except:
-                continue
-            else:
-                df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], coef[1], \
-                                      coef[2], score
-    df.to_csv('%s.txt' % property, sep=' ', index=False)
 
 
 def main():
@@ -211,12 +52,260 @@ def main():
     app = create_app(args.procedure)
     app.app_context().push()
     if args.type == 'EXP' and args.database == 'NIST':
-        #get_exp_data('tt')
-        #get_exp_data('pc')
-        #get_exp_data('tc')
-        get_exp_data_fitcoef('viscosity-lg')
-        get_exp_data_fitcoef_old('viscosity-lg')
-        # get_exp_data('st')
+        def get_exp_data(property, uncertainty=True, T=False):
+            df = pd.DataFrame({'inchi': [], 'SMILES': [], 'nheavy': []})
+            if T:
+                df['T'] = []
+            df[property] = []
+            if uncertainty:
+                df['%s_u' % property] = []
+
+            molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 1)
+            # 5).filter(NistMolecule.n_heavy < 16)
+            for i, mol in enumerate(molecules):
+                if mol.remark != 'selected':
+                    continue
+                sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
+                i, molecules.count(), mol.smiles))
+                if T:
+                    datas_mol = mol.datas
+                    datas = datas_mol.filter(
+                        NistData.property == NistProperty.query.filter(
+                            NistProperty.name == property).first())
+                    if datas is not None:
+                        for data in datas:
+                            df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
+                                                  mol.n_heavy, data.t, \
+                                                  data.value, data.uncertainty
+                else:
+                    if property == 'tb':
+                        v, u = mol.tb, mol.tb_u
+                    elif property == 'tt':
+                        v, u = mol.tt, mol.tt_u
+                    elif property == 'tc':
+                        v, u = mol.tc, mol.tc_u
+                    elif property == 'pc':
+                        v, u = mol.pc, mol.pc_u
+                    elif property == 'dc':
+                        v, u = mol.dc, mol.dc_u
+                    elif property == 'hfus':
+                        v, u = mol.hfus, mol.hfus_u
+                    elif property == 'st':
+                        spline = mol.splines.filter(
+                            NistSpline.property_id == 8).first()
+                        if mol.tb is not None and spline is not None:
+                            v, u = spline.get_data(T=mol.tb)
+                        else:
+                            v, u = None, None
+                    elif property == 'vis':
+                        spline = mol.splines.filter(
+                            NistSpline.property_id == 7).first()
+                        if mol.tb is not None and spline is not None:
+                            v, u = spline.get_data(T=mol.tb)
+                        else:
+                            v, u = None, None
+                    else:
+                        v, u = None, None
+                    if v is not None and u is not None:
+                        df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
+                                              mol.n_heavy, v, u
+            df.to_csv('%s.txt' % property, sep=' ', index=False)
+
+        def get_exp_data_fitcoef(property, repeat=100):
+            df = pd.DataFrame({'inchi': [], 'SMILES': []})
+            if property == 'viscosity-lg':
+                df['c1'] = []
+                df['c2'] = []
+                df['c3'] = []
+                df['c1_u'] = []
+                df['c2_u'] = []
+                df['c3_u'] = []
+            molecules = NistMolecule.query.filter(
+                NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
+            for i, mol in enumerate(molecules):
+                if mol.remark != 'selected':
+                    continue
+                sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
+                i, molecules.count(), mol.smiles))
+                datas_mol = mol.datas
+                datas = datas_mol.filter(
+                    NistData.property == NistProperty.query.filter(
+                        NistProperty.name == property).first())
+                if datas.count() < 10:
+                    continue
+                t_list = []
+                v_list = []
+                u_list = []
+                if datas is not None:
+                    for data in datas:
+                        if data.value is None or data.uncertainty is None:
+                            continue
+                        if data.uncertainty / data.value > 1.0:
+                            continue
+                        t_list.append(data.t)
+                        v_list.append(data.value)
+                        u_list.append(data.uncertainty)
+                if property == 'viscosity-lg':
+                    # print(len(v_list), len(u_list))
+                    coef_list = []
+                    j = 0
+                    k = 0
+                    while j < repeat:
+                        k += 1
+                        if k == repeat * 10:
+                            break
+                        if len(v_list) < 5:
+                            k = repeat * 10
+                            break
+                        data = np.random.normal(
+                            loc=v_list,
+                            scale=u_list,
+                            size=len(v_list)
+                        )
+                        if data.min() < 0:
+                            continue
+                        try:
+                            coef, score = VTFfit(t_list, data)
+                        except:
+                            k = repeat * 10
+                            break
+                        else:
+                            coef_list.append(coef)
+                            j += 1
+                    if k == repeat * 10:
+                        continue
+                    coef_v = np.mean(coef_list, axis=0)
+                    coef_u = np.std(coef_list, axis=0)
+                    df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef_v[0], \
+                                          coef_v[1], \
+                                          coef_v[2], coef_u[0], coef_u[1], \
+                                          coef_u[2],
+            df.to_csv('%s.txt' % property, sep=' ', index=False)
+
+        def get_exp_data_fitcoef_old(property):
+            df = pd.DataFrame({'inchi': [], 'SMILES': []})
+            if property == 'viscosity-lg':
+                df['c1'] = []
+                df['c2'] = []
+                df['c3'] = []
+                df['score'] = []
+            molecules = NistMolecule.query.filter(
+                NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
+            for i, mol in enumerate(molecules):
+                if mol.remark != 'selected':
+                    continue
+                sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
+                i, molecules.count(), mol.smiles))
+                datas_mol = mol.datas
+                datas = datas_mol.filter(
+                    NistData.property == NistProperty.query.filter(
+                        NistProperty.name == property).first())
+                if datas.count() < 10:
+                    continue
+                t_list = []
+                v_list = []
+                u_list = []
+                if datas is not None:
+                    for data in datas:
+                        if data.value is None or data.uncertainty is None:
+                            continue
+                        t_list.append(data.t)
+                        v_list.append(data.value)
+                        u_list.append(data.uncertainty)
+                if property == 'viscosity-lg':
+                    try:
+                        coef, score = VTFfit(t_list, v_list)
+                    except:
+                        continue
+                    else:
+                        df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], \
+                                              coef[1], \
+                                              coef[2], score
+            df.to_csv('%s.txt' % property, sep=' ', index=False)
+
+        def get_vle_coefs(n=10):
+            df = pd.DataFrame({'inchi': [], 'SMILES': [], 'tc': [], 'dc': [],
+                               'A': [], 'B': [], 'tmin': [], 'tmax': []})
+            splines_liq = NistSpline.query.filter(NistSpline.property_id == 2)
+            splines_gas = NistSpline.query.filter(NistSpline.property_id == 3)
+            molecules = NistMolecule.query.filter(
+                NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
+            for i, mol in enumerate(molecules):
+                if mol.remark != 'selected':
+                    continue
+                sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
+                i, molecules.count(), mol.smiles))
+                sp_liq = splines_liq.filter(
+                    NistSpline.molecule == mol
+                ).first()
+                if sp_liq is None:
+                    continue
+                sp_gas = splines_gas.filter(
+                    NistSpline.molecule == mol
+                ).first()
+                if sp_gas is None:
+                    continue
+                t_min = max(sp_liq.t_min, sp_gas.t_min)
+                t_max = min(sp_liq.t_max, sp_gas.t_max)
+                t_list = np.linspace(t_min, t_max, n)
+                d_liq = sp_liq.get_data(t_list)[0]
+                d_gas = sp_gas.get_data(t_list)[0]
+                d_minus = d_liq - d_gas
+                coef, score = fit_vle_dminus(t_list, d_minus)
+                tc = coef[0]
+                B = coef[1]
+                d_plus = d_liq + d_gas
+                coef, score = fit_vle_dplus(t_list, d_plus, tc)
+                dc = coef[0]
+                A = coef[1]
+                df.loc[df.shape[0]] = mol.inchi, mol.smiles, tc, dc, A, B, \
+                                      t_min, t_max
+            df.to_csv('vle-coef.txt', sep=' ', index=False)
+        get_exp_data('tt')
+        get_exp_data('tb')
+        get_exp_data('tc')
+        get_exp_data('pc')
+        get_exp_data('dc')
+        get_exp_data('hfus')
+        # get_exp_data('pvap-lg', T=True)
+        # get_exp_data('density-lg', T=True)
+        # get_exp_data('density-gl', T=True)
+        # get_exp_data('hvap-lg', T=True)
+        # get_exp_data('cp-lg', T=True)
+        # get_exp_data('sound-lg', T=True)
+        # get_exp_data('viscosity-lg', T=True)
+        # get_exp_data('st-lg', T=True)
+        # get_exp_data_fitcoef('viscosity-lg')
+        # get_exp_data_fitcoef_old('viscosity-lg')
+        # get_vle_coefs(10)
+    elif args.type == 'EXP' and args.database == 'ILTHERMO':
+        def get_exp_vis_coef():
+            df = pd.DataFrame({'SMILES': [], 'c1': [], 'c2': [], 'c3': [],
+                               'tmin': [], 'tmax': []})
+            splines = Spline.query.filter(Spline.property_id == 50)
+            for spline in splines:
+                smiles = spline.molecule.smiles()
+                if smiles is None:
+                    continue
+                coefs, score = json.loads(spline.coef_VTF)
+                df.loc[df.shape[0]] = smiles, coefs[0], coefs[1], coefs[2], \
+                                      spline.t_min, spline.t_max
+            df.to_csv('vis-coefs.txt', sep=' ', index=False)
+
+        def get_exp_data(p_id):
+            df = pd.DataFrame({'SMILES': [], 'T': [], 'P': [], 'vis': [],
+                               'vis_u': []})
+            datas = Data.query.filter(Data.property_id == p_id)
+            for data in datas:
+                smiles = data.molecule.smiles()
+                p = 100 if data.p is None else data.p
+                if smiles is None:
+                    continue
+                df.loc[df.shape[0]] = smiles, data.t, p, data.value, data.stderr
+            df.to_csv('vis.txt', sep=' ', index=False)
+
+        get_exp_vis_coef()
+        get_exp_data(50)
     elif args.type == 'SIM' and args.errormolecules and args.training:
         info = pd.read_csv(args.training, sep='\s+', header=0)
         training_smiles_list = []

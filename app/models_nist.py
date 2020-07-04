@@ -1,5 +1,6 @@
 from scipy import interpolate
 import json, sys
+import numpy as np
 from config import Config
 sys.path.append(Config.MS_TOOLS_DIR)
 from mstools.formula import Formula
@@ -282,12 +283,15 @@ class NistSpline(db.Model):
     property = relationship(NistProperty)
 
     def get_data(self, T):
-        if T < self.t_min or T > self.t_max:
-            return None, None
-
+        if not np.iterable(T):
+            if T < self.t_min or T > self.t_max:
+                return None, None
+        else:
+            for i, t in enumerate(T):
+                if t < self.t_min or t > self.t_max:
+                    return None, None
         coef_v = json.loads(self.coef_v)
         coef_u = json.loads(self.coef_u)
-
         v = interpolate.splev(T, coef_v)
         u = interpolate.splev(T, coef_u)
-        return float(v), float(u)
+        return v, u
