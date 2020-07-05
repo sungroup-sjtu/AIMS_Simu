@@ -215,16 +215,19 @@ def main():
                 t_list = np.linspace(t_min, t_max, n)
                 d_liq = sp_liq.get_data(t_list)[0]
                 d_gas = sp_gas.get_data(t_list)[0]
-                d_minus = d_liq - d_gas
-                coef, score_minus = fit_vle_dminus(t_list, d_minus)
-                tc = coef[0]
-                B = coef[1]
-                d_plus = d_liq + d_gas
-                coef, score_plus = fit_vle_dplus(t_list, d_plus, tc)
-                dc = coef[0]
-                A = coef[1]
-                df.loc[df.shape[0]] = mol.inchi, mol.smiles, tc, dc, A, B, \
-                                      t_min, t_max, score_minus, score_plus
+                try:
+                    d_minus = d_liq - d_gas
+                    coef, score_minus = fit_vle_dminus(t_list, d_minus)
+                    tc = coef[0]
+                    B = coef[1]
+                    d_plus = d_liq + d_gas
+                    coef, score_plus = fit_vle_dplus(t_list, d_plus, tc)
+                    dc = coef[0]
+                    A = coef[1]
+                    df.loc[df.shape[0]] = mol.inchi, mol.smiles, tc, dc, A, B, \
+                                          t_min, t_max, score_minus, score_plus
+                except:
+                    continue
             df.to_csv('vle-coef.txt', sep=' ', index=False)
 
         def get_coefs(property_id):
