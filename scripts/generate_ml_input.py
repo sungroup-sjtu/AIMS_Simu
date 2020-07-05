@@ -241,8 +241,7 @@ def main():
                 df['A'] = []
                 df['n'] = []
                 df['tc'] = []
-            molecules = NistMolecule.query.filter(NistMolecule.n_heavy >
-                                                  1).limit(50)
+            molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 1)
             for i, mol in enumerate(molecules):
                 if mol.remark != 'selected':
                     continue
