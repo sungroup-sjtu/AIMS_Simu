@@ -241,7 +241,8 @@ def main():
                 df['A'] = []
                 df['n'] = []
                 df['tc'] = []
-            molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 1)
+            molecules = NistMolecule.query.filter(NistMolecule.n_heavy >
+                                                  1).limit(50)
             for i, mol in enumerate(molecules):
                 if mol.remark != 'selected':
                     continue
@@ -270,24 +271,20 @@ def main():
                         df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
                                               mol.n_heavy, score, coef[0], \
                                               coef[1], coef[2]
-                    elif property_id == 8:
-                        coef, score = fit_vle_st(t_list, v_list)
+                    elif property_id == 8 and mol.tc is not None:
+                        coef, score = fit_vle_st(t_list, v_list, mol.tc)
                         df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
                                               mol.n_heavy, score, coef[0], \
-                                              coef[1], coef[2]
+                                              coef[1], mol.tc
                 except:
                     continue
-                else:
-                    df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], \
-                                          coef[1], \
-                                          coef[2], score
             df.to_csv('coef-%i.txt' % property_id, sep=' ', index=False)
-        get_exp_data('tt')
-        get_exp_data('tb')
-        get_exp_data('tc')
-        get_exp_data('pc')
-        get_exp_data('dc')
-        get_exp_data('hfus')
+        #get_exp_data('tt')
+        #get_exp_data('tb')
+        #get_exp_data('tc')
+        #get_exp_data('pc')
+        #get_exp_data('dc')
+        #get_exp_data('hfus')
         # get_exp_data('pvap-lg', T=True)
         # get_exp_data('density-lg', T=True)
         # get_exp_data('density-gl', T=True)
@@ -296,12 +293,12 @@ def main():
         # get_exp_data('sound-lg', T=True)
         # get_exp_data('viscosity-lg', T=True)
         # get_exp_data('st-lg', T=True)
-        get_coefs(1)
-        get_coefs(7)
-        get_coefs(8)
+        #get_coefs(1)
+        #get_coefs(7)
+        #get_coefs(8)
         # get_exp_data_fitcoef('viscosity-lg')
         # get_exp_data_fitcoef_old('viscosity-lg')
-        # get_vle_coefs(10)
+        get_vle_coefs(100)
     elif args.type == 'EXP' and args.database == 'ILTHERMO':
         def get_exp_vis_coef():
             df = pd.DataFrame({'SMILES': [], 'c1': [], 'c2': [], 'c3': [],
