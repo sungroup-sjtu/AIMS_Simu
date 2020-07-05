@@ -11,7 +11,13 @@ from app.models_nist import *
 from app.models_cv import Cv
 from app.models_ilthermo import *
 from app.selection import *
-from mstools.analyzer.fitting import VTFfit, fit_vle_dminus, fit_vle_dplus
+from mstools.analyzer.fitting import (
+    VTFfit,
+    fit_vle_dminus,
+    fit_vle_dplus,
+    fit_vle_pvap,
+    fit_vle_st
+)
 
 
 def write_data(_smiles, _training_smiles_list, _t, _p, _property, file, file_train, positive=False):
@@ -182,54 +188,13 @@ def main():
                                           coef_u[2],
             df.to_csv('%s.txt' % property, sep=' ', index=False)
 
-        def get_exp_data_fitcoef_old(property):
-            df = pd.DataFrame({'inchi': [], 'SMILES': []})
-            if property == 'viscosity-lg':
-                df['c1'] = []
-                df['c2'] = []
-                df['c3'] = []
-                df['score'] = []
-            molecules = NistMolecule.query.filter(
-                NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
-            for i, mol in enumerate(molecules):
-                if mol.remark != 'selected':
-                    continue
-                sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
-                i, molecules.count(), mol.smiles))
-                datas_mol = mol.datas
-                datas = datas_mol.filter(
-                    NistData.property == NistProperty.query.filter(
-                        NistProperty.name == property).first())
-                if datas.count() < 10:
-                    continue
-                t_list = []
-                v_list = []
-                u_list = []
-                if datas is not None:
-                    for data in datas:
-                        if data.value is None or data.uncertainty is None:
-                            continue
-                        t_list.append(data.t)
-                        v_list.append(data.value)
-                        u_list.append(data.uncertainty)
-                if property == 'viscosity-lg':
-                    try:
-                        coef, score = VTFfit(t_list, v_list)
-                    except:
-                        continue
-                    else:
-                        df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], \
-                                              coef[1], \
-                                              coef[2], score
-            df.to_csv('%s.txt' % property, sep=' ', index=False)
-
-        def get_vle_coefs(n=10):
+        def get_vle_coefs(n=100):
             df = pd.DataFrame({'inchi': [], 'SMILES': [], 'tc': [], 'dc': [],
-                               'A': [], 'B': [], 'tmin': [], 'tmax': []})
+                               'A': [], 'B': [], 'tmin': [], 'tmax': [],
+                               'score_minus': [], 'score_plus': []})
             splines_liq = NistSpline.query.filter(NistSpline.property_id == 2)
             splines_gas = NistSpline.query.filter(NistSpline.property_id == 3)
-            molecules = NistMolecule.query.filter(
-                NistMolecule.n_heavy > 5).filter(NistMolecule.n_heavy < 16)
+            molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 1)
             for i, mol in enumerate(molecules):
                 if mol.remark != 'selected':
                     continue
@@ -251,16 +216,72 @@ def main():
                 d_liq = sp_liq.get_data(t_list)[0]
                 d_gas = sp_gas.get_data(t_list)[0]
                 d_minus = d_liq - d_gas
-                coef, score = fit_vle_dminus(t_list, d_minus)
+                coef, score_minus = fit_vle_dminus(t_list, d_minus)
                 tc = coef[0]
                 B = coef[1]
                 d_plus = d_liq + d_gas
-                coef, score = fit_vle_dplus(t_list, d_plus, tc)
+                coef, score_plus = fit_vle_dplus(t_list, d_plus, tc)
                 dc = coef[0]
                 A = coef[1]
                 df.loc[df.shape[0]] = mol.inchi, mol.smiles, tc, dc, A, B, \
-                                      t_min, t_max
+                                      t_min, t_max, score_minus, score_plus
             df.to_csv('vle-coef.txt', sep=' ', index=False)
+
+        def get_coefs(property_id):
+            df = pd.DataFrame({'inchi': [], 'SMILES': [], 'nheavy': [],
+                               'score': []})
+            if property_id == 1:
+                df['c1'] = []
+                df['c2'] = []
+            elif property_id == 7:
+                df['c1'] = []
+                df['c2'] = []
+                df['c3'] = []
+            elif property_id == 8:
+                df['A'] = []
+                df['n'] = []
+                df['tc'] = []
+            molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 1)
+            for i, mol in enumerate(molecules):
+                if mol.remark != 'selected':
+                    continue
+                sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
+                i, molecules.count(), mol.smiles))
+                datas = mol.datas.filter(NistData.property_id == property_id)
+                if datas.count() < 10:
+                    continue
+                t_list = []
+                v_list = []
+                u_list = []
+                for data in datas:
+                    if data.value is None or data.uncertainty is None:
+                        continue
+                    t_list.append(data.t)
+                    v_list.append(data.value)
+                    u_list.append(data.uncertainty)
+                try:
+                    if property_id == 1:
+                        coef, score = fit_vle_pvap(t_list, v_list)
+                        df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
+                                              mol.n_heavy, score, coef[0], \
+                                              coef[1]
+                    elif property_id == 7:
+                        coef, score = VTFfit(t_list, v_list)
+                        df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
+                                              mol.n_heavy, score, coef[0], \
+                                              coef[1], coef[2]
+                    elif property_id == 8:
+                        coef, score = fit_vle_st(t_list, v_list)
+                        df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
+                                              mol.n_heavy, score, coef[0], \
+                                              coef[1], coef[2]
+                except:
+                    continue
+                else:
+                    df.loc[df.shape[0]] = mol.inchi, mol.smiles, coef[0], \
+                                          coef[1], \
+                                          coef[2], score
+            df.to_csv('coef-%i.txt' % property_id, sep=' ', index=False)
         get_exp_data('tt')
         get_exp_data('tb')
         get_exp_data('tc')
@@ -275,6 +296,9 @@ def main():
         # get_exp_data('sound-lg', T=True)
         # get_exp_data('viscosity-lg', T=True)
         # get_exp_data('st-lg', T=True)
+        get_coefs(1)
+        get_coefs(7)
+        get_coefs(8)
         # get_exp_data_fitcoef('viscosity-lg')
         # get_exp_data_fitcoef_old('viscosity-lg')
         # get_vle_coefs(10)
