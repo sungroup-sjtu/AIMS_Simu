@@ -151,8 +151,9 @@ class Compute(db.Model):
             for combination in combinations:
                 # check for smiles and name
                 smiles_list = combination['smiles']
-                if unambiguity and True in [has_stereo_isomer(smiles) for smiles in smiles_list]:
-                    continue
+                # if unambiguity and True in [has_stereo_isomer(smiles) for
+                # smiles in smiles_list]:
+                    # continue
 
                 name_list = combination.get('names')
                 t_list = list(map(int, combination.get('t_list')))
@@ -171,7 +172,8 @@ class Compute(db.Model):
                 if procedure not in current_app.config['ALLOWED_PROCEDURES']:
                     raise Exception('Invalid procedure for this config')
 
-                smiles_list = [get_canonical_smiles(smiles) for smiles in smiles_list]
+                # smiles_list = [get_canonical_smiles(smiles) for smiles in
+                # smiles_list]
                 tasks = Task.query.filter(Task.smiles_list == json.dumps(smiles_list)).filter(
                     Task.procedure == procedure). \
                     filter(Task.n_mol_ratio == json.dumps(n_mol_ratio))
