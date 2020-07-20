@@ -62,11 +62,15 @@ def main():
             df = pd.DataFrame({'inchi': [], 'SMILES': [], 'nheavy': []})
             if T:
                 df['T'] = []
+                df['rel_T'] = []
+                df['tt'] = []
+                df['tc'] = []
             df[property] = []
             if uncertainty:
                 df['%s_u' % property] = []
 
-            molecules = NistMolecule.query.filter(NistMolecule.n_heavy > 1)
+            molecules = NistMolecule.query.filter(NistMolecule.n_heavy >
+                                                  1).limit(5)
             # 5).filter(NistMolecule.n_heavy < 16)
             for i, mol in enumerate(molecules):
                 if mol.remark != 'selected':
@@ -74,14 +78,18 @@ def main():
                 sys.stdout.write('\r%i / %i. %s\t\t\t\t' % (
                 i, molecules.count(), mol.smiles))
                 if T:
+                    if mol.tt is None or mol.tc is None:
+                        continue
                     datas_mol = mol.datas
                     datas = datas_mol.filter(
                         NistData.property == NistProperty.query.filter(
                             NistProperty.name == property).first())
                     if datas is not None:
                         for data in datas:
+                            rel_T = (data.t - mol.tt) / (mol.tc - mol.tt)
                             df.loc[df.shape[0]] = mol.inchi, mol.smiles, \
-                                                  mol.n_heavy, data.t, \
+                                                  mol.n_heavy, data.t, rel_T, \
+                                                  mol.tt, mol.tc, \
                                                   data.value, data.uncertainty
                 else:
                     if property == 'tb':
@@ -281,26 +289,26 @@ def main():
                 except:
                     continue
             df.to_csv('coef-%i.txt' % property_id, sep=' ', index=False)
-        #get_exp_data('tt')
+        # get_exp_data('tt')
         #get_exp_data('tb')
         #get_exp_data('tc')
         #get_exp_data('pc')
         #get_exp_data('dc')
         #get_exp_data('hfus')
-        # get_exp_data('pvap-lg', T=True)
-        # get_exp_data('density-lg', T=True)
-        # get_exp_data('density-gl', T=True)
+        get_exp_data('pvap-lg', T=True)
+        get_exp_data('density-lg', T=True)
+        get_exp_data('density-gl', T=True)
         # get_exp_data('hvap-lg', T=True)
         # get_exp_data('cp-lg', T=True)
         # get_exp_data('sound-lg', T=True)
-        # get_exp_data('viscosity-lg', T=True)
+        #get_exp_data('viscosity-lg', T=True)
         # get_exp_data('st-lg', T=True)
         #get_coefs(1)
         #get_coefs(7)
         #get_coefs(8)
         # get_exp_data_fitcoef('viscosity-lg')
         # get_exp_data_fitcoef_old('viscosity-lg')
-        get_vle_coefs(100)
+        # get_vle_coefs(100)
     elif args.type == 'EXP' and args.database == 'ILTHERMO':
         def get_exp_vis_coef():
             df = pd.DataFrame({'SMILES': [], 'c1': [], 'c2': [], 'c3': [],
